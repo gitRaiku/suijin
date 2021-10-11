@@ -1,0 +1,11 @@
+[Mon 11 Oct 2021 21:37:35 EEST]  0: Picking discrete GPU: NVIDIA GeForce MX250
+[Mon 11 Oct 2021 21:37:36 EEST]  0: Window resized to: 1898x1034
+VUID-vkCmdClearColorImage-image-00002(ERROR / SPEC): msgNum: 1668253329 - Validation Error: [ VUID-vkCmdClearColorImage-image-00002 ] Object 0: handle = 0xe7f79a0000000005, type = VK_OBJECT_TYPE_IMAGE; | MessageID = 0x636f8691 | vkCmdClearColorImage() pRanges[0] called with image VkImage 0xe7f79a0000000005[] which was created without VK_IMAGE_USAGE_TRANSFER_DST_BIT. The Vulkan spec states: image must have been created with VK_IMAGE_USAGE_TRANSFER_DST_BIT usage flag (https://www.khronos.org/registry/vulkan/specs/1.2-extensions/html/vkspec.html#VUID-vkCmdClearColorImage-image-00002)
+    Objects: 1
+        [0] 0xe7f79a0000000005, type: 10, name: NULL
+UNASSIGNED-CoreValidation-DrawState-InvalidImageLayout(ERROR / SPEC): msgNum: 1303270965 - Validation Error: [ UNASSIGNED-CoreValidation-DrawState-InvalidImageLayout ] Object 0: handle = 0xff31a020378, type = VK_OBJECT_TYPE_COMMAND_BUFFER; | MessageID = 0x4dae5635 | vkQueueSubmit(): pSubmits[0].pCommandBuffers[0] command buffer VkCommandBuffer 0xff31a020378[] expects VkImage 0xe7f79a0000000005[] (subresource: aspectMask 0x1 array layer 0, mip level 0) to be in layout VK_IMAGE_LAYOUT_GENERAL--instead, current layout is VK_IMAGE_LAYOUT_UNDEFINED.
+    Objects: 1
+        [0] 0xff31a020378, type: 6, name: NULL
+VUID-VkPresentInfoKHR-pImageIndices-01296(ERROR / SPEC): msgNum: -945112042 - Validation Error: [ VUID-VkPresentInfoKHR-pImageIndices-01296 ] Object 0: handle = 0xff31a511518, type = VK_OBJECT_TYPE_QUEUE; | MessageID = 0xc7aabc16 | vkQueuePresentKHR(): pSwapchains[0] images passed to present must be in layout VK_IMAGE_LAYOUT_PRESENT_SRC_KHR or VK_IMAGE_LAYOUT_SHARED_PRESENT_KHR but is in VK_IMAGE_LAYOUT_UNDEFINED. The Vulkan spec states: Each element of pImageIndices must be the index of a presentable image acquired from the swapchain specified by the corresponding element of the pSwapchains array, and the presented image subresource must be in the VK_IMAGE_LAYOUT_PRESENT_SRC_KHR layout at the time the operation is executed on a VkDevice (https://github.com/KhronosGroup/Vulkan-Docs/search?q=)VUID-VkPresentInfoKHR-pImageIndices-01296)
+    Objects: 1
+        [0] 0xff31a511518, type: 4, name: NULL

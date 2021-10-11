@@ -12,6 +12,7 @@
 #include "fujin.h"      /**  Logging                **/
 
 #define VK_CHECK(call) {VkResult _result = call;assert(_result == VK_SUCCESS);}
+#define assert_log(value, message)                {if (!(value)              ) {log_message(10, message); cleanup(10);};}
 
 int32_t windowWidth = 0, windowHeight = 0;
 
@@ -93,8 +94,6 @@ VkSwapchainKHR create_swapchain(VkDevice *__restrict device, VkSurfaceKHR *__res
     VkSwapchainCreateInfoKHR createInfo = { VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR };
     createInfo.surface = *surface;
     createInfo.minImageCount = 2;
-    createInfo.imageFormat = VK_FORMAT_R8G8B8A8_UNORM;
-    createInfo.imageColorSpace = VK_COLOR_SPACE_SRGB_NONLINEAR_KHR;
     createInfo.imageExtent.width = width;
     createInfo.imageExtent.height = height;
     createInfo.imageArrayLayers = 1;
@@ -107,6 +106,15 @@ VkSwapchainKHR create_swapchain(VkDevice *__restrict device, VkSurfaceKHR *__res
     vkGetPhysicalDeviceSurfaceCapabilitiesKHR(*physicalDevice, *surface, &surfaceCapabilites);
     createInfo.preTransform = surfaceCapabilites.currentTransform;
     createInfo.compositeAlpha = surfaceCapabilites.supportedCompositeAlpha;
+
+    {
+      VkSurfaceFormatKHR surfaceFormats[16];
+      uint32_t surfaceFormatCount = sizeof(surfaceFormats) / sizeof(surfaceFormats[0]);
+
+      VK_CHECK(vkGetPhysicalDeviceSurfaceFormatsKHR(*physicalDevice, *surface, &surfaceFormatCount, surfaceFormats));
+      createInfo.imageFormat = surfaceFormats[0].format;
+      createInfo.imageColorSpace = surfaceFormats[0].colorSpace;
+    }
 
     VkSwapchainKHR swapchain = 0;
     VK_CHECK(vkCreateSwapchainKHR(*device, &createInfo, 0, &swapchain));
@@ -168,7 +176,7 @@ void init_vulkan(VkInstance *__restrict instance, VkPhysicalDevice *__restrict p
 
   *familyIndex = 0;
   *device = create_device(*instance, *physicalDevice, familyIndex);
-  assert(*device);
+  assert_log(*device, "Could not create a Vulkan device!");
 }
 
 VkCommandPool create_command_pool(VkDevice *__restrict device, uint32_t *__restrict familyIndex) {
@@ -211,16 +219,21 @@ int main(int argc, char **argv) {
   window = init_window();
 
   VkSurfaceKHR surface = create_surface(&instance, window);
-  assert(surface);
+  assert_log(surface, "Could not create a surface!");
+  {
+    uint32_t pSupported;
+    VK_CHECK(vkGetPhysicalDeviceSurfaceSupportKHR(physicalDevice, familyIndex, surface, &pSupported));
+    assert_log(surface, "No WSI support on the created surface!");
+  }
 
   VkSwapchainKHR swapchain = create_swapchain(&device, &surface, &physicalDevice, &familyIndex, windowWidth, windowHeight);
-  assert(swapchain);
+  assert_log(swapchain, "Could not create a swapchain!");
 
   VkSemaphore acquireSemaphore = create_semaphore(&device);
-  assert(acquireSemaphore);
+  assert_log(acquireSemaphore, "Could not create the acquire semaphore!");
 
   VkSemaphore releaseSemaphore = create_semaphore(&device);
-  assert(releaseSemaphore);
+  assert_log(releaseSemaphore, "Could not create the release semaphore!");
 
   VkQueue queue = 0;
   vkGetDeviceQueue(device, familyIndex, 0, &queue);
@@ -230,7 +243,7 @@ int main(int argc, char **argv) {
   VK_CHECK(vkGetSwapchainImagesKHR(device, swapchain, &swapchainImageCount, swapchainImages));
 
   VkCommandPool commandPool = create_command_pool(&device, &familyIndex);
-  assert(commandPool);
+  assert_log(commandPool, "Could not create the command pool!");
 
   VkCommandBufferAllocateInfo allocateInfo = { VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO };
   allocateInfo.commandPool = commandPool;
@@ -241,6 +254,7 @@ int main(int argc, char **argv) {
   VK_CHECK(vkAllocateCommandBuffers(device, &allocateInfo, &commandBuffer));
 
   while (!glfwWindowShouldClose(window)) {
+    log_message(0, "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\n\n\n\n\n");
     glfwPollEvents();
     
     uint32_t imageIndex = 0;
@@ -268,7 +282,7 @@ int main(int argc, char **argv) {
 
     VkSubmitInfo submitInfo = { VK_STRUCTURE_TYPE_SUBMIT_INFO };
     submitInfo.waitSemaphoreCount = 1;
-    submitInfo.pWaitSemaphores = &releaseSemaphore;
+    submitInfo.pWaitSemaphores = &acquireSemaphore;
     submitInfo.pWaitDstStageMask = &submitStageMask;
     submitInfo.commandBufferCount = 1;
     submitInfo.pCommandBuffers = &commandBuffer;
@@ -289,12 +303,10 @@ int main(int argc, char **argv) {
     VK_CHECK(vkDeviceWaitIdle(device));
   }
 
-
   cleanup(0);
   /** Unreachable **/
   return 0;
 }
-
 
 GLFWwindow *init_window() {
   GLFWwindow *window;
