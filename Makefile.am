@@ -1,0 +1,4 @@
+AM_CPPFLAGS = -Im4 -D_DEBUG -D_GNU_SOURCE -DVK_USE_PLATFORM_XLIB_KHR -DGLFW_EXPOSE_NATIVE_X11
+
+bin_PROGRAMS = suijin
+suijin_SOURCES = src/main.c src/fujin.c
