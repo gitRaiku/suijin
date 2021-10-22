@@ -21,6 +21,8 @@ suijin
 # Get rid of leftover object files
 *.o
 src/.deps
+shaders/*.spv
+logout
 
 # Get rid of the gdb history
 .gdb_history
