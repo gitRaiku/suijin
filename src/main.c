@@ -608,6 +608,9 @@ int main(int argc, char **argv) {
 
   GLFWwindow *__restrict window;
   assert_log(glfwInit(), "Could not initialize glfw");
+  /* glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API); */
+  /* This apparently fixes a bug that may or may not affect anyone and may have been fixed */
+  /* I've 0 idea what that does but it creates an error so i'm not including it */
 
   VkInstance instance;
   VkDevice device;
