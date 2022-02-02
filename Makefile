@@ -19,13 +19,14 @@ clean:
 shaders:
 	@for f in ${SHADER_FILES} ; do echo $(SHADER_CC) "shaders/$$f" -o "shaders/$$f.spv" ; $(SHADER_CC) "shaders/$$f" -o "shaders/$$f.spv" ; done
 
+COMPILE_FLAGS = -Og -g -ggdb3 -march=native -mtune=native -fmodulo-sched
 DEFINE_FLAGS = -D_DEBUG -D_GNU_SOURCE -DVK_USE_PLATFORM_XLIB_KHR -DGLFW_EXPOSE_NATIVE_X11
 LINK_FLAGS = -lvulkan -lglfw
 
 suijin: shaders
-	@for f in ${PROJECT_FILES} ; do echo $(CC) -Og -g -ggdb3 -march=native -mtune=native $(DEFINE_FLAGS) -c -o "src/$$f.o" "src/$$f.c" ; $(CC) -Og -g -ggdb3 -march=native -mtune=native $(DEFINE_FLAGS) -c -o "src/$$f.o" "src/$$f.c" ; done
+	@for f in ${PROJECT_FILES} ; do echo $(CC) $(COMPILE_FLAGS) $(DEFINE_FLAGS) -c -o "src/$$f.o" "src/$$f.c" ; $(CC) $(COMPILE_FLAGS) $(DEFINE_FLAGS) -c -o "src/$$f.o" "src/$$f.c" ; done
 
-	$(CC) -Og -g -ggdb3 -march=native -mtune=native $(DEFINE_FLAGS) -o suijin $(OBJECT_FILES) $(LINK_FLAGS)
+	$(CC) $(COMPILE_FLAGS) $(DEFINE_FLAGS) -o suijin $(OBJECT_FILES) $(LINK_FLAGS)
 # What the fuck Makefile?
 # Yeah gonna do this another time
 
