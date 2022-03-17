@@ -1,42 +1,68 @@
-all: suijin shaders
+all: build
 
-.PHONY: clean shaders suijin tar test
+.PHONY: build run debug clean remove tar
 
-CC = gcc
-SHADER_CC = glslc
+# Directories
+TARGET   = suijin
+SRC_DIR  = src
+LIB_DIR  = lib
+BIN_DIR  = bin
+OBJ_DIR  = .obj
+MOD_DIR  = .mod
+
+# Options
+CC       = gcc
+CCFLAGS  = -ggdb3 -Og \
+					 -Wall -march=native -mtune=native -fmodulo-sched \
+					 -pipe -I$(LIB_DIR)/glad \
+					 -D SUIJIN_DEBUG
+
+LINKER   = $(CC)
+
+DEBUGGER = gdb
+
 DATE := $(shell date "+%Y-%m-%d")
 
-PROJECT_FILES = "main" "fujin"
-SHADER_FILES  = "triangle.frag" "triangle.vert"
-LIBRARY_FILES = "volk/volk"
-OBJECT_FILES = `for f in ${PROJECT_FILES} ; do echo "src/$$f.o" ; done`
+LFLAGS   = -lglfw -lm
+
+C_SRC = $(wildcard $(SRC_DIR)/*.c $(SRC_DIR)/*/*.c)
+L_SRC = $(wildcard $(LIB_DIR)/*.c $(LIB_DIR)/*/*.c)
+C_OBJ = $(C_SRC:$(SRC_DIR)/%.c=$(OBJ_DIR)/%.o)
+L_OBJ = $(L_SRC:$(LIB_DIR)/%.c=$(OBJ_DIR)/%.o)
+MOD   = $(wildcard $(MOD_DIR)/*.mod)
+
+build: $(BIN_DIR) $(BIN_DIR)/$(TARGET)
+
+$(BIN_DIR):
+	mkdir -p $@
+
+$(C_OBJ): $(OBJ_DIR)/%.o : $(SRC_DIR)/%.c
+	@mkdir -p $(@D)
+	$(CC) -c $(CCFLAGS) $< -o $@
+
+$(L_OBJ): $(OBJ_DIR)/%.o : $(LIB_DIR)/%.c
+	@mkdir -p $(@D)
+	$(CC) -c $(CCFLAGS) $< -o $@
+
+$(MOD_DIR):
+	mkdir -p $@
+
+$(BIN_DIR)/$(TARGET): $(C_OBJ) $(L_OBJ)
+	$(LINKER) $(L_OBJ) $(C_OBJ) $(LFLAGS) -o $@
+
+run: build
+	./$(BIN_DIR)/$(TARGET)
+
+debug: build
+	$(DEBUGGER) $(BIN_DIR)/$(TARGET)
 
 clean:
-	for f in ${PROJECT_FILES} ; do echo rm -f src/$$f.o ; rm -f src/$$f.o ; done
-	for f in ${SHADER_FILES} ; do echo rm -f shaders/$$f.spv ; rm -f shaders/$$f.spv ; done
-	rm -f suijin
-	
-shaders:
-	@for f in ${SHADER_FILES} ; do echo $(SHADER_CC) "shaders/$$f" -o "shaders/$$f.spv" ; $(SHADER_CC) "shaders/$$f" -o "shaders/$$f.spv" ; done
+	rm -f $(C_OBJ)
+	rm -f $(L_OBJ)
+	rm -f $(MOD)
 
-COMPILE_FLAGS = -Og -g -ggdb3 -march=native -mtune=native -fmodulo-sched
-DEFINE_FLAGS = -D_DEBUG -D_GNU_SOURCE -DVK_USE_PLATFORM_XLIB_KHR -DGLFW_EXPOSE_NATIVE_X11
-LINK_FLAGS = -lvulkan -lglfw
-
-suijin: shaders
-	@for f in ${PROJECT_FILES} ; do echo $(CC) $(COMPILE_FLAGS) $(DEFINE_FLAGS) -c -o "src/$$f.o" "src/$$f.c" ; $(CC) $(COMPILE_FLAGS) $(DEFINE_FLAGS) -c -o "src/$$f.o" "src/$$f.c" ; done
-
-	$(CC) $(COMPILE_FLAGS) $(DEFINE_FLAGS) -o suijin $(OBJECT_FILES) $(LINK_FLAGS)
-# What the fuck Makefile?
-# Yeah gonna do this another time
+remove: clean
+	rm -f $(BIN_DIR)/$(TARGET)
 
 tar:
-	tar -czvf suijin-$(DATE).tar.gz Makefile src/* shaders/* AUTHORS
-
-test:
-	echo $(CC)
-	echo $(SHADER_CC)
-	echo $(CFLAGS)
-	echo $(DEFINE_FLAGS)
-	echo $(LINK_FLAGS)
-	echo $(DATE)
+	tar -czvf suijin-$(DATE).tar.gz Makefile $(SRC_DIR)/* $(LIB_DIR)/* AUTHORS
