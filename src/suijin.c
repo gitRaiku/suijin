@@ -59,12 +59,13 @@ uint8_t showGrid = 1;
 
 uint32_t pvao, pvbo;
 uint32_t lvao, lvbo;
-float horiz_spacing = M_PI;
-float vert_spacing  = M_PI;
+float grid_spacing = M_PI;
 
 #define C0 0.5f
 #define C1 0.2f /// TODO: FIX COLOUR INTENSITY
 #define C2 0.2f
+
+#define INIT_RES_COEF 0.07f
 
 
 void callback_error(int error, const char *desc) {
@@ -76,6 +77,14 @@ void callback_window_should_close(GLFWwindow *window) {
 
 void callback_window_resize(GLFWwindow *window, int width, int height) {
     glViewport(0, 0, width, height);
+
+    float wc = initCamSize[0] / camSize[0];
+    float hc = initCamSize[1] / camSize[1];
+    initCamSize[0] = (float)width * wc * INIT_RES_COEF;
+    initCamSize[1] = (float)height * hc * INIT_RES_COEF;
+    memcpy(camSize, initCamSize, sizeof(camSize));
+    cameraUpdate = 1;
+
     fprintf(stdout, "Window Resize To: %ix%i\n", width, height);
 }
 
@@ -262,33 +271,26 @@ void handle_input(GLFWwindow *__restrict window) {
 }
 
 void update_grid_lines() {
-  while (camSize[0] / vert_spacing > MAX_DIVISIONS / 2) {
-    vert_spacing *= 2.0f;
+  while (camSize[1] / grid_spacing > MAX_DIVISIONS / 3.5f) {
+    grid_spacing *= 2.0f;
   }
-  while (camSize[0] / vert_spacing < MIN_DIVISIONS / 2) {
-    vert_spacing /= 2.0f;
-  }
-
-  while (camSize[1] / horiz_spacing > MAX_DIVISIONS / 2) {
-    horiz_spacing *= 2.0f;
-  }
-  while (camSize[1] / horiz_spacing < MIN_DIVISIONS / 2) {
-    horiz_spacing /= 2.0f;
+  while (camSize[1] / grid_spacing < MIN_DIVISIONS / 3.5f) {
+    grid_spacing /= 2.0f;
   }
 
-  float npos = ceil((camPos[1] + camSize[1] / 2.0f) / vert_spacing) * vert_spacing;
-  float spos = floor((camPos[1] - camSize[1] / 2.0f) / vert_spacing) * vert_spacing;
-  float epos = ceil((camPos[0] + camSize[0] / 2.0f) / horiz_spacing) * horiz_spacing;
-  float wpos = floor((camPos[0] - camSize[0] / 2.0f) / horiz_spacing) * horiz_spacing;
+  float npos =  ceil((camPos[1] + camSize[1] / 2.0f) / grid_spacing) * grid_spacing;
+  float spos = floor((camPos[1] - camSize[1] / 2.0f) / grid_spacing) * grid_spacing;
+  float epos =  ceil((camPos[0] + camSize[0] / 2.0f) / grid_spacing) * grid_spacing;
+  float wpos = floor((camPos[0] - camSize[0] / 2.0f) / grid_spacing) * grid_spacing;
   ///fprintf(stdout, "North: %f\nSouth: %f\nEast: %f\nWest: %f\n", npos, spos, epos, wpos);
   int32_t i;
   float cpos;
   float cintensity;
   for(i = 0; i < MAX_DIVISIONS; ++i) {
-    cpos = wpos + i * horiz_spacing;
+    cpos = wpos + i * grid_spacing;
     if (epsilon_equals(cpos, 0.0f)) {
       cintensity = C0;
-    } else if ((int32_t)(cpos / horiz_spacing) % 5 == 0) {
+    } else if ((int32_t)(cpos / grid_spacing) % 5 == 0) {
       cintensity = C1;
     } else {
       cintensity = C2;
@@ -297,10 +299,10 @@ void update_grid_lines() {
     lines[2 * i + 1] = (struct pixel) {{ cpos, spos }, {1.0f, 1.0f, 1.0f, cintensity }};
   }
   for(i = 0; i < MAX_DIVISIONS; ++i) {
-    cpos = spos + i * vert_spacing;
+    cpos = spos + i * grid_spacing;
     if (epsilon_equals(cpos, 0.0f)) {
       cintensity = C0;
-    } else if ((int32_t)(cpos / vert_spacing) % 5 == 0) {
+    } else if ((int32_t)(cpos / grid_spacing) % 5 == 0) {
       cintensity = C1;
     } else {
       cintensity = C2;
@@ -368,6 +370,13 @@ uint8_t run_suijin() {
     glEnableVertexAttribArray(1);
 
     glBindVertexArray(0);
+  }
+
+  {
+    int iw, ih;
+    glfwGetWindowSize(window, &iw, &ih);
+    initCamSize[0] = (float)iw * INIT_RES_COEF;
+    initCamSize[1] = (float)ih * INIT_RES_COEF;
   }
 
   memcpy(camPos, initCamPos, sizeof(camPos));
