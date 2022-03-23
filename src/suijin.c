@@ -3,6 +3,7 @@
 #include <stdio.h>
 #include <stdint.h>
 #include <math.h>
+#include <string.h>
 
 #include "shaders.h"
 
@@ -62,6 +63,24 @@ GLFWwindow *window_init() {
     return window;
 }
 
+struct pos {
+  float x;
+  float y;
+  float z;
+};
+
+struct col {
+  float r;
+  float g;
+  float b;
+  float a;
+};
+
+struct pixel {
+  struct pos p;
+  struct col c;
+};
+
 uint8_t run_suijin() {
   GL_CHECK(glfwInit(), "Could not initialize glfw!");
 
@@ -90,16 +109,8 @@ uint8_t run_suijin() {
     }
   }
 
-  /*float vertices[] = {
-    -0.5f, -0.5f, 0.0f,
-    0.5f, -0.5f, 0.0f,
-    0.0f, 0.5f, 0.0f
-  };*/
-  float vertices[] = {
-    -0.5f, -0.5f, 0.0f, 1.0f, 0.0f, 0.0f, 0.5f,
-    0.5f, -0.5f, 0.0f, 0.0f, 1.0f, 0.0f, 0.5f,
-    0.0f, 0.5f, 0.0f, 0.0f, 0.0f, 1.0f, 0.5f,
-  };
+  struct pixel pixels[2] = {0};
+  uint32_t pcount = sizeof(pixels) / sizeof(pixels[0]);
 
   uint32_t vao, vbo;
   { 
@@ -108,11 +119,11 @@ uint8_t run_suijin() {
     glBindVertexArray(vao);
 
     glBindBuffer(GL_ARRAY_BUFFER, vbo);
-    glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(pixels), pixels, GL_STATIC_DRAW);
 
     glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 7 * sizeof(float), (void *) 0);
+    glVertexAttribPointer(1, 4, GL_FLOAT, GL_FALSE, 7 * sizeof(float), (void *) sizeof(struct pos));
     glEnableVertexAttribArray(0);
-    glVertexAttribPointer(1, 4, GL_FLOAT, GL_FALSE, 7 * sizeof(float), (void *) (3 * sizeof(float)));
     glEnableVertexAttribArray(1);
 
     glBindVertexArray(0);
@@ -128,19 +139,41 @@ uint8_t run_suijin() {
   while (!glfwWindowShouldClose(window)) {
     ctime = glfwGetTime();
     deltaTime = ctime - ltime;
-    glClearColor(0.2f, 0.3f, 0.3f, 1.0f);
+    //glClearColor(0.2f, 0.3f, 0.3f, 1.0f);
+    glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
     glClear(GL_COLOR_BUFFER_BIT);
 
     //program_set_float2(program, "posOffset", sin(ctime * 3) * 0.2, cos(ctime * 3) * 0.2);
     
+
+    /*memmove(pixels + 1, pixels, sizeof(pixels[0]) * (pcount - 1));
+    {
+      int32_t i;
+      for(i = 1; i < pcount; ++i) {
+        pixels[i].c.a -= 1.0f / pcount;
+      }
+    }*/
+    pixels[0].p.x = sin(ctime * 2) * 0.5;
+    pixels[0].p.y = cos(ctime * 2) * 0.5;
+    pixels[0].p.z = 0;
+    pixels[0].c.r = 0.4f;
+    pixels[0].c.g = 0.7f;
+    pixels[0].c.b = 0.1f;
+    pixels[0].c.a = 0.0f;
+    
+    pixels[1].p.x = cos(ctime * 2) * 0.5;
+    pixels[1].p.y = sin(ctime * 2) * 0.5;
+    pixels[1].p.z = 0;
+    pixels[1].c.r = 0.8f;
+    pixels[1].c.g = 0.7f;
+    pixels[1].c.b = 0.1f;
+    pixels[1].c.a = 1.0f;
     glBindBuffer(GL_ARRAY_BUFFER, vbo);
-    vertices[0]  = sin(ctime) * 0.4;
-    vertices[6]  = cos(ctime) * 0.4;
-    glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(vertices), vertices);
+    glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(pixels), pixels);
 
     glUseProgram(program);
     glBindVertexArray(vao);
-    glDrawArrays(GL_POINTS, 0, 3);
+    glDrawArrays(GL_POINTS, 0, pcount);
     
     glfwPollEvents();
     glfwSwapBuffers(window);
