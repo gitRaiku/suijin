@@ -4,9 +4,11 @@ layout (location = 1) in vec3 col;
 
 out vec3 passCol;
 
-uniform mat3 affine_transform;
+//uniform mat3 tl_mat;
+//uniform mat3 rs_mat;
+uniform mat3 fn_mat;
 
 void main() {
     passCol = col;
-    gl_Position = vec4(pos * affine_transform, 1.0f);
+    gl_Position = vec4(fn_mat * pos, 1.0f);
 }
