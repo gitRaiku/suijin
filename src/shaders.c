@@ -104,5 +104,14 @@ void program_set_float4(uint32_t program, const char *uniform_name, float val1, 
 void program_set_int1(uint32_t program, const char *uniform_name, int32_t val1) {
     uint32_t uniform_loc = glGetUniformLocation(program, uniform_name);
     glUniform1i(uniform_loc, val1);
+}
 
+void program_set_mat3(uint32_t program, const char *uniform_name, mat3 val1) {
+    uint32_t uniform_loc = glGetUniformLocation(program, uniform_name);
+    glUniformMatrix3fv(uniform_loc, 1, GL_FALSE, &val1[0][0]);
+}
+
+void program_set_mat4(uint32_t program, const char *uniform_name, mat4 val1) {
+    uint32_t uniform_loc = glGetUniformLocation(program, uniform_name);
+    glUniformMatrix4fv(uniform_loc, 1, GL_FALSE, &val1[0][0]);
 }
