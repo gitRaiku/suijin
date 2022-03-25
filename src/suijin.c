@@ -10,6 +10,8 @@
 struct pos {
   float x;
   float y;
+  float z;
+  float w;
 };
 
 struct col {
@@ -28,6 +30,7 @@ struct pixel {
 
 #define GL_CHECK(call, message) if (!(call)) { fputs(message "! Aborting...\n", stderr); glfwTerminate(); exit(1); }
 #define PR_CHECK(call) if (call) { return 1; }
+#define KEY_PRESSED(key) (glfwGetKey(window, key) == GLFW_PRESS)
 
 float COEF = 0.8f;
 double ctime, ltime;
@@ -35,31 +38,30 @@ double deltaTime;
 float mu = 1.5f;
 float g = -9.8f;
 
-struct pixel pixels[2000] = {0};
+//struct pixel pixels[2000] = {0};
+struct pixel pixels[1000] = {0};
 uint32_t pcount = sizeof(pixels) / sizeof(pixels[0]);
+
 #define MAX_DIVISIONS 40
 #define MIN_DIVISIONS 20
 struct pixel lines[MAX_DIVISIONS * 4] = {0};
 
-//float camPos[2] = {1920.0f / 2.0f, 1080.0f / 2.0f};
-float initCamPos[2] = {0.0f, 0.0f};
-float camPos[2] = {0.0f, 0.0f};
-float initCamSize[2] = {50.0f, 50.0f};
-float camSize[2] = {50.0f, 50.0f};
-
-mat3 tl;
-mat3 rs;
-mat3 fn;
+float initCamPos[2]  = {0};
+float camPos[2]      = {0};
+float initCamSize[2] = {0};
+float camSize[2]     = {0};
 
 uint8_t cameraUpdate = 1;
-uint8_t showGrid = 1;
-#define KEY_PRESSED(key) (glfwGetKey(window, key) == GLFW_PRESS)
+uint8_t showGrid = 0;
 #define ZOOM_SPEED 0.01f
 #define PAN_SPEED 0.0003f
 
 uint32_t pvao, pvbo;
 uint32_t lvao, lvbo;
 float grid_spacing = M_PI;
+
+mat4 tl, rs, fn;
+mat4 proj_mat;
 
 #define C0 0.5f
 #define C1 0.2f /// TODO: FIX COLOUR INTENSITY
@@ -155,45 +157,96 @@ float __attribute((pure)) __inline__ lerp(float bottomLim, float topLim, float p
   return (topLim - bottomLim) * progress + bottomLim;
 }
 
+void matmul44(mat4 res, mat4 m1, mat4 m2) {
+  int32_t i, j, k;
+  for (i = 0; i < 4; ++i) {
+    for (j = 0; j < 4; ++j) {
+      res[i][j] = 0.0f;
+      for(k = 0; k < 4; ++k) {
+        res[i][j] += m1[i][k] * m2[k][j];
+      }
+    }
+  }
+}
+
+struct pos mat44x4(mat4 m, struct pos p) {
+  struct pos res;
+  res.x = p.x * m[0][0] + p.y * m[0][1] + p.z * m[0][2] + p.w * m[0][3];
+  res.y = p.x * m[1][0] + p.y * m[1][1] + p.z * m[1][2] + p.w * m[1][3];
+  res.z = p.x * m[2][0] + p.y * m[2][1] + p.z * m[2][2] + p.w * m[2][3];
+  res.w = p.x * m[3][0] + p.y * m[3][1] + p.z * m[3][2] + p.w * m[3][3];
+
+  if (!epsilon_equals(res.w, 1.0f)) {
+    res.x /= res.w;
+    res.y /= res.w;
+    res.z /= res.w;
+    res.w = 1.0f;
+  }
+  return res;
+}
+
 void init_points() {
-  int32_t i;
-  for(i = 0; i < pcount; ++i) {
+  //int32_t i;
+  /*for(i = 0; i < pcount; ++i) {
     pixels[i].p.x = rfloat(-18.0f, 18.0f);
     pixels[i].p.y = rfloat(-18.0f, 18.0f);
+    pixels[i].p.z = rfloat(-18.0f, 18.0f);
+    pixels[i].p.w = 1;
+
     pixels[i].c.r = rfloat(0.0f, 1.0f);
     pixels[i].c.g = rfloat(0.0f, 1.0f);
     pixels[i].c.b = rfloat(0.0f, 1.0f);
     pixels[i].c.a = 1.0f;
 
     //fprintf(stdout, "Point: %fx %fy (%f, %f, %F, %f)\n", pixels[i].p.x, pixels[i].p.y, pixels[i].c.r, pixels[i].c.g, pixels[i].c.b, pixels[i].c.a);
+  }*/
+
+  {
+    int32_t i, j, k;
+    for (i = 0; i < 10; ++i) {
+      for (j = 0; j < 10; ++j) {
+        for (k = 0; k < 10; ++k) {
+          pixels[i * 100 + j * 10 + k].p.x = (float)i;
+          pixels[i * 100 + j * 10 + k].p.y = (float)j;
+          pixels[i * 100 + j * 10 + k].p.z = (float)k;
+          pixels[i * 100 + j * 10 + k].p.w = 1.0f;
+
+          pixels[i * 100 + j * 10 + k].c.r = i / 10.0f;
+          pixels[i * 100 + j * 10 + k].c.g = j / 10.0f;
+          pixels[i * 100 + j * 10 + k].c.b = k / 10.0f;
+          pixels[i * 100 + j * 10 + k].c.a = 1.0f;
+        }
+      }
+    }
   }
 }
 
 struct pos update_pos(struct pos p) {
-  p.x += p.y * deltaTime;
-  p.y += (-mu * p.y + g * sinf(p.x)) * deltaTime;
+  struct pos res;
+  //res.x = p.x + p.y * deltaTime;
+  //res.y = p.y + (-mu * p.y + g * sinf(p.x)) * deltaTime;
+  
+  float a = 0.95f;
+  float b = 0.7f;
+  float c = 0.6f;
+  float d = 3.5f;
+  float e = 0.25f;
+  float f = 0.1f;
+  float dx = (p.z - b) * p.x - d * p.y;
+  float dy = d * p.x + (p.z - b) * p.y;
+  float dz = c + a * p.z - (p.z * p.z * p.z) / 3.0f - (p.x * p.x) + (1.0f + e * p.z) + f * p.z * (p.x * p.x * p.x);
 
-  /*p.y += (p.x) * deltaTime;
-  p.x += (-mu * p.x + g * sinf(p.y)) * deltaTime;*/
-  return p;
+  res.x = p.x + dx * deltaTime;
+  res.y = p.y + dy * deltaTime;
+  res.z = p.z + dz * deltaTime;
+  res.w = p.w;
+  return res;
 }
 
 void update_points() {
   int32_t i;
   for(i = 0; i < pcount; ++i) {
     pixels[i].p = update_pos(pixels[i].p);
-  }
-}
-
-void matmul33(mat3 res, mat3 m1, mat3 m2) {
-  int32_t i, j, k;
-  for (i = 0; i < 3; ++i) {
-    for (j = 0; j < 3; ++j) {
-      res[i][j] = 0.0f;
-      for(k = 0; k < 3; ++k) {
-        res[i][j] += m1[i][k] * m2[k][j];
-      }
-    }
   }
 }
 
@@ -215,17 +268,31 @@ void print_mat(mat3 m, const char *name) {
   }
 }
 
+void create_projection_matrix(mat4 m, float angle, float ratio, float near, float far) {
+  float tanHalfAngle = tanf(angle / 2.0f);
+  mat4 proj = {{ 1.0f / (ratio * tanHalfAngle), 0.0f               , 0.0f                               ,  0.0f },
+               { 0.0f                         , 1.0f / tanHalfAngle, 0.0f                               ,  0.0f },
+               { 0.0f                         , 0.0f               , -(far + near) / (far - near)       , -1.0f },
+               { 0.0f                         , 0.0f               , -(2.0f * far * near) / (far - near),  0.0f }};
+  memcpy(m, proj, 4 * 4 * sizeof(float));
+}
+
 void update_camera_matrix() {
-  tl[0][0] = 1.0f; tl[0][1] = 0.0f; tl[0][2] = -camPos[0];
-  tl[1][0] = 0.0f; tl[1][1] = 1.0f; tl[1][2] = -camPos[1];
-  tl[2][0] = 0.0f; tl[2][1] = 0.0f; tl[2][2] = 1.0f;
+  tl[0][0] = 1.0f; tl[0][1] = 0.0f; tl[0][2] = -camPos[0]; tl[0][3] = 0.0f;
+  tl[1][0] = 0.0f; tl[1][1] = 1.0f; tl[1][2] = -camPos[1]; tl[1][3] = 0.0f;
+  tl[2][0] = 0.0f; tl[2][1] = 0.0f; tl[2][2] = 1.0f;       tl[2][3] = 0.0f;
+  tl[3][0] = 0.0f; tl[3][1] = 0.0f; tl[3][2] = 0.0f;       tl[3][3] = 1.0f;
 
-  rs[0][0] = 2.0f / camSize[0]; rs[0][1] =              0.0f; rs[0][2] = 0.0f;
-  rs[1][0] =              0.0f; rs[1][1] = 2.0f / camSize[1]; rs[1][2] = 0.0f;
-  rs[2][0] =              0.0f; rs[2][1] =              0.0f; rs[2][2] = 1.0f;
+  rs[0][0] = 2.0f / camSize[0]; rs[0][1] =              0.0f; rs[0][2] = 0.0f; rs[0][3] = 0.0f;
+  rs[1][0] =              0.0f; rs[1][1] = 2.0f / camSize[1]; rs[1][2] = 0.0f; rs[1][3] = 0.0f;
+  rs[2][0] =              0.0f; rs[2][1] =              0.0f; rs[2][2] = 1.0f; rs[2][3] = 0.0f;
+  rs[3][0] =              0.0f; rs[3][1] =              0.0f; rs[3][2] = 0.0f; rs[3][3] = 1.0f;
 
-  matmul33(fn, rs, tl);
-  //matmul33(fn, tl, rs);
+  create_projection_matrix(proj_mat, M_PI / 2, camSize[0] / camSize[1], 0.1f, 100.0f);
+
+  mat4 temp;
+  matmul44(temp, rs, tl);
+  matmul44(fn, proj_mat, temp);
 }
 
 void handle_input(GLFWwindow *__restrict window) {
@@ -352,8 +419,8 @@ uint8_t run_suijin() {
     glBindBuffer(GL_ARRAY_BUFFER, pvbo);
     glBufferData(GL_ARRAY_BUFFER, sizeof(pixels), pixels, GL_DYNAMIC_DRAW);
 
-    glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 6 * sizeof(float), (void *) 0);
-    glVertexAttribPointer(1, 4, GL_FLOAT, GL_FALSE, 6 * sizeof(float), (void *) sizeof(struct pos));
+    glVertexAttribPointer(0, 4, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void *) 0);
+    glVertexAttribPointer(1, 4, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void *) sizeof(struct pos));
     glEnableVertexAttribArray(0);
     glEnableVertexAttribArray(1);
   }
@@ -364,8 +431,8 @@ uint8_t run_suijin() {
     glBindBuffer(GL_ARRAY_BUFFER, lvbo);
     glBufferData(GL_ARRAY_BUFFER, sizeof(lines), lines, GL_DYNAMIC_DRAW);
 
-    glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 6 * sizeof(float), (void *) 0);
-    glVertexAttribPointer(1, 4, GL_FLOAT, GL_FALSE, 6 * sizeof(float), (void *) sizeof(struct pos));
+    glVertexAttribPointer(0, 4, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void *) 0);
+    glVertexAttribPointer(1, 4, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void *) sizeof(struct pos));
     glEnableVertexAttribArray(0);
     glEnableVertexAttribArray(1);
 
@@ -410,16 +477,17 @@ uint8_t run_suijin() {
       print_mat(fn, "final");*/
     }
 
-    program_set_mat3(program, "fn_mat", fn);
+    program_set_mat4(program, "fn_mat", fn);
 
     if (showGrid) {
       glBindVertexArray(lvao);
       glDrawArrays(GL_LINES, 0, sizeof(lines) / sizeof(lines[0]));
     }
 
+    //update_points();
+
     {
       glBindVertexArray(pvao);
-      update_points();
 
       glBindBuffer(GL_ARRAY_BUFFER, pvbo);
       glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(pixels), pixels);
