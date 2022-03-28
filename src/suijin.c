@@ -6,6 +6,7 @@
 #include <string.h>
 
 #include "shaders.h"
+#include "linalg.h"
 
 struct pos {
   float x;
@@ -44,30 +45,42 @@ uint32_t pcount = sizeof(pixels) / sizeof(pixels[0]);
 
 #define MAX_DIVISIONS 40
 #define MIN_DIVISIONS 20
-struct pixel lines[MAX_DIVISIONS * 4] = {0};
-
-float initCamPos[2]  = {0};
-float camPos[2]      = {0};
-float initCamSize[2] = {0};
-float camSize[2]     = {0};
-
-uint8_t cameraUpdate = 1;
-uint8_t showGrid = 0;
-#define ZOOM_SPEED 0.01f
-#define PAN_SPEED 0.0003f
-
-uint32_t pvao, pvbo;
-uint32_t lvao, lvbo;
-float grid_spacing = M_PI;
-
-mat4 tl, rs, fn;
-mat4 proj_mat;
 
 #define C0 0.5f
 #define C1 0.2f /// TODO: FIX COLOUR INTENSITY
 #define C2 0.2f
 
-#define INIT_RES_COEF 0.07f
+float grid_spacing = M_PI;
+struct pixel lines[MAX_DIVISIONS * 4] = {0};
+
+struct camera {
+  vec3 pos;
+  vec3 front;
+  vec3 up;
+  float fov;
+  float yaw;
+  float pitch;
+  float roll;
+  float ratio;
+};
+
+double mouseX, mouseY;
+double oldMouseX, oldMouseY;
+
+struct camera initCam;
+struct camera cam;
+
+uint8_t cameraUpdate = 1;
+uint8_t showGrid = 0;
+#define ZOOM_SPEED 0.01f
+//#define PAN_SPEED 0.0003f
+#define PAN_SPEED 0.1f
+#define SENS 0.01f
+
+uint32_t pvao, pvbo;
+uint32_t lvao, lvbo;
+
+mat4 fn;
 
 
 void callback_error(int error, const char *desc) {
@@ -80,11 +93,7 @@ void callback_window_should_close(GLFWwindow *window) {
 void callback_window_resize(GLFWwindow *window, int width, int height) {
     glViewport(0, 0, width, height);
 
-    float wc = initCamSize[0] / camSize[0];
-    float hc = initCamSize[1] / camSize[1];
-    initCamSize[0] = (float)width * wc * INIT_RES_COEF;
-    initCamSize[1] = (float)height * hc * INIT_RES_COEF;
-    memcpy(camSize, initCamSize, sizeof(camSize));
+    initCam.ratio = cam.ratio = (float) width / (float) height;
     cameraUpdate = 1;
 
     fprintf(stdout, "Window Resize To: %ix%i\n", width, height);
@@ -145,6 +154,10 @@ GLFWwindow *window_init() {
     return window;
 }
 
+float __attribute((pure)) __inline__ toRadians(float o) {
+  return o * M_PI / 180.0f;
+}
+
 uint8_t __attribute((pure)) __inline__ epsilon_equals(float o1, float o2) {
   return fabsf(o1 - o2) < 0.000000001;
 }
@@ -157,34 +170,15 @@ float __attribute((pure)) __inline__ lerp(float bottomLim, float topLim, float p
   return (topLim - bottomLim) * progress + bottomLim;
 }
 
-void matmul44(mat4 res, mat4 m1, mat4 m2) {
-  int32_t i, j, k;
-  for (i = 0; i < 4; ++i) {
-    for (j = 0; j < 4; ++j) {
-      res[i][j] = 0.0f;
-      for(k = 0; k < 4; ++k) {
-        res[i][j] += m1[i][k] * m2[k][j];
-      }
-    }
+float __attribute((pure)) clamp(float val, float lb, float ub) {
+  if (val <= lb) {
+    return lb;
   }
-}
-
-struct pos mat44x4(mat4 m, struct pos p) {
-  struct pos res;
-  res.x = p.x * m[0][0] + p.y * m[0][1] + p.z * m[0][2] + p.w * m[0][3];
-  res.y = p.x * m[1][0] + p.y * m[1][1] + p.z * m[1][2] + p.w * m[1][3];
-  res.z = p.x * m[2][0] + p.y * m[2][1] + p.z * m[2][2] + p.w * m[2][3];
-  res.w = p.x * m[3][0] + p.y * m[3][1] + p.z * m[3][2] + p.w * m[3][3];
-
-  if (!epsilon_equals(res.w, 1.0f)) {
-    res.x /= res.w;
-    res.y /= res.w;
-    res.z /= res.w;
-    res.w = 1.0f;
+  if (val >= ub) {
+    return ub;
   }
-  return res;
+  return val;
 }
-
 void init_points() {
   //int32_t i;
   /*for(i = 0; i < pcount; ++i) {
@@ -202,22 +196,25 @@ void init_points() {
   }*/
 
   {
+#define cp pixels[i * 100 + j * 10 + k]
     int32_t i, j, k;
     for (i = 0; i < 10; ++i) {
       for (j = 0; j < 10; ++j) {
         for (k = 0; k < 10; ++k) {
-          pixels[i * 100 + j * 10 + k].p.x = (float)i;
-          pixels[i * 100 + j * 10 + k].p.y = (float)j;
-          pixels[i * 100 + j * 10 + k].p.z = (float)k;
-          pixels[i * 100 + j * 10 + k].p.w = 1.0f;
+          cp.p.x = (float)i;
+          cp.p.y = (float)j;
+          cp.p.z = (float)k;
+          cp.p.w = 1.0f;
 
-          pixels[i * 100 + j * 10 + k].c.r = i / 10.0f;
-          pixels[i * 100 + j * 10 + k].c.g = j / 10.0f;
-          pixels[i * 100 + j * 10 + k].c.b = k / 10.0f;
-          pixels[i * 100 + j * 10 + k].c.a = 1.0f;
+          cp.c.r = i / 10.0f;
+          cp.c.g = j / 10.0f;
+          cp.c.b = k / 10.0f;
+          cp.c.a = 1.0f;
+          //fprintf(stdout, "pixels[%u] = %f %f %f %f - %f %f %f %f\n", i * 100 + j * 10 + k, cp.p.x, cp.p.y, cp.p.z, cp.p.w, cp.c.r, cp.c.g, cp.c.b, cp.c.a);
         }
       }
     }
+#undef cp
   }
 }
 
@@ -257,11 +254,11 @@ struct pos matmul(mat3 mat,struct pos p) {
   return res;
 }
 
-void print_mat(mat3 m, const char *name) {
+void print_mat(mat4 m, const char *name) {
   fprintf(stdout, "Printing %s\n", name);
   int32_t i, j;
-  for (i = 0; i < 3; ++i) {
-    for (j = 0; j < 3; ++j) {
+  for (i = 0; i < 4; ++i) {
+    for (j = 0; j < 4; ++j) {
       fprintf(stdout, "%f ", m[i][j]);
     }
     fputc('\n', stdout);
@@ -269,76 +266,125 @@ void print_mat(mat3 m, const char *name) {
 }
 
 void create_projection_matrix(mat4 m, float angle, float ratio, float near, float far) {
+  memset(m, 0, sizeof(mat4));
   float tanHalfAngle = tanf(angle / 2.0f);
-  mat4 proj = {{ 1.0f / (ratio * tanHalfAngle), 0.0f               , 0.0f                               ,  0.0f },
-               { 0.0f                         , 1.0f / tanHalfAngle, 0.0f                               ,  0.0f },
-               { 0.0f                         , 0.0f               , -(far + near) / (far - near)       , -1.0f },
-               { 0.0f                         , 0.0f               , -(2.0f * far * near) / (far - near),  0.0f }};
-  memcpy(m, proj, 4 * 4 * sizeof(float));
+  m[0][0] = 1.0f / (ratio * tanHalfAngle);
+  m[1][1] = 1.0f / (tanHalfAngle);
+  m[2][2] = -(far + near) / (far - near);
+  m[3][2] = -1.0f;
+  m[2][3] = -(2.0f * far * near) / (far - near);
+}
+
+void create_lookat_matrix(mat4 m) {
+
+  vec3 f = norm(v3s(v3a(cam.pos, cam.front), cam.pos));
+  vec3 s = norm(cross(cam.up, f));
+  vec3 u = cross(f, s);
+
+  memset(m, 0, sizeof(mat4));
+  m[0][0] = s.x;
+  m[0][1] = s.y;
+  m[0][2] = s.z;
+         
+  m[1][0] = u.x;
+  m[1][1] = u.y;
+  m[1][2] = u.z;
+         
+  m[2][0] = f.x;
+  m[2][1] = f.y;
+  m[2][2] = f.z;
+         
+  m[0][3] = -dot(s, cam.pos);
+  m[1][3] = -dot(u, cam.pos);
+  m[2][3] = -dot(f, cam.pos);
+  m[3][3] = 1.0f;
 }
 
 void update_camera_matrix() {
-  tl[0][0] = 1.0f; tl[0][1] = 0.0f; tl[0][2] = -camPos[0]; tl[0][3] = 0.0f;
-  tl[1][0] = 0.0f; tl[1][1] = 1.0f; tl[1][2] = -camPos[1]; tl[1][3] = 0.0f;
-  tl[2][0] = 0.0f; tl[2][1] = 0.0f; tl[2][2] = 1.0f;       tl[2][3] = 0.0f;
-  tl[3][0] = 0.0f; tl[3][1] = 0.0f; tl[3][2] = 0.0f;       tl[3][3] = 1.0f;
+  mat4 proj, view;
+  create_projection_matrix(proj, cam.fov, cam.ratio, 0.01f, 1000.0f);
+  create_lookat_matrix(view);
 
-  rs[0][0] = 2.0f / camSize[0]; rs[0][1] =              0.0f; rs[0][2] = 0.0f; rs[0][3] = 0.0f;
-  rs[1][0] =              0.0f; rs[1][1] = 2.0f / camSize[1]; rs[1][2] = 0.0f; rs[1][3] = 0.0f;
-  rs[2][0] =              0.0f; rs[2][1] =              0.0f; rs[2][2] = 1.0f; rs[2][3] = 0.0f;
-  rs[3][0] =              0.0f; rs[3][1] =              0.0f; rs[3][2] = 0.0f; rs[3][3] = 1.0f;
-
-  create_projection_matrix(proj_mat, M_PI / 2, camSize[0] / camSize[1], 0.1f, 100.0f);
-
-  mat4 temp;
-  matmul44(temp, rs, tl);
-  matmul44(fn, proj_mat, temp);
+  //matmul44(fn, view, proj);
+  matmul44(fn, proj, view);
 }
 
 void handle_input(GLFWwindow *__restrict window) {
-  if (KEY_PRESSED(GLFW_KEY_EQUAL) && KEY_PRESSED(GLFW_KEY_LEFT_SHIFT)) {
-    camSize[0] -= camSize[0] * ZOOM_SPEED;
-    camSize[1] -= camSize[1] * ZOOM_SPEED;
-    cameraUpdate = 1;
-  } else if (KEY_PRESSED(GLFW_KEY_EQUAL)) {
-    memcpy(camSize, initCamSize, sizeof(camSize));
-    cameraUpdate = 1;
+  { 
+    glfwGetCursorPos(window, &mouseX, &mouseY);
+
+    if ((mouseX != oldMouseX) || (mouseY != oldMouseY)) {
+      double xoff = mouseX - oldMouseX;
+      double yoff = mouseY - oldMouseY;
+
+      oldMouseX = mouseX;
+      oldMouseY = mouseY;
+  
+      cam.yaw   += xoff * SENS;
+      cam.pitch = clamp(cam.pitch - yoff * SENS, -3 * M_PI / 4.0, 3 * M_PI / 4.0);
+      fprintf(stdout, "xoff: %f yoff: %f\n", xoff, yoff);
+
+      cam.front.x = cos(cam.yaw * cos(cam.pitch));
+      cam.front.y = sin(cam.pitch);
+      cam.front.z = sin(cam.yaw) * cos(cam.pitch);
+      cam.front = norm(cam.front);
+      cameraUpdate = 1;
+      fprintf(stdout, "Look vector: %f %f %f\n", cam.front.x, cam.front.y, cam.front.z);
+      fprintf(stdout, "Yaw: %f; Pitch: %f\n", cam.yaw, cam.pitch);
+    }
   }
-  if (KEY_PRESSED(GLFW_KEY_MINUS)) {
-    camSize[0] += camSize[0] * ZOOM_SPEED;
-    camSize[1] += camSize[1] * ZOOM_SPEED;
-    cameraUpdate = 1;
-  }
-  if (KEY_PRESSED(GLFW_KEY_R)) {
-    init_points();
-  }
-  if (KEY_PRESSED(GLFW_KEY_W)) {
-    camPos[1] += camSize[1] * PAN_SPEED;
-    cameraUpdate = 1;
-  }
-  if (KEY_PRESSED(GLFW_KEY_S)) {
-    camPos[1] -= camSize[1] * PAN_SPEED;
-    cameraUpdate = 1;
-  }
-  if (KEY_PRESSED(GLFW_KEY_A)) {
-    camPos[0] -= camSize[0] * PAN_SPEED;
-    cameraUpdate = 1;
-  }
-  if (KEY_PRESSED(GLFW_KEY_D)) {
-    camPos[0] += camSize[0] * PAN_SPEED;
-    cameraUpdate = 1;
-  }
-  if (KEY_PRESSED(GLFW_KEY_Q)) {
-    memcpy(camPos, initCamPos, sizeof(camPos));
-    cameraUpdate = 1;
-  }
-  if (KEY_PRESSED(GLFW_KEY_P)) {
-    showGrid ^= 1;
+
+  {
+    if (KEY_PRESSED(GLFW_KEY_EQUAL) && KEY_PRESSED(GLFW_KEY_LEFT_SHIFT)) {
+      cam.fov += cam.fov * ZOOM_SPEED;
+      cameraUpdate = 1;
+    } else if (KEY_PRESSED(GLFW_KEY_EQUAL)) {
+      cam.fov = initCam.fov;
+      cameraUpdate = 1;
+    }
+    if (KEY_PRESSED(GLFW_KEY_MINUS)) {
+      cam.fov -= cam.fov * ZOOM_SPEED;
+      cameraUpdate = 1;
+    }
+    if (KEY_PRESSED(GLFW_KEY_A)) {
+      cam.pos = v3a(v3m(PAN_SPEED, v3n(norm(cross(cam.front, cam.up)))), cam.pos);
+      cameraUpdate = 1;
+    }
+    if (KEY_PRESSED(GLFW_KEY_D)) {
+      cam.pos = v3a(v3m(PAN_SPEED, norm(cross(cam.front, cam.up))), cam.pos);
+      cameraUpdate = 1;
+    }
+    if (KEY_PRESSED(GLFW_KEY_SPACE)) {
+      cam.pos = v3a(v3m(PAN_SPEED, cam.up), cam.pos);
+      cameraUpdate = 1;
+    }
+    if (KEY_PRESSED(GLFW_KEY_LEFT_CONTROL)) {
+      cam.pos = v3a(v3m(PAN_SPEED, v3n(cam.up)), cam.pos);
+      cameraUpdate = 1;
+    }
+    if (KEY_PRESSED(GLFW_KEY_W)) {
+      cam.pos = v3a(v3m(PAN_SPEED, v3n(cam.front)), cam.pos);
+      cameraUpdate = 1;
+    }
+    if (KEY_PRESSED(GLFW_KEY_S)) {
+      cam.pos = v3a(v3m(PAN_SPEED, cam.front), cam.pos);
+      cameraUpdate = 1;
+    }
+    if (KEY_PRESSED(GLFW_KEY_R)) {
+      init_points();
+    }
+    if (KEY_PRESSED(GLFW_KEY_U)) {
+      memcpy(&cam, &initCam, sizeof(cam));
+      cameraUpdate = 1;
+    }
+    if (KEY_PRESSED(GLFW_KEY_P)) {
+      showGrid ^= 1;
+    }
   }
 }
 
 void update_grid_lines() {
-  while (camSize[1] / grid_spacing > MAX_DIVISIONS / 3.5f) {
+  /*while (camSize[1] / grid_spacing > MAX_DIVISIONS / 3.5f) {
     grid_spacing *= 2.0f;
   }
   while (camSize[1] / grid_spacing < MIN_DIVISIONS / 3.5f) {
@@ -379,7 +425,7 @@ void update_grid_lines() {
   }
 
   glBindBuffer(GL_ARRAY_BUFFER, lvbo);
-  glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(lines), lines);
+  glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(lines), lines);*/
 }
 
 uint8_t run_suijin() {
@@ -387,6 +433,8 @@ uint8_t run_suijin() {
   GL_CHECK(glfwInit(), "Could not initialize glfw!");
 
   GLFWwindow *__restrict window = window_init();
+
+  glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
 
   uint32_t program;
 
@@ -439,23 +487,35 @@ uint8_t run_suijin() {
     glBindVertexArray(0);
   }
 
+  memset(&initCam, 0, sizeof(initCam));
+
   {
     int iw, ih;
     glfwGetWindowSize(window, &iw, &ih);
-    initCamSize[0] = (float)iw * INIT_RES_COEF;
-    initCamSize[1] = (float)ih * INIT_RES_COEF;
+    initCam.ratio = (float)iw / (float)ih;
   }
 
-  memcpy(camPos, initCamPos, sizeof(camPos));
-  memcpy(camSize, initCamSize, sizeof(camSize));
+  initCam.up.y = 1.0f;
+  initCam.fov = toRadians(90.0f);
+  initCam.yaw = toRadians(0.0f);
+  initCam.pitch = toRadians(0.0f);
+  initCam.pos = (vec3) {5.0f, 5.0f, 5.0f};
 
-  glPointSize(2.0);
-  glLineWidth(1.0);
+  memcpy(&cam, &initCam, sizeof(cam));
+
+  glPointSize(5.0);
+  glLineWidth(3.0);
 
   glEnable(GL_BLEND);
   glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
+  glEnable(GL_PROGRAM_POINT_SIZE);
+
   init_points();
+
+  glfwGetCursorPos(window, &mouseX, &mouseY);
+  oldMouseX = 0.0;
+  oldMouseY = 0.0;
 
   while (!glfwWindowShouldClose(window)) {
     ctime = glfwGetTime();
