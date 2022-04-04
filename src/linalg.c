@@ -1,6 +1,49 @@
 #include "linalg.h"
 
-vec3 norm(vec3 v) {
+
+quat __attribute((pure)) gen_quat(vec3 axis, float rot) {
+  float rs = sinf(rot / 2.0f);
+  float rc = cosf(rot / 2.0f);
+  
+  quat res;
+  res.w =          rc;
+  res.x = axis.x * rs;
+  res.y = axis.y * rs;
+  res.z = axis.z * rs;
+  return res;
+}
+
+quat __attribute((pure)) qconj(quat q) {
+  return (quat) { -q.x, -q.y, -q.z, q.w };
+}
+
+quat __attribute((pure)) qmul(quat q1, quat q2) {
+  quat res;
+  res.w = q1.w * q2.w - q1.x * q2.x - q1.y * q2.y - q1.z * q2.z;
+  res.x = q1.w * q2.x + q1.x * q2.w + q1.y * q2.z - q1.z * q2.y;
+  res.y = q1.w * q2.y - q1.x * q2.z + q1.y * q2.w + q1.z * q2.x;
+  res.z = q1.w * q2.z + q1.x * q2.y - q1.x * q2.x + q1.z * q2.w;
+  return res;
+}
+
+void quat_to_mat(mat3 ret, quat q) {
+  memset(ret, 0, sizeof(mat3));
+  ret[0][0] = 1.0f - 2.0f * (q.y * q.y + q.z * q.z);
+  ret[0][1] =        2.0f * (q.x * q.y - q.w * q.z);
+  ret[0][2] =        2.0f * (q.x * q.z + q.w * q.y);
+
+  ret[1][0] =        2.0f * (q.x * q.y + q.w * q.z);
+  ret[1][1] = 1.0f - 2.0f * (q.x * q.x + q.z * q.z);
+  ret[1][2] =        2.0f * (q.y * q.z + q.w * q.x);
+
+  ret[2][0] =        2.0f * (q.x * q.z + q.w * q.y);
+  ret[2][1] =        2.0f * (q.y * q.z + q.w * q.x);
+  ret[2][2] = 1.0f - 2.0f * (q.x * q.x + q.y * q.y);
+  
+  //ret[3][3] = 1.0f;
+}
+
+vec3 __attribute((pure)) norm(vec3 v) {
   float dist = sqrtf(v.x * v.x + v.y * v.y + v.z * v.z);
   vec3 res;
   res.x = v.x / dist;
@@ -9,7 +52,7 @@ vec3 norm(vec3 v) {
   return res;
 }
 
-vec3 cross(vec3 v1, vec3 v2) {
+vec3 __attribute((pure)) cross(vec3 v1, vec3 v2) {
   vec3 res;
   res.x = v1.y * v2.z - v1.z * v2.y;
   res.y = v1.z * v2.x - v1.x * v2.z;
@@ -17,13 +60,13 @@ vec3 cross(vec3 v1, vec3 v2) {
   return res;
 }
 
-float dot(vec3 v1, vec3 v2) {
+float __attribute((pure)) dot(vec3 v1, vec3 v2) {
   return v1.x * v2.x + 
          v1.y * v2.y + 
          v1.z * v2.z;
 }
 
-vec3 v3m(float coef, vec3 v) {
+vec3 __attribute((pure)) v3m(float coef, vec3 v) {
   vec3 res;
   res.x = v.x * coef;
   res.y = v.y * coef;
@@ -31,7 +74,7 @@ vec3 v3m(float coef, vec3 v) {
   return res;
 }
 
-vec3 v3s(vec3 v1, vec3 v2) {
+vec3 __attribute((pure)) v3s(vec3 v1, vec3 v2) {
   vec3 res;
   res.x = v1.x - v2.x;
   res.y = v1.y - v2.y;
@@ -39,7 +82,7 @@ vec3 v3s(vec3 v1, vec3 v2) {
   return res;
 }
 
-vec3 v3a(vec3 v1, vec3 v2) {
+vec3 __attribute((pure)) v3a(vec3 v1, vec3 v2) {
   vec3 res;
   res.x = v1.x + v2.x;
   res.y = v1.y + v2.y;
@@ -47,7 +90,7 @@ vec3 v3a(vec3 v1, vec3 v2) {
   return res;
 }
 
-vec3 v3n(vec3 v) {
+vec3 __attribute((pure)) v3n(vec3 v) {
   vec3 res;
   res.x = -v.x;
   res.y = -v.y;
@@ -65,5 +108,16 @@ void matmul44(mat4 res, mat4 m1, mat4 m2) {
       }
     }
   }
+}
+
+vec3 __attribute((pure)) vmm3(mat3 m, vec3 v) { /* Vec mat mul 3 */
+  vec3 res;
+
+  res.x = v.x * m[0][0] + v.y * m[0][1] + v.z * m[0][2]; /* v.w * m[0][3]; */
+  res.y = v.x * m[1][0] + v.y * m[1][1] + v.z * m[1][2]; /* v.w * m[1][3]; */
+  res.z = v.x * m[2][0] + v.y * m[2][1] + v.z * m[2][2]; /* v.w * m[2][3]; */
+  //res.w = v.x * m[3][0] + v.y * m[3][1] + v.z * m[3][2] + v.w * m[3][3];
+
+  return res;
 }
 

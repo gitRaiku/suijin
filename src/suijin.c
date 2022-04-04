@@ -40,7 +40,7 @@ float mu = 1.5f;
 float g = -9.8f;
 
 //struct pixel pixels[2000] = {0};
-struct pixel pixels[1000] = {0};
+struct pixel pixels[2000] = {0};
 uint32_t pcount = sizeof(pixels) / sizeof(pixels[0]);
 
 #define MAX_DIVISIONS 40
@@ -55,8 +55,8 @@ struct pixel lines[MAX_DIVISIONS * 4] = {0};
 
 struct camera {
   vec3 pos;
-  vec3 front;
   vec3 up;
+  quat orientation;
   float fov;
   float yaw;
   float pitch;
@@ -73,15 +73,17 @@ struct camera cam;
 uint8_t cameraUpdate = 1;
 uint8_t showGrid = 0;
 #define ZOOM_SPEED 0.01f
-//#define PAN_SPEED 0.0003f
 #define PAN_SPEED 0.1f
-#define SENS 0.01f
+#define SENS 0.001f
 
 uint32_t pvao, pvbo;
 uint32_t lvao, lvbo;
 
 mat4 fn;
 
+void print_vec3(vec3 v, const char *str) {
+  fprintf(stdout, "%s: x = %f y = %f z = %f\n", str, v.x, v.y, v.z);
+}
 
 void callback_error(int error, const char *desc) {
     fprintf(stderr, "GLFW error, no %i, desc %s\n", error, desc);
@@ -179,9 +181,10 @@ float __attribute((pure)) clamp(float val, float lb, float ub) {
   }
   return val;
 }
+
 void init_points() {
-  //int32_t i;
-  /*for(i = 0; i < pcount; ++i) {
+  int32_t i;
+  for(i = 0; i < pcount; ++i) {
     pixels[i].p.x = rfloat(-18.0f, 18.0f);
     pixels[i].p.y = rfloat(-18.0f, 18.0f);
     pixels[i].p.z = rfloat(-18.0f, 18.0f);
@@ -193,9 +196,9 @@ void init_points() {
     pixels[i].c.a = 1.0f;
 
     //fprintf(stdout, "Point: %fx %fy (%f, %f, %F, %f)\n", pixels[i].p.x, pixels[i].p.y, pixels[i].c.r, pixels[i].c.g, pixels[i].c.b, pixels[i].c.a);
-  }*/
+  }
 
-  {
+  /*{
 #define cp pixels[i * 100 + j * 10 + k]
     int32_t i, j, k;
     for (i = 0; i < 10; ++i) {
@@ -215,7 +218,7 @@ void init_points() {
       }
     }
 #undef cp
-  }
+  }*/
 }
 
 struct pos update_pos(struct pos p) {
@@ -254,6 +257,17 @@ struct pos matmul(mat3 mat,struct pos p) {
   return res;
 }
 
+void print_mat3(mat3 m, const char *name) {
+  fprintf(stdout, "Printing %s\n", name);
+  int32_t i, j;
+  for (i = 0; i < 3; ++i) {
+    for (j = 0; j < 3; ++j) {
+      fprintf(stdout, "%f ", m[i][j]);
+    }
+    fputc('\n', stdout);
+  }
+}
+
 void print_mat(mat4 m, const char *name) {
   fprintf(stdout, "Printing %s\n", name);
   int32_t i, j;
@@ -274,12 +288,18 @@ void create_projection_matrix(mat4 m, float angle, float ratio, float near, floa
   m[3][2] = -1.0f;
   m[2][3] = -(2.0f * far * near) / (far - near);
 }
+vec3 __inline__ __attribute((pure)) *__restrict qv(quat *__restrict q) {
+  return (struct vec3 *__restrict) q;
+}
 
 void create_lookat_matrix(mat4 m) {
-
-  vec3 f = norm(v3s(v3a(cam.pos, cam.front), cam.pos));
-  vec3 s = norm(cross(cam.up, f));
+  vec3 f = norm(*qv(&cam.orientation));
+  vec3 s = cross(cam.up, f);
   vec3 u = cross(f, s);
+  print_vec3(f, "f");
+  print_vec3(s, "s");
+  print_vec3(u, "u");
+  print_vec3(cam.pos, "cam.pos");
 
   memset(m, 0, sizeof(mat4));
   m[0][0] = s.x;
@@ -298,10 +318,14 @@ void create_lookat_matrix(mat4 m) {
   m[1][3] = -dot(u, cam.pos);
   m[2][3] = -dot(f, cam.pos);
   m[3][3] = 1.0f;
+  print_mat(m, "lookat");
 }
 
 void update_camera_matrix() {
   mat4 proj, view;
+  if (cam.up.x == cam.orientation.x && cam.up.y == cam.orientation.y && cam.up.z == cam.orientation.z) {
+    cam.orientation.x = 0.0000000000000001;
+  }
   create_projection_matrix(proj, cam.fov, cam.ratio, 0.01f, 1000.0f);
   create_lookat_matrix(view);
 
@@ -313,25 +337,27 @@ void handle_input(GLFWwindow *__restrict window) {
   { 
     glfwGetCursorPos(window, &mouseX, &mouseY);
 
-    if ((mouseX != oldMouseX) || (mouseY != oldMouseY)) {
+    //if ((mouseX != oldMouseX) || (mouseY != oldMouseY)) {
       double xoff = mouseX - oldMouseX;
       double yoff = mouseY - oldMouseY;
 
       oldMouseX = mouseX;
       oldMouseY = mouseY;
+      //xoff = 5;
   
-      cam.yaw   += xoff * SENS;
-      cam.pitch = clamp(cam.pitch - yoff * SENS, -3 * M_PI / 4.0, 3 * M_PI / 4.0);
-      fprintf(stdout, "xoff: %f yoff: %f\n", xoff, yoff);
+      //fprintf(stdout, "xoff: %f yoff: %f\n", xoff, yoff);
 
-      cam.front.x = cos(cam.yaw * cos(cam.pitch));
-      cam.front.y = sin(cam.pitch);
-      cam.front.z = sin(cam.yaw) * cos(cam.pitch);
-      cam.front = norm(cam.front);
+      quat qx = gen_quat(norm((struct vec3) {0.0f, 1.0f, 0.0f}), -xoff * SENS);
+      quat qy = gen_quat(norm((struct vec3) {1.0f, 0.0f, 0.0f}), -yoff * SENS);
+      //quat qr = qmul(qx, qy);
+      quat qr = qmul(qy, qx);
+      quat qt = qmul(qmul(qr, cam.orientation), qconj(qr));
+      /*fprintf(stdout, "Gen q: %f %f %f %f\n", q.w, q.x, q.y, q.z);
+      fprintf(stdout, "Cam q: %f %f %f %f -> %f %f %f %f\n", cam.orientation.w, cam.orientation.x, cam.orientation.y, cam.orientation.z, qt.w, qt.x, qt.y, qt.z);*/
+      cam.orientation = qt;
+
       cameraUpdate = 1;
-      fprintf(stdout, "Look vector: %f %f %f\n", cam.front.x, cam.front.y, cam.front.z);
-      fprintf(stdout, "Yaw: %f; Pitch: %f\n", cam.yaw, cam.pitch);
-    }
+    //}
   }
 
   {
@@ -347,11 +373,11 @@ void handle_input(GLFWwindow *__restrict window) {
       cameraUpdate = 1;
     }
     if (KEY_PRESSED(GLFW_KEY_A)) {
-      cam.pos = v3a(v3m(PAN_SPEED, v3n(norm(cross(cam.front, cam.up)))), cam.pos);
+      cam.pos = v3a(v3m(PAN_SPEED, norm(cross(*qv(&cam.orientation), cam.up))), cam.pos);
       cameraUpdate = 1;
     }
     if (KEY_PRESSED(GLFW_KEY_D)) {
-      cam.pos = v3a(v3m(PAN_SPEED, norm(cross(cam.front, cam.up))), cam.pos);
+      cam.pos = v3a(v3m(PAN_SPEED, v3n(norm(cross(*qv(&cam.orientation), cam.up)))), cam.pos);
       cameraUpdate = 1;
     }
     if (KEY_PRESSED(GLFW_KEY_SPACE)) {
@@ -363,11 +389,11 @@ void handle_input(GLFWwindow *__restrict window) {
       cameraUpdate = 1;
     }
     if (KEY_PRESSED(GLFW_KEY_W)) {
-      cam.pos = v3a(v3m(PAN_SPEED, v3n(cam.front)), cam.pos);
+      cam.pos = v3a(v3m(PAN_SPEED, v3n(*qv(&cam.orientation))), cam.pos);
       cameraUpdate = 1;
     }
     if (KEY_PRESSED(GLFW_KEY_S)) {
-      cam.pos = v3a(v3m(PAN_SPEED, cam.front), cam.pos);
+      cam.pos = v3a(v3m(PAN_SPEED, *qv(&cam.orientation)), cam.pos);
       cameraUpdate = 1;
     }
     if (KEY_PRESSED(GLFW_KEY_R)) {
@@ -426,6 +452,10 @@ void update_grid_lines() {
 
   glBindBuffer(GL_ARRAY_BUFFER, lvbo);
   glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(lines), lines);*/
+}
+
+void print_quat(quat q, const char *str) {
+  fprintf(stdout, "%s: x = %f y = %f z = %f w = %f\n", str, q.x, q.y, q.z, q.w);
 }
 
 uint8_t run_suijin() {
@@ -499,7 +529,8 @@ uint8_t run_suijin() {
   initCam.fov = toRadians(90.0f);
   initCam.yaw = toRadians(0.0f);
   initCam.pitch = toRadians(0.0f);
-  initCam.pos = (vec3) {5.0f, 5.0f, 5.0f};
+  initCam.pos = (vec3) { 5.0f, 5.0f, 5.0f };
+  initCam.orientation = (quat) { 0.707f, 0.707f, 0.0f, 0.0f};
 
   memcpy(&cam, &initCam, sizeof(cam));
 
@@ -522,6 +553,12 @@ uint8_t run_suijin() {
     deltaTime = ctime - ltime;
 
     handle_input(window);
+    
+    //fscanf(stdin, "%f%f%f", &cam.orientation.x, &cam.orientation.y, &cam.orientation.z);
+    if (cam.orientation.x == 0.0) {
+      //cam.orientation.x = 0.00000001;
+    }
+    
 
     glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
     glClear(GL_COLOR_BUFFER_BIT);
@@ -532,9 +569,6 @@ uint8_t run_suijin() {
       update_camera_matrix();
       update_grid_lines();
       cameraUpdate = 0;
-      /*fprintf(stdout, "Camera pos: %f %f\n", camPos[0], camPos[1]);
-      fprintf(stdout, "Camera siz: %f %f\n", camSize[0], camSize[1]);
-      print_mat(fn, "final");*/
     }
 
     program_set_mat4(program, "fn_mat", fn);
@@ -544,7 +578,7 @@ uint8_t run_suijin() {
       glDrawArrays(GL_LINES, 0, sizeof(lines) / sizeof(lines[0]));
     }
 
-    //update_points();
+    update_points();
 
     {
       glBindVertexArray(pvao);
