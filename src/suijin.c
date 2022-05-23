@@ -77,6 +77,18 @@ uint32_t lvao, lvbo;
 
 mat4 fn;
 
+void read_uint32_t(FILE *__restrict stream, uint32_t *__restrict nr) {
+  uint8_t ch;
+  *nr = 0;
+  while ((ch = fgetc(stream)) && ('0' <= ch && ch <= '9')) {
+    *nr *= 10;
+    *nr += ch - '0';
+  }
+  if (ch == '\r') {
+    fgetc(stream);
+  }
+}
+
 void print_vec3(vec3 v, const char *str) {
   fprintf(stdout, "%s: x = %f y = %f z = %f\n", str, v.x, v.y, v.z);
 }
@@ -181,69 +193,89 @@ float __attribute((pure)) clamp(float val, float lb, float ub) {
 void init_points() {
   int32_t i;
   for(i = 0; i < pcount; ++i) {
-    pixels[i].p.x = rfloat(-18.0f, 18.0f);
-    pixels[i].p.y = rfloat(-18.0f, 18.0f);
-    pixels[i].p.z = rfloat(-18.0f, 18.0f);
+    pixels[i].p.x = rfloat(-10.0f, 10.0f);
+    pixels[i].p.y = rfloat(-10.0f, 10.0f);
+    pixels[i].p.z = rfloat(-10.0f, 10.0f);
     pixels[i].p.w = 1;
 
     pixels[i].c.r = rfloat(0.0f, 1.0f);
     pixels[i].c.g = rfloat(0.0f, 1.0f);
     pixels[i].c.b = rfloat(0.0f, 1.0f);
     pixels[i].c.a = 0.2f;
-
-    //fprintf(stdout, "Point: %fx %fy (%f, %f, %F, %f)\n", pixels[i].p.x, pixels[i].p.y, pixels[i].c.r, pixels[i].c.g, pixels[i].c.b, pixels[i].c.a);
   }
-
-  /*{
-#define cp pixels[i * 100 + j * 10 + k]
-    int32_t i, j, k;
-    for (i = 0; i < 10; ++i) {
-      for (j = 0; j < 10; ++j) {
-        for (k = 0; k < 10; ++k) {
-          cp.p.x = (float)i;
-          cp.p.y = (float)j;
-          cp.p.z = (float)k;
-          cp.p.w = 1.0f;
-
-          cp.c.r = i / 10.0f;
-          cp.c.g = j / 10.0f;
-          cp.c.b = k / 10.0f;
-          cp.c.a = 1.0f;
-        }
-      }
-    }
-#undef cp
-  }*/
 }
 
-#define AIZAWA
+enum ATTRACTORS {AIZAWA, LORENTZ, ROSSLER, LORENTZ2, CHUA, LEIPNIK};
+enum ATTRACTORS currentAttractor = ROSSLER;
 
 struct pos update_pos(struct pos p) {
   struct pos res;
 
-  float dx;
-  float dy;
-  float dz;
+  float dx = 0.0f;
+  float dy = 0.0f;
+  float dz = 0.0f;
 
-#ifdef AIZAWA
-  float a = 0.95f;
-  float b = 0.7f;
-  float c = 0.6f;
-  float d = 3.5f;
-  float e = 0.25f;
-  float f = 0.1f;
-  dx = (p.z - b) * p.x - d * p.y;
-  dy = d * p.x + (p.z - b) * p.y;
-  dz = c + a * p.z - (p.z * p.z * p.z) / 3.0f - (p.x * p.x) + (1.0f + e * p.z) + f * p.z * (p.x * p.x * p.x);
-#else
-  float coef = 1.0f;
-  float sigma = (10.0f) / coef;
-  float rho = (28.0f) / coef;
-  float beta = (8.0f / 3.0f) / coef;
-  dx = sigma * (p.y - p.x);
-  dy = p.x * (rho - p.z) - p.y;
-  dz = p.x * p.y - beta * p.z;
-#endif
+  switch (currentAttractor) {
+    case AIZAWA: {
+      float a = 0.95f;
+      float b = 0.7f;
+      float c = 0.6f;
+      float d = 3.5f;
+      float e = 0.25f;
+      float f = 0.1f;
+      dx = (p.z - b) * p.x - d * p.y;
+      dy = d * p.x + (p.z - b) * p.y;
+      dz = c + a * p.z - (p.z * p.z * p.z) / 3.0f - (p.x * p.x) + (1.0f + e * p.z) + f * p.z * (p.x * p.x * p.x);
+      break;
+    }
+    case LORENTZ: {
+      float coef = 1.0f;
+      float sigma = (10.0f) / coef;
+      float rho = (28.0f) / coef;
+      float beta = (8.0f / 3.0f) / coef;
+      dx = sigma * (p.y - p.x);
+      dy = p.x * (rho - p.z) - p.y;
+      dz = p.x * p.y - beta * p.z;
+      break;
+    }
+    case ROSSLER: {
+      float a = 0.2f;
+      float b = 0.2f;
+      float c = 5.7f;
+      dx = -p.y - p.z;
+      dy = p.x + a * p.y;
+      dz = b + p.z * (p.x - c);
+      break;
+    }
+    case LORENTZ2: {
+      float P = 10.0f;
+      float R = 28.0f;
+      float B = 8.0f / 3.0f;
+      dx = P * (p.y - p.x);
+      dy = R * p.x - p.y - p.x * p.z;
+      dz = p.x * p.y - B * p.z;
+      break;
+    }
+    case CHUA: {
+      float a = 40.0f;
+      float b = 3.0f;
+      float c = 28.0f;
+      dx = a * (p.y - p.x);
+      dy = (c - a) * p.x - p.x * p.z + c * p.y;
+      dz = p.x * p.y - b * p.z;
+      break;
+    }
+    case LEIPNIK: {
+      float a = 0.4f;
+      float b = 0.175f;
+      float c = 10.0f;
+      float d = 5.0f;
+      float e = 1.0f;
+      dx = -a * p.x + p.y + c * p.y * p.z;
+      dy = -p.x - e * p.y + d * p.x * p.z;
+      dz = b * p.z - c * p.x * p.y;
+    }
+  }
 
   res.x = p.x + dx * deltaTime;
   res.y = p.y + dy * deltaTime;
@@ -305,7 +337,7 @@ void create_lookat_matrix(mat4 m) {
   vec3 f = norm(*qv(&cam.orientation));
   vec3 s = norm(cross(cam.up, f));
   vec3 u = cross(f, s);
-  print_vec3(f, "f");
+  //print_vec3(f, "f");
   //print_vec3(f, "f");
   //print_vec3(s, "s");
   //print_vec3(u, "u");
@@ -371,6 +403,7 @@ void handle_input(GLFWwindow *__restrict window) {
   }
 
   {
+    float cpanSpeed = PAN_SPEED + KEY_PRESSED(GLFW_KEY_LEFT_SHIFT) * PAN_SPEED;
     if (KEY_PRESSED(GLFW_KEY_EQUAL) && KEY_PRESSED(GLFW_KEY_LEFT_SHIFT)) {
       cam.fov += cam.fov * ZOOM_SPEED;
       cameraUpdate = 1;
@@ -383,27 +416,27 @@ void handle_input(GLFWwindow *__restrict window) {
       cameraUpdate = 1;
     }
     if (KEY_PRESSED(GLFW_KEY_A)) {
-      cam.pos = v3a(v3m(PAN_SPEED, norm(cross(*qv(&cam.orientation), cam.up))), cam.pos);
+      cam.pos = v3a(v3m(cpanSpeed, norm(cross(*qv(&cam.orientation), cam.up))), cam.pos);
       cameraUpdate = 1;
     }
     if (KEY_PRESSED(GLFW_KEY_D)) {
-      cam.pos = v3a(v3m(PAN_SPEED, v3n(norm(cross(*qv(&cam.orientation), cam.up)))), cam.pos);
+      cam.pos = v3a(v3m(cpanSpeed, v3n(norm(cross(*qv(&cam.orientation), cam.up)))), cam.pos);
       cameraUpdate = 1;
     }
     if (KEY_PRESSED(GLFW_KEY_SPACE)) {
-      cam.pos = v3a(v3m(PAN_SPEED, cam.up), cam.pos);
+      cam.pos = v3a(v3m(cpanSpeed, cam.up), cam.pos);
       cameraUpdate = 1;
     }
     if (KEY_PRESSED(GLFW_KEY_LEFT_CONTROL)) {
-      cam.pos = v3a(v3m(PAN_SPEED, v3n(cam.up)), cam.pos);
+      cam.pos = v3a(v3m(cpanSpeed, v3n(cam.up)), cam.pos);
       cameraUpdate = 1;
     }
     if (KEY_PRESSED(GLFW_KEY_W)) {
-      cam.pos = v3a(v3m(PAN_SPEED, v3n(*qv(&cam.orientation))), cam.pos);
+      cam.pos = v3a(v3m(cpanSpeed, v3n(*qv(&cam.orientation))), cam.pos);
       cameraUpdate = 1;
     }
     if (KEY_PRESSED(GLFW_KEY_S)) {
-      cam.pos = v3a(v3m(PAN_SPEED, *qv(&cam.orientation)), cam.pos);
+      cam.pos = v3a(v3m(cpanSpeed, *qv(&cam.orientation)), cam.pos);
       cameraUpdate = 1;
     }
     if (KEY_PRESSED(GLFW_KEY_R)) {
@@ -415,6 +448,17 @@ void handle_input(GLFWwindow *__restrict window) {
     }
     if (KEY_PRESSED(GLFW_KEY_P)) {
       showGrid ^= 1;
+    }
+    if (KEY_PRESSED(GLFW_KEY_K)) {
+      enum ATTRACTORS {AIZAWA, LORENTZ, ROSSLER, LORENTZ2, CHUA, LEIPNIK};
+      fprintf(stdout, "%s: %u\n", "AIZAWA"  , AIZAWA);
+      fprintf(stdout, "%s: %u\n", "LORENTZ" , LORENTZ);
+      fprintf(stdout, "%s: %u\n", "ROSSLER" , ROSSLER);
+      fprintf(stdout, "%s: %u\n", "LORENTZ2", LORENTZ2);
+      fprintf(stdout, "%s: %u\n", "CHUA"    , CHUA);
+      fprintf(stdout, "%s: %u\n", "LEIPNIK" , LEIPNIK);
+
+      read_uint32_t(stdin, &currentAttractor);
     }
   }
 }
