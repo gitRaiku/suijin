@@ -2,25 +2,11 @@
 
 FILE *__restrict of;
 
-void *_malloc(size_t size, uint32_t line_number) {
-  fprintf(of, "Malloc of %lu at %u\n", size, line_number);
-  return malloc(size);
-}
-
-#define tmalloc(size) _malloc((size), __LINE__)
-
-void *_realloc(void *ptr, size_t size, uint32_t line_number) {
-  fprintf(of, "Realloc of %p to size %lu at %u\n", ptr, size, line_number);
-  return realloc(ptr, size);
-}
-
-#define trealloc(ptr, size) _realloc((ptr), (size), __LINE__)
-
 #define VECTOR_PUSH(name, btype, stype)               \
 void name ##vp(btype v, stype val) {                  \
   if (v->l == v->s) {                                 \
     v->s *= 2;                                        \
-    v->v = trealloc(v->v, sizeof(stype) * v->s);      \
+    v->v = realloc(v->v, sizeof(stype) * v->s);      \
   }                                                   \
   v->v[v->l] = val;                                   \
   ++v->l;                                             \
@@ -30,14 +16,14 @@ void name ##vp(btype v, stype val) {                  \
 void name ##vi(btype v) {                     \
   v->l = 0;                                   \
   v->s = 4;                                   \
-  v->v = tmalloc(sizeof(v4) * v->s);          \
+  v->v = malloc(sizeof(v4) * v->s);          \
 }                                             
 
 #define VECTOR_TRIM(name, btype, stype)          \
 void name ##vt(btype v) {                        \
   if (v->s != v->l) {                            \
     v->s = v->l;                                 \
-    v->v = trealloc(v->v, sizeof(stype) * v->s); \
+    v->v = realloc(v->v, sizeof(stype) * v->s); \
   }                                              \
 }
 
@@ -55,7 +41,7 @@ VECTOR_SUITE(mat, struct matv *__restrict, struct material)
 void facevp(struct facev *__restrict v, faceev val) {
   if (v->l == v->s) {
     v->s *= 2;
-    v->v = trealloc(v->v, sizeof(faceev) * v->s);
+    v->v = realloc(v->v, sizeof(faceev) * v->s);
   }
   // v->v[v->l] = val;
   memcpy(v->v[v->l], val, sizeof(faceev));
@@ -65,13 +51,13 @@ void facevp(struct facev *__restrict v, faceev val) {
 void facevi(struct facev *__restrict v) {
   v->l = 0;
   v->s = 4;
-  v->v = tmalloc(sizeof(faceev) * v->s);
+  v->v = malloc(sizeof(faceev) * v->s);
 }
 
 void facevt(struct facev *__restrict v) {
   if (v->s != v->l) {
     v->s = v->l;
-    v->v = trealloc(v->v, sizeof(faceev) * v->s);
+    v->v = realloc(v->v, sizeof(faceev) * v->s);
   }
 }
 
@@ -257,9 +243,8 @@ void id_to_str(enum IDS id) {
   fprintf(stdout, "Got id %u [%s]\n", id, s);
 }
 
-void parse_object_file(char *__restrict fname, struct object *__restrict objs, uint32_t *__restrict objl) {
-  of = fopen("KMS", "w");
-  setbuf(of, NULL);
+struct object *__restrict parse_object_file(char *__restrict fname, uint32_t *__restrict objl) {
+  struct object *__restrict objs = NULL;
   
   bufp = bufl = 0;
   cfd = open(fname, O_RDONLY);
@@ -325,7 +310,6 @@ void parse_object_file(char *__restrict fname, struct object *__restrict objs, u
         break;
       case USE_MATERIAL:
         next_token(tok);
-        fprintf(stdout, "Use material %s on %u\n", tok, cobj);
         /// USE MATERIAL
         break;
       case OBJECT:
@@ -336,7 +320,7 @@ void parse_object_file(char *__restrict fname, struct object *__restrict objs, u
           facevt(&objs[cobj].f);
           matvt(&objs[cobj].m);
         }
-        objs = trealloc(objs, sizeof(struct object) * (*objl + 1));
+        objs = realloc(objs, sizeof(struct object) * (*objl + 1));
         init_object(objs + *objl);
         cobj = *objl;
         ++*objl;
@@ -360,12 +344,11 @@ void parse_object_file(char *__restrict fname, struct object *__restrict objs, u
         break;
     }
   }
-//end:;
-  fprintf(stdout, "END OF FILE!\n");
   v4vt(&objs[cobj].v);
   v3vt(&objs[cobj].n);
   v2vt(&objs[cobj].t);
   facevt(&objs[cobj].f);
   matvt(&objs[cobj].m);
-  fclose(of);
+
+  return objs;
 }

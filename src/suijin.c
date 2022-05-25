@@ -330,12 +330,15 @@ void handle_input(GLFWwindow *__restrict window) {
 }
 
 uint8_t run_suijin() {
-  /*init_random();
+  init_random();
   GL_CHECK(glfwInit(), "Could not initialize glfw!");
 
   GLFWwindow *__restrict window = window_init();
 
   glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+
+  uint32_t objl;
+  struct object *__restrict objects = parse_object_file("Moarte.obj", &objl);
 
   uint32_t program;
 
@@ -455,33 +458,13 @@ uint8_t run_suijin() {
     ltime = ctime;
   }
 
-  glfwTerminate();*/
+  glfwTerminate();
 
   return 0;
 }
 
 int main(int argc, char **argv) {
-  ///GL_CHECK(run_suijin() == 0, "Running failed!");
+  GL_CHECK(run_suijin() == 0, "Running failed!");
   
-  struct object *objects = NULL;
-  uint32_t objl;
-  parse_object_file("Moarte.obj", objects, &objl);
-
-  {
-    int32_t i;
-    struct object obj;
-    for(i = 0; i < objl; ++i) {
-      memcpy(&obj, objects + i, sizeof(struct object));
-      fprintf(stdout, "Object: %u/%u\n", i, objl);
-      fprintf(stdout, "Obj->name: %s\n", obj.name);
-      fprintf(stdout, "Obj->smooth_shading: %u\n", obj.smooth_shading);
-      fprintf(stdout, "Obj->v: %u %u\n", obj.v->s, obj.v->l);
-      fprintf(stdout, "Obj->t: %u %u\n", obj.t->s, obj.t->l);
-      fprintf(stdout, "Obj->n: %u %u\n", obj.n->s, obj.n->l);
-      fprintf(stdout, "Obj->f: %u %u\n", obj.f->s, obj.f->l);
-      fprintf(stdout, "Obj->m: %u %u\n", obj.m->s, obj.m->l);
-    }
-  }
-
   return 0;
 }

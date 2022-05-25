@@ -61,6 +61,6 @@ struct object {
   char name[64];
 };
 
-void parse_object_file(char *__restrict fname, struct object *__restrict objs, uint32_t *__restrict objl);
+struct object *__restrict parse_object_file(char *__restrict fname, uint32_t *__restrict objl);
 
 #endif
