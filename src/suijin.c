@@ -7,6 +7,7 @@
 
 #include "shaders.h"
 #include "linalg.h"
+#include "izanagi.h"
 
 struct pos {
   float x;
@@ -33,24 +34,8 @@ struct pixel {
 #define PR_CHECK(call) if (call) { return 1; }
 #define KEY_PRESSED(key) (glfwGetKey(window, key) == GLFW_PRESS)
 
-float COEF = 0.8f;
 double ctime, ltime;
 double deltaTime;
-float mu = 1.5f;
-float g = -9.8f;
-
-struct pixel pixels[3000] = {0};
-uint32_t pcount = sizeof(pixels) / sizeof(pixels[0]);
-
-#define MAX_DIVISIONS 40
-#define MIN_DIVISIONS 20
-
-#define C0 0.5f
-#define C1 0.2f /// TODO: FIX COLOUR INTENSITY
-#define C2 0.2f
-
-float grid_spacing = M_PI;
-struct pixel lines[MAX_DIVISIONS * 4] = {0};
 
 struct camera {
   vec3 pos;
@@ -67,7 +52,6 @@ struct camera initCam;
 struct camera cam;
 
 uint8_t cameraUpdate = 1;
-uint8_t showGrid = 0;
 #define ZOOM_SPEED 0.01f
 #define PAN_SPEED 0.1f
 #define SENS 0.001f
@@ -89,8 +73,34 @@ void read_uint32_t(FILE *__restrict stream, uint32_t *__restrict nr) {
   }
 }
 
+void print_quat(quat q, const char *str) {
+  fprintf(stdout, "%s: x = %f y = %f z = %f w = %f\n", str, q.x, q.y, q.z, q.w);
+}
+
 void print_vec3(vec3 v, const char *str) {
   fprintf(stdout, "%s: x = %f y = %f z = %f\n", str, v.x, v.y, v.z);
+}
+
+void print_mat3(mat3 m, const char *name) {
+  fprintf(stdout, "Printing %s\n", name);
+  int32_t i, j;
+  for (i = 0; i < 3; ++i) {
+    for (j = 0; j < 3; ++j) {
+      fprintf(stdout, "%f ", m[i][j]);
+    }
+    fputc('\n', stdout);
+  }
+}
+
+void print_mat(mat4 m, const char *name) {
+  fprintf(stdout, "Printing %s\n", name);
+  int32_t i, j;
+  for (i = 0; i < 4; ++i) {
+    for (j = 0; j < 4; ++j) {
+      fprintf(stdout, "%f ", m[i][j]);
+    }
+    fputc('\n', stdout);
+  }
 }
 
 void callback_error(int error, const char *desc) {
@@ -190,134 +200,11 @@ float __attribute((pure)) clamp(float val, float lb, float ub) {
   return val;
 }
 
-void init_points() {
-  int32_t i;
-  for(i = 0; i < pcount; ++i) {
-    pixels[i].p.x = rfloat(-10.0f, 10.0f);
-    pixels[i].p.y = rfloat(-10.0f, 10.0f);
-    pixels[i].p.z = rfloat(-10.0f, 10.0f);
-    pixels[i].p.w = 1;
-
-    pixels[i].c.r = rfloat(0.0f, 1.0f);
-    pixels[i].c.g = rfloat(0.0f, 1.0f);
-    pixels[i].c.b = rfloat(0.0f, 1.0f);
-    pixels[i].c.a = 0.2f;
-  }
-}
-
-enum ATTRACTORS {AIZAWA, LORENTZ, ROSSLER, LORENTZ2, CHUA, LEIPNIK};
-enum ATTRACTORS currentAttractor = ROSSLER;
-
-struct pos update_pos(struct pos p) {
-  struct pos res;
-
-  float dx = 0.0f;
-  float dy = 0.0f;
-  float dz = 0.0f;
-
-  switch (currentAttractor) {
-    case AIZAWA: {
-      float a = 0.95f;
-      float b = 0.7f;
-      float c = 0.6f;
-      float d = 3.5f;
-      float e = 0.25f;
-      float f = 0.1f;
-      dx = (p.z - b) * p.x - d * p.y;
-      dy = d * p.x + (p.z - b) * p.y;
-      dz = c + a * p.z - (p.z * p.z * p.z) / 3.0f - (p.x * p.x) + (1.0f + e * p.z) + f * p.z * (p.x * p.x * p.x);
-      break;
-    }
-    case LORENTZ: {
-      float coef = 1.0f;
-      float sigma = (10.0f) / coef;
-      float rho = (28.0f) / coef;
-      float beta = (8.0f / 3.0f) / coef;
-      dx = sigma * (p.y - p.x);
-      dy = p.x * (rho - p.z) - p.y;
-      dz = p.x * p.y - beta * p.z;
-      break;
-    }
-    case ROSSLER: {
-      float a = 0.2f;
-      float b = 0.2f;
-      float c = 5.7f;
-      dx = -p.y - p.z;
-      dy = p.x + a * p.y;
-      dz = b + p.z * (p.x - c);
-      break;
-    }
-    case LORENTZ2: {
-      float P = 10.0f;
-      float R = 28.0f;
-      float B = 8.0f / 3.0f;
-      dx = P * (p.y - p.x);
-      dy = R * p.x - p.y - p.x * p.z;
-      dz = p.x * p.y - B * p.z;
-      break;
-    }
-    case CHUA: {
-      float a = 40.0f;
-      float b = 3.0f;
-      float c = 28.0f;
-      dx = a * (p.y - p.x);
-      dy = (c - a) * p.x - p.x * p.z + c * p.y;
-      dz = p.x * p.y - b * p.z;
-      break;
-    }
-    case LEIPNIK: {
-      float a = 0.4f;
-      float b = 0.175f;
-      float c = 10.0f;
-      float d = 5.0f;
-      float e = 1.0f;
-      dx = -a * p.x + p.y + c * p.y * p.z;
-      dy = -p.x - e * p.y + d * p.x * p.z;
-      dz = b * p.z - c * p.x * p.y;
-    }
-  }
-
-  res.x = p.x + dx * deltaTime;
-  res.y = p.y + dy * deltaTime;
-  res.z = p.z + dz * deltaTime;
-  res.w = p.w;
-  return res;
-}
-
-void update_points() {
-  int32_t i;
-  for(i = 0; i < pcount; ++i) {
-    pixels[i].p = update_pos(pixels[i].p);
-  }
-}
-
 struct pos matmul(mat3 mat,struct pos p) {
   struct pos res = {0};
   res.x = p.x * mat[0][0] + p.y * mat[0][1] + mat[0][2];
   res.y = p.x * mat[1][0] + p.y * mat[1][1] + mat[1][2];
   return res;
-}
-
-void print_mat3(mat3 m, const char *name) {
-  fprintf(stdout, "Printing %s\n", name);
-  int32_t i, j;
-  for (i = 0; i < 3; ++i) {
-    for (j = 0; j < 3; ++j) {
-      fprintf(stdout, "%f ", m[i][j]);
-    }
-    fputc('\n', stdout);
-  }
-}
-
-void print_mat(mat4 m, const char *name) {
-  fprintf(stdout, "Printing %s\n", name);
-  int32_t i, j;
-  for (i = 0; i < 4; ++i) {
-    for (j = 0; j < 4; ++j) {
-      fprintf(stdout, "%f ", m[i][j]);
-    }
-    fputc('\n', stdout);
-  }
 }
 
 void create_projection_matrix(mat4 m, float angle, float ratio, float near, float far) {
@@ -330,7 +217,7 @@ void create_projection_matrix(mat4 m, float angle, float ratio, float near, floa
   m[2][3] = -(2.0f * far * near) / (far - near);
 }
 vec3 __inline__ __attribute((pure)) *__restrict qv(quat *__restrict q) {
-  return (struct vec3 *__restrict) q;
+  return (v3 *__restrict) q;
 }
 
 void create_lookat_matrix(mat4 m) {
@@ -375,10 +262,6 @@ void update_camera_matrix() {
   matmul44(fn, proj, view);
 }
 
-void print_quat(quat q, const char *str) {
-  fprintf(stdout, "%s: x = %f y = %f z = %f w = %f\n", str, q.x, q.y, q.z, q.w);
-}
-
 void handle_input(GLFWwindow *__restrict window) {
   { 
     glfwGetCursorPos(window, &mouseX, &mouseY);
@@ -392,8 +275,8 @@ void handle_input(GLFWwindow *__restrict window) {
   
       //fprintf(stdout, "xoff: %f yoff: %f\n", xoff, yoff);
 
-      quat qx = gen_quat((struct vec3) {0.0f, 1.0f, 0.0f}, -xoff * SENS);
-      quat qy = gen_quat((struct vec3) {0.0f, 0.0f, 1.0f},  yoff * SENS);
+      quat qx = gen_quat((v3) {0.0f, 1.0f, 0.0f}, -xoff * SENS);
+      quat qy = gen_quat((v3) {0.0f, 0.0f, 1.0f},  yoff * SENS);
       quat qr = qmul(qy, qx);
       quat qt = qmul(qmul(qr, cam.orientation), qconj(qr));
       cam.orientation = qt;
@@ -439,77 +322,15 @@ void handle_input(GLFWwindow *__restrict window) {
       cam.pos = v3a(v3m(cpanSpeed, *qv(&cam.orientation)), cam.pos);
       cameraUpdate = 1;
     }
-    if (KEY_PRESSED(GLFW_KEY_R)) {
-      init_points();
-    }
     if (KEY_PRESSED(GLFW_KEY_U)) {
       memcpy(&cam, &initCam, sizeof(cam));
       cameraUpdate = 1;
     }
-    if (KEY_PRESSED(GLFW_KEY_P)) {
-      showGrid ^= 1;
-    }
-    if (KEY_PRESSED(GLFW_KEY_K)) {
-      enum ATTRACTORS {AIZAWA, LORENTZ, ROSSLER, LORENTZ2, CHUA, LEIPNIK};
-      fprintf(stdout, "%s: %u\n", "AIZAWA"  , AIZAWA);
-      fprintf(stdout, "%s: %u\n", "LORENTZ" , LORENTZ);
-      fprintf(stdout, "%s: %u\n", "ROSSLER" , ROSSLER);
-      fprintf(stdout, "%s: %u\n", "LORENTZ2", LORENTZ2);
-      fprintf(stdout, "%s: %u\n", "CHUA"    , CHUA);
-      fprintf(stdout, "%s: %u\n", "LEIPNIK" , LEIPNIK);
-
-      read_uint32_t(stdin, &currentAttractor);
-    }
   }
-}
-
-void update_grid_lines() {
-  /*while (camSize[1] / grid_spacing > MAX_DIVISIONS / 3.5f) {
-    grid_spacing *= 2.0f;
-  }
-  while (camSize[1] / grid_spacing < MIN_DIVISIONS / 3.5f) {
-    grid_spacing /= 2.0f;
-  }
-
-  float npos =  ceil((camPos[1] + camSize[1] / 2.0f) / grid_spacing) * grid_spacing;
-  float spos = floor((camPos[1] - camSize[1] / 2.0f) / grid_spacing) * grid_spacing;
-  float epos =  ceil((camPos[0] + camSize[0] / 2.0f) / grid_spacing) * grid_spacing;
-  float wpos = floor((camPos[0] - camSize[0] / 2.0f) / grid_spacing) * grid_spacing;
-  ///fprintf(stdout, "North: %f\nSouth: %f\nEast: %f\nWest: %f\n", npos, spos, epos, wpos);
-  int32_t i;
-  float cpos;
-  float cintensity;
-  for(i = 0; i < MAX_DIVISIONS; ++i) {
-    cpos = wpos + i * grid_spacing;
-    if (epsilon_equals(cpos, 0.0f)) {
-      cintensity = C0;
-    } else if ((int32_t)(cpos / grid_spacing) % 5 == 0) {
-      cintensity = C1;
-    } else {
-      cintensity = C2;
-    }
-    lines[2 * i    ] = (struct pixel) {{ cpos, npos }, {1.0f, 1.0f, 1.0f, cintensity }};
-    lines[2 * i + 1] = (struct pixel) {{ cpos, spos }, {1.0f, 1.0f, 1.0f, cintensity }};
-  }
-  for(i = 0; i < MAX_DIVISIONS; ++i) {
-    cpos = spos + i * grid_spacing;
-    if (epsilon_equals(cpos, 0.0f)) {
-      cintensity = C0;
-    } else if ((int32_t)(cpos / grid_spacing) % 5 == 0) {
-      cintensity = C1;
-    } else {
-      cintensity = C2;
-    }
-    lines[MAX_DIVISIONS + 2 * i    ] = (struct pixel) {{ epos, cpos }, {1.0f, 1.0f, 1.0f, cintensity }};
-    lines[MAX_DIVISIONS + 2 * i + 1] = (struct pixel) {{ wpos, cpos }, {1.0f, 1.0f, 1.0f, cintensity }};
-  }
-
-  glBindBuffer(GL_ARRAY_BUFFER, lvbo);
-  glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(lines), lines);*/
 }
 
 uint8_t run_suijin() {
-  init_random();
+  /*init_random();
   GL_CHECK(glfwInit(), "Could not initialize glfw!");
 
   GLFWwindow *__restrict window = window_init();
@@ -590,8 +411,6 @@ uint8_t run_suijin() {
 
   glEnable(GL_PROGRAM_POINT_SIZE);
 
-  init_points();
-
   glfwGetCursorPos(window, &mouseX, &mouseY);
   oldMouseX = 0.0;
   oldMouseY = 0.0;
@@ -600,10 +419,10 @@ uint8_t run_suijin() {
     ctime = glfwGetTime();
     deltaTime = ctime - ltime;
 
-    handle_input(window);
-    
     glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
+    // handle_input(window);
 
     glUseProgram(program);
 
@@ -636,13 +455,33 @@ uint8_t run_suijin() {
     ltime = ctime;
   }
 
-  glfwTerminate();
+  glfwTerminate();*/
 
   return 0;
 }
 
 int main(int argc, char **argv) {
-  GL_CHECK(run_suijin() == 0, "Running failed!");
+  ///GL_CHECK(run_suijin() == 0, "Running failed!");
+  
+  struct object *objects = NULL;
+  uint32_t objl;
+  parse_object_file("Moarte.obj", objects, &objl);
+
+  {
+    int32_t i;
+    struct object obj;
+    for(i = 0; i < objl; ++i) {
+      memcpy(&obj, objects + i, sizeof(struct object));
+      fprintf(stdout, "Object: %u/%u\n", i, objl);
+      fprintf(stdout, "Obj->name: %s\n", obj.name);
+      fprintf(stdout, "Obj->smooth_shading: %u\n", obj.smooth_shading);
+      fprintf(stdout, "Obj->v: %u %u\n", obj.v->s, obj.v->l);
+      fprintf(stdout, "Obj->t: %u %u\n", obj.t->s, obj.t->l);
+      fprintf(stdout, "Obj->n: %u %u\n", obj.n->s, obj.n->l);
+      fprintf(stdout, "Obj->f: %u %u\n", obj.f->s, obj.f->l);
+      fprintf(stdout, "Obj->m: %u %u\n", obj.m->s, obj.m->l);
+    }
+  }
 
   return 0;
 }

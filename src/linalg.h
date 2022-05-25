@@ -1,25 +1,11 @@
+#ifndef LINALG_H
+#define LINALG_H
+
 #include <stdint.h>
 #include <math.h>
 #include <string.h>
 
-struct vec3 {
-  float x;
-  float y;
-  float z;
-};
-typedef struct vec3 vec3;
-
-struct vec4 {
-  float x;
-  float y;
-  float z;
-  float w;
-};
-typedef struct vec4 vec4;
-typedef struct vec4 quat;
-
-typedef float mat3[3][3];
-typedef float mat4[4][4];
+#include "defs.h"
 
 quat __attribute((pure)) gen_quat(vec3 axis, float rot);
 
@@ -46,3 +32,5 @@ vec3 __attribute((pure)) v3n(vec3 v);
 void matmul44(mat4 res, mat4 m1, mat4 m2);
 
 vec3 __attribute((pure)) vmm3(mat3 m, vec3 v); /* Vec mat mul 3 */
+
+#endif

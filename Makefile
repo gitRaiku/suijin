@@ -14,8 +14,9 @@ MOD_DIR  = .mod
 CC       = gcc
 CCFLAGS  = -ggdb3 -Og \
 					 -Wall -march=native -mtune=native -fmodulo-sched \
+					 -fstack-clash-protection \
 					 -pipe -I$(LIB_DIR)/glad \
-					 -D SUIJIN_DEBUG
+					 -DSUIJIN_DEBUG -D_FORTIFY_SOURCE=2
 
 LINKER   = $(CC)
 

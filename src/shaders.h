@@ -1,3 +1,6 @@
+#ifndef SHADERS_H
+#define SHADERS_H
+
 #include <glad/glad.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -27,3 +30,4 @@ void program_set_mat3(uint32_t program, const char *uniform_name, mat3 val1);
 
 void program_set_mat4(uint32_t program, const char *uniform_name, mat4 val1);
 
+#endif
