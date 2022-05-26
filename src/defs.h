@@ -28,6 +28,15 @@ typedef struct v4 v4;
 typedef struct v4 vec4;
 typedef struct v4 quat;
 
+struct uv4 {
+  uint32_t x;
+  uint32_t y;
+  uint32_t z;
+  uint32_t w;
+};
+typedef struct uv4 uv4;
+
+
 typedef float mat3[3][3];
 typedef float mat4[4][4];
 

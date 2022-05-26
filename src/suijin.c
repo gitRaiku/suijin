@@ -56,9 +56,6 @@ uint8_t cameraUpdate = 1;
 #define PAN_SPEED 0.1f
 #define SENS 0.001f
 
-uint32_t pvao, pvbo;
-uint32_t lvao, lvbo;
-
 mat4 fn;
 
 void read_uint32_t(FILE *__restrict stream, uint32_t *__restrict nr) {
@@ -216,6 +213,7 @@ void create_projection_matrix(mat4 m, float angle, float ratio, float near, floa
   m[3][2] = -1.0f;
   m[2][3] = -(2.0f * far * near) / (far - near);
 }
+
 vec3 __inline__ __attribute((pure)) *__restrict qv(quat *__restrict q) {
   return (v3 *__restrict) q;
 }
@@ -361,34 +359,19 @@ uint8_t run_suijin() {
     }
   }
 
-  glGenVertexArrays(1, &pvao);
-  glGenVertexArrays(1, &lvao);
-  glGenBuffers(1, &pvbo);
-  glGenBuffers(1, &lvbo);
-  { 
-    glBindVertexArray(pvao);
+  uint32_t ebo, vbo, vao;
+  {
+    glGenVertexArrays(1, &vao);
+    glGenBuffers(1, &vbo);
+    glGenBuffers(1, &ebo);
 
-    glBindBuffer(GL_ARRAY_BUFFER, pvbo);
-    glBufferData(GL_ARRAY_BUFFER, sizeof(pixels), pixels, GL_DYNAMIC_DRAW);
+    glBindBuffer(GL_ARRAY_BUFFER, vbo);
+    glBufferData(GL_ARRAY_BUFFER, objects[0].v.l * sizeof(objects[0].v.v[0]), objects[0].v.v, GL_STATIC_DRAW);
 
-    glVertexAttribPointer(0, 4, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void *) 0);
-    glVertexAttribPointer(1, 4, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void *) sizeof(struct pos));
-    glEnableVertexAttribArray(0);
-    glEnableVertexAttribArray(1);
-  }
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ebo);
+    glBufferData(GL_ELEMENT_ARRAY_BUFFER, objects[0].f.l * sizeof(objects[0].f.v[0]), objects[0].f.v, GL_STATIC_DRAW);
 
-  { 
-    glBindVertexArray(lvao);
-
-    glBindBuffer(GL_ARRAY_BUFFER, lvbo);
-    glBufferData(GL_ARRAY_BUFFER, sizeof(lines), lines, GL_DYNAMIC_DRAW);
-
-    glVertexAttribPointer(0, 4, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void *) 0);
-    glVertexAttribPointer(1, 4, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void *) sizeof(struct pos));
-    glEnableVertexAttribArray(0);
-    glEnableVertexAttribArray(1);
-
-    glBindVertexArray(0);
+    glVertexAttribPointer(0, 3, 
   }
 
   memset(&initCam, 0, sizeof(initCam));
@@ -431,27 +414,10 @@ uint8_t run_suijin() {
 
     if (cameraUpdate) {
       update_camera_matrix();
-      update_grid_lines();
       cameraUpdate = 0;
     }
 
     program_set_mat4(program, "fn_mat", fn);
-
-    if (showGrid) {
-      glBindVertexArray(lvao);
-      glDrawArrays(GL_LINES, 0, sizeof(lines) / sizeof(lines[0]));
-    }
-
-    update_points();
-
-    {
-      glBindVertexArray(pvao);
-
-      glBindBuffer(GL_ARRAY_BUFFER, pvbo);
-      glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(pixels), pixels);
-
-      glDrawArrays(GL_POINTS, 0, pcount);
-    }
 
     glfwPollEvents();
     glfwSwapBuffers(window);

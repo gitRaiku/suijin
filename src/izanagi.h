@@ -10,12 +10,6 @@
 #include "defs.h"
 #include "linalg.h"
 
-struct face_elem {
-  uint32_t v; // Vertex Index
-  uint32_t t; // Texture Index
-  uint32_t n; // Normal Index
-};
-
 struct material {
   uint32_t idek; // TODO
 };
@@ -38,9 +32,14 @@ struct v2v {
   uint32_t s;
 };
 
-typedef struct face_elem faceev[4];
+struct faceev {
+  uv4 v;
+  uv4 t;
+  uv4 n;
+};
+
 struct facev {
-  faceev *v;
+  struct faceev *v;
   uint32_t l;
   uint32_t s;
 };

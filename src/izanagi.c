@@ -37,27 +37,26 @@ VECTOR_SUITE(v3, struct v3v *__restrict, v3)
 VECTOR_SUITE(v2, struct v2v *__restrict, v2)
 VECTOR_SUITE(mat, struct matv *__restrict, struct material)
 
-
-void facevp(struct facev *__restrict v, faceev val) {
+void facevp(struct facev *__restrict v, struct faceev val) {
   if (v->l == v->s) {
     v->s *= 2;
-    v->v = realloc(v->v, sizeof(faceev) * v->s);
+    v->v = realloc(v->v, sizeof(struct faceev) * v->s);
   }
-  // v->v[v->l] = val;
-  memcpy(v->v[v->l], val, sizeof(faceev));
+  v->v[v->l] = val;
+  // memcpy(v->v[v->l], val, sizeof(struct faceev));
   ++v->l;
 }
 
 void facevi(struct facev *__restrict v) {
   v->l = 0;
   v->s = 4;
-  v->v = malloc(sizeof(faceev) * v->s);
+  v->v = malloc(sizeof(struct faceev) * v->s);
 }
 
 void facevt(struct facev *__restrict v) {
   if (v->s != v->l) {
     v->s = v->l;
-    v->v = realloc(v->v, sizeof(faceev) * v->s);
+    v->v = realloc(v->v, sizeof(struct faceev) * v->s);
   }
 }
 
@@ -154,7 +153,7 @@ union OBJ_MEMBERS {
   vec4 v4;
   vec3 v3;
   vec2 v2;
-  faceev fv; 
+  struct faceev fv; 
   struct material mat;
 };
 
@@ -296,9 +295,9 @@ struct object *__restrict parse_object_file(char *__restrict fname, uint32_t *__
         {
           int32_t i;
           for(i = 0; i < 4; ++i) {
-            om.fv[i].v = (uint32_t)read_float();
-            om.fv[i].t = (uint32_t)read_float();
-            om.fv[i].n = (uint32_t)read_float();
+            *(&om.fv.v.x + i) = (uint32_t)read_float();
+            *(&om.fv.t.x + i) = (uint32_t)read_float();
+            *(&om.fv.n.x + i) = (uint32_t)read_float();
           }
         }
         facevp(&objs[cobj].f, om.fv);
