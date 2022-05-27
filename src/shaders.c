@@ -96,6 +96,11 @@ void program_set_float3(uint32_t program, const char *uniform_name, float val1, 
     glUniform3f(uniform_loc, val1, val2, val3);
 }
 
+void program_set_float3v(uint32_t program, const char *uniform_name, vec3 v) {
+    uint32_t uniform_loc = glGetUniformLocation(program, uniform_name);
+    glUniform3f(uniform_loc, v.x, v.y, v.z);
+}
+
 void program_set_float4(uint32_t program, const char *uniform_name, float val1, float val2, float val3, float val4) {
     uint32_t uniform_loc = glGetUniformLocation(program, uniform_name);
     glUniform4f(uniform_loc, val1, val2, val3, val4);

@@ -375,7 +375,7 @@ uint8_t run_suijin() {
 
   uint32_t objl;
   struct matv mats;
-  struct object *__restrict objects = parse_object_file("AAAAAAAAAAAAAA.obj", &objl, &mats);
+  struct object *__restrict objects = parse_object_file("Quietus.obj", &objl, &mats);
 
   uint32_t program;
 
@@ -401,8 +401,8 @@ uint8_t run_suijin() {
   uint32_t ql;
   float *__restrict q = quietus(objects, &ql);
 
-  /*uint32_t qm;
-  float *__restrict d = quietus(objects + 1, &qm);*/ // TODO: KMS
+  uint32_t qm;
+  float *__restrict d = quietus(objects + 1, &qm); // TODO: KMS
 
   /*float d[] = { 0.0f, 1.0f, 1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f,
                 0.5f, 0.0f, 1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f,
@@ -440,7 +440,7 @@ uint8_t run_suijin() {
     glEnableVertexAttribArray(2);
   }
 
-  /*uint32_t vbo2, vao2;
+  uint32_t vbo2, vao2;
   {
     glGenVertexArrays(1, &vao2);
     glGenBuffers(1, &vbo2);
@@ -456,7 +456,7 @@ uint8_t run_suijin() {
     glEnableVertexAttribArray(0);
     glEnableVertexAttribArray(1);
     glEnableVertexAttribArray(2);
-  }*/ // TODO: KMS
+  } // TODO: KMS
 
   memset(&initCam, 0, sizeof(initCam));
 
@@ -502,21 +502,26 @@ uint8_t run_suijin() {
     program_set_mat4(program, "fn_mat", fn);
     program_set_int1(program, "shading", cshading);
     cmat = mats.v[0];
-    program_set_float3(program, "mat.ambient", cmat.ambient.x, cmat.ambient.y, cmat.ambient.z);
-    program_set_float3(program, "mat.diffuse", cmat.diffuse.x, cmat.diffuse.y, cmat.diffuse.z);
-    program_set_float3(program, "mat.spec", cmat.spec.x, cmat.spec.y, cmat.spec.z);
-    program_set_float3(program, "mat.emmisive", cmat.emmisive.x, cmat.emmisive.y, cmat.emmisive.z);
+    program_set_float3v(program, "mat.ambient", cmat.ambient);
+    program_set_float3v(program, "mat.diffuse", cmat.diffuse);
+    program_set_float3v(program, "mat.spec", cmat.spec);
+    program_set_float3v(program, "mat.emmisive", cmat.emmisive);
     program_set_float1(program, "mat.spece", cmat.spece);
     program_set_float1(program, "mat.transp", cmat.transp);
     program_set_float1(program, "mat.optd", cmat.optd);
     program_set_int1(program, "mat.illum", cmat.illum);
-    program_set_float3(program, "camPos", cam.pos.x, cam.pos.y, cam.pos.z);
+    program_set_float3v(program, "camPos", cam.pos);
+    print_vec3(cmat.ambient, "ambient");
+    print_vec3(cmat.diffuse, "diffuse");
+    print_vec3(cmat.spec, "spec");
+    print_vec3(cmat.emmisive, "emmisive");
+    fprintf(stdout, "spece: %f\noptd: %f\nillum: %u\n", cmat.spece, cmat.optd, cmat.illum);
 
     glBindVertexArray(vao1);
     glDrawArrays(GL_TRIANGLES, 0, ql * 3);
 
-    // glBindVertexArray(vao2);
-    // glDrawArrays(GL_TRIANGLES, 0, qm * 3);
+    /*glBindVertexArray(vao2);
+    glDrawArrays(GL_TRIANGLES, 0, qm * 3);*/
 
     glfwPollEvents();
     glfwSwapBuffers(window);
@@ -524,7 +529,7 @@ uint8_t run_suijin() {
   }
 
   free(q);
-  //free(d);
+  free(d);
 
   destroy_object(objects);
   destroy_object(objects + 1);
