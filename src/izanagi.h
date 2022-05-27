@@ -9,10 +9,7 @@
 
 #include "defs.h"
 #include "linalg.h"
-
-struct material {
-  uint32_t idek; // TODO
-};
+#include "izanami.h"
 
 struct v4v {
   v4 *__restrict v;
@@ -33,9 +30,9 @@ struct v2v {
 };
 
 struct faceev {
-  uv4 v;
-  uv4 t;
-  uv4 n;
+  uv3 v;
+  uv3 t;
+  uv3 n;
 };
 
 struct facev {
@@ -44,22 +41,17 @@ struct facev {
   uint32_t s;
 };
 
-struct matv {
-  struct material *__restrict v;
-  uint32_t l;
-  uint32_t s;
-};
-
 struct object {
-  struct   v4v v; // Vertices
+  struct   v3v v; // Vertices
   struct   v2v t; // Texture coords
   struct   v3v n; // Normals
   struct facev f; // Faces
-  struct  matv m; // Materials
   uint16_t smooth_shading;          
   char name[64];
 };
 
-struct object *__restrict parse_object_file(char *__restrict fname, uint32_t *__restrict objl);
+struct object *__restrict parse_object_file(char *__restrict fname, uint32_t *__restrict objl, struct matv *__restrict materials);
+
+void destroy_object(struct object *__restrict obj);
 
 #endif

@@ -3,6 +3,14 @@
 
 #include <stdint.h>
 
+struct fbuf {
+  char fb[2048];
+  uint32_t fd;
+  uint32_t bufp;
+  uint32_t bufl;
+  uint8_t flags;
+};
+
 struct v2 {
   float x;
   float y;
@@ -36,6 +44,12 @@ struct uv4 {
 };
 typedef struct uv4 uv4;
 
+struct uv3 {
+  uint32_t x;
+  uint32_t y;
+  uint32_t z;
+};
+typedef struct uv3 uv3;
 
 typedef float mat3[3][3];
 typedef float mat4[4][4];
