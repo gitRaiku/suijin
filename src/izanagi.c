@@ -2,36 +2,6 @@
 
 FILE *__restrict of;
 
-#define VECTOR_PUSH(name, btype, stype)               \
-void name ##vp(btype v, stype val) {                  \
-  if (v->l == v->s) {                                 \
-    v->s *= 2;                                        \
-    v->v = realloc(v->v, sizeof(stype) * v->s);      \
-  }                                                   \
-  v->v[v->l] = val;                                   \
-  ++v->l;                                             \
-}                                                     
-
-#define VECTOR_INIT(name, btype, stype)       \
-void name ##vi(btype v) {                     \
-  v->l = 0;                                   \
-  v->s = 4;                                   \
-  v->v = malloc(sizeof(stype) * v->s);         \
-}                                             
-
-#define VECTOR_TRIM(name, btype, stype)          \
-void name ##vt(btype v) {                        \
-  if (v->s != v->l) {                            \
-    v->s = v->l;                                 \
-    v->v = realloc(v->v, sizeof(stype) * v->s); \
-  }                                              \
-}
-
-#define VECTOR_SUITE(name, btype, stype) \
-VECTOR_PUSH(name, btype, stype) \
-VECTOR_INIT(name, btype, stype) \
-VECTOR_TRIM(name, btype, stype) \
-
 // VECTOR_SUITE(v4, struct v4v *__restrict, v4)
 VECTOR_SUITE(v3, struct v3v *__restrict, v3)
 VECTOR_SUITE(v2, struct v2v *__restrict, v2)

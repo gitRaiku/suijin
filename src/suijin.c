@@ -4,6 +4,8 @@
 #include <stdint.h>
 #include <math.h>
 #include <string.h>
+#include <sys/stat.h>
+#include <unistd.h>
 
 #include "shaders.h"
 #include "linalg.h"
@@ -364,6 +366,26 @@ void print_face(float *__restrict buf) {
   fprintf(stdout, "    t: %f %f\n", buf[6], buf[7]);
 }
 
+time_t la;
+
+uint8_t check_frag_update(uint32_t *__restrict program, uint32_t vert) {
+  struct stat s;
+  stat("shaders/frag.glsl", &s);
+  if (s.st_ctim.tv_sec != la) {
+    uint32_t shaders[2];
+    shaders[0] = vert;
+    if (shader_get("shaders/frag.glsl", GL_FRAGMENT_SHADER, shaders + 1)) {
+      return 2;
+    } else {
+      program_get(2, shaders, program);
+      glDeleteShader(shaders[1]);
+    }
+    la = s.st_ctim.tv_sec;
+    return 1;
+  }
+  return 0;
+}
+
 uint8_t run_suijin() {
   init_random();
   setbuf(stdout, NULL);
@@ -381,11 +403,11 @@ uint8_t run_suijin() {
 
   ctime = ltime = deltaTime = 0;
 
-  {
 #define SHADERC 2
+  uint32_t shaders[SHADERC];
+  {
     const char          *paths[SHADERC] = { "shaders/vert.glsl", "shaders/frag.glsl" };
     const uint32_t shaderTypes[SHADERC] = { GL_VERTEX_SHADER   , GL_FRAGMENT_SHADER  };
-    uint32_t shaders[SHADERC];
     uint32_t i;
     for (i = 0; i < SHADERC; ++i) {
       PR_CHECK(shader_get(paths[i], shaderTypes[i], shaders + i));
@@ -393,7 +415,7 @@ uint8_t run_suijin() {
 
     PR_CHECK(program_get(2, shaders, &program));
 
-    for (i = 0; i < SHADERC; ++i) {
+    for (i = 1; i < SHADERC; ++i) { // TODO: REMOVE
       glDeleteShader(shaders[i]);
     }
   }
@@ -404,23 +426,8 @@ uint8_t run_suijin() {
   uint32_t qm;
   float *__restrict d = quietus(objects + 1, &qm); // TODO: KMS
 
-  /*float d[] = { 0.0f, 1.0f, 1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f,
-                0.5f, 0.0f, 1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f,
-               -0.5f, 1.0f, 1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f };
-  uint32_t qm = sizeof(d) / sizeof(float);*/
-
-  /*{
-    int32_t i;
-    for(i = 0; i < qm / 27; ++i) {
-      fprintf(stdout, "Face %u:\n", i);
-      fprintf(stdout, "  Elem 1:\n");
-      print_face(d + i * 27);
-      fprintf(stdout, "  Elem 2:\n");
-      print_face(d + i * 27 + 9);
-      fprintf(stdout, "  Elem 3:\n");
-      print_face(d + i * 27 + 18);
-    }
-  }*/ 
+  destroy_object(objects);
+  destroy_object(objects + 1);
 
   uint32_t vbo1, vao1;
   {
@@ -482,9 +489,17 @@ uint8_t run_suijin() {
   oldMouseX = 0.0;
   oldMouseY = 0.0;
 
-
   struct material cmat;
+  cmat = mats.v[0];
+  uint32_t frame = 0;
+  print_vec3(cmat.ambient, "ambient");
+  print_vec3(cmat.diffuse, "diffuse");
+  print_vec3(cmat.spec, "spec");
+  print_vec3(cmat.emmisive, "emmisive");
+  fprintf(stdout, "spece: %f\noptd: %f\nillum: %u\n", cmat.spece, cmat.optd, cmat.illum);
+
   while (!glfwWindowShouldClose(window)) {
+    ++frame;
     ctime = glfwGetTime();
     deltaTime = ctime - ltime;
 
@@ -501,7 +516,6 @@ uint8_t run_suijin() {
     glUseProgram(program);
     program_set_mat4(program, "fn_mat", fn);
     program_set_int1(program, "shading", cshading);
-    cmat = mats.v[0];
     program_set_float3v(program, "mat.ambient", cmat.ambient);
     program_set_float3v(program, "mat.diffuse", cmat.diffuse);
     program_set_float3v(program, "mat.spec", cmat.spec);
@@ -511,17 +525,23 @@ uint8_t run_suijin() {
     program_set_float1(program, "mat.optd", cmat.optd);
     program_set_int1(program, "mat.illum", cmat.illum);
     program_set_float3v(program, "camPos", cam.pos);
-    print_vec3(cmat.ambient, "ambient");
-    print_vec3(cmat.diffuse, "diffuse");
-    print_vec3(cmat.spec, "spec");
-    print_vec3(cmat.emmisive, "emmisive");
-    fprintf(stdout, "spece: %f\noptd: %f\nillum: %u\n", cmat.spece, cmat.optd, cmat.illum);
 
     glBindVertexArray(vao1);
     glDrawArrays(GL_TRIANGLES, 0, ql * 3);
 
-    /*glBindVertexArray(vao2);
-    glDrawArrays(GL_TRIANGLES, 0, qm * 3);*/
+    //glBindVertexArray(vao2);
+    //glDrawArrays(GL_TRIANGLES, 0, qm * 3);
+
+    if (frame % 30 == 0) {
+      while (1) {
+        uint8_t r = check_frag_update(&program, shaders[0]);
+        if (r < 2) {
+          break;
+        } else {
+          sleep(300);
+        }
+      }
+    }
 
     glfwPollEvents();
     glfwSwapBuffers(window);
@@ -530,9 +550,6 @@ uint8_t run_suijin() {
 
   free(q);
   free(d);
-
-  destroy_object(objects);
-  destroy_object(objects + 1);
 
   glfwTerminate();
 

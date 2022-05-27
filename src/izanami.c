@@ -124,6 +124,7 @@ void parse_material(struct matv *__restrict mats, char *__restrict fname) {
   matvi(mats);
   
   struct fbuf cb;
+  memset(&cb, 0, sizeof(cb));
   char tok[128] = {0};
   uint32_t line_number = 0; 
   enum MIDS id;

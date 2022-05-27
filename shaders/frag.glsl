@@ -20,8 +20,8 @@ uniform int shading;
 uniform vec3 camPos;
 uniform Material mat;
 
-const float atten_const = 3.0f;
-const float atten_linear = 0.013f;
+const float atten_const = 1.0f;
+const float atten_linear = 0.012f;
 const float atten_quad = 0.00032f;
 const vec3 lpos = vec3(8.0f);
 
@@ -31,8 +31,7 @@ void main() {
 
     float attenuation = 1.0f / (atten_const + atten_linear * dist + atten_quad * dist * dist);
 
-    vec3 ambient =  vec3(0.5f) * mat.ambient;
-    
+    vec3 ambient = vec3(0.1f) * mat.ambient;
 
     vec3 nVec = normalize(passNorm);
     vec3 dir = normalize(lpos - passPos);
