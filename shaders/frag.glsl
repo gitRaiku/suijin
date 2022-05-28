@@ -23,7 +23,7 @@ uniform Material mat;
 const float atten_const = 1.0f;
 const float atten_linear = 0.012f;
 const float atten_quad = 0.00032f;
-const vec3 lpos = vec3(8.0f);
+const vec3 lpos = vec3(10.0f);
 
 void main() {
   if (shading == 0) {
@@ -32,6 +32,7 @@ void main() {
     float attenuation = 1.0f / (atten_const + atten_linear * dist + atten_quad * dist * dist);
 
     vec3 ambient = vec3(0.1f) * mat.ambient;
+
 
     vec3 nVec = normalize(passNorm);
     vec3 dir = normalize(lpos - passPos);
@@ -47,6 +48,10 @@ void main() {
     vec3 _result = (ambient + diffuse + specular) * attenuation;
     FragColor = vec4(_result, 1.0f);
   } else {
+    FragColor = vec4(passNorm, 1.0f);
+    return;
+    FragColor = vec4(vec3(dot(passNorm, vec3(0.0f, 1.0f, 0.0f))), 1.0f);
+    return;
     FragColor = vec4(0.0f, 0.0f, 1.0f, 1.0f);
   }
 }
