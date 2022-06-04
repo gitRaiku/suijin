@@ -452,13 +452,6 @@ uint8_t run_suijin() {
     glEnableVertexAttribArray(2);
   }
 
-  /*{
-    int32_t i;
-    for(i = 0; i < objects[0].v.l; ++i) {
-      fprintf(stdout, "%.5f\n", objects[0].v.v[i]);
-    }
-  }*/
-
   uint32_t vbo2, vao2;
   {
     glGenVertexArrays(1, &vao2);
@@ -536,8 +529,8 @@ uint8_t run_suijin() {
     glBindVertexArray(vao1);
     glDrawArrays(GL_TRIANGLES, 0, objects[0].v.l / 8);
 
-    //glBindVertexArray(vao2);
-    //glDrawArrays(GL_TRIANGLES, 0, objects[0].v.l * 3);
+    glBindVertexArray(vao2);
+    glDrawArrays(GL_TRIANGLES, 0, objects[0].v.l * 3);
 
     if (frame % 30 == 0) {
       while (1) {
