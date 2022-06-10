@@ -397,7 +397,7 @@ uint8_t run_suijin() {
 
   uint32_t objl;
   struct matv mats;
-  struct object *__restrict objects = parse_object_file("Quietus.obj", &objl, &mats);
+  struct object *__restrict objects = parse_object_file("Dough.obj", &objl, &mats);
 
   uint32_t program;
 
@@ -425,15 +425,6 @@ uint8_t run_suijin() {
     la = s.st_ctim.tv_sec;
   }
   
-  /*uint32_t ql;
-  float *__restrict q = quietus(objects, &ql);
-
-  uint32_t qm;
-  float *__restrict d = quietus(objects + 1, &qm); // TODO: KMS*/
-
-  //destroy_object(objects);
-  //destroy_object(objects + 1);
-
   uint32_t vbo1, vao1;
   {
     glGenVertexArrays(1, &vao1);

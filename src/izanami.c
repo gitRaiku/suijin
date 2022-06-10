@@ -33,10 +33,11 @@ float read_float(struct fbuf *__restrict cb) {
   float adm = 0.1f;
   uint8_t afterDot = 0;
   ch = _getc(cb);
+  //fprintf(stdout, "[%c]\n", ch);
   if (ch == '-') {
     sgn = -1.0f;
-  } else if (ch == '\\') {
-    return 0.0f;
+  } else if (ch == '/') {
+    return 1.0f;
   } else {
     res = ch - '0';
   }

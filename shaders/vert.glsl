@@ -10,7 +10,7 @@ uniform mat4 fn_mat;
 
 void main() {
   passNorm = norm;
-  vec4 magn = vec4(pos.x * 100, pos.y * 100, pos.z * 100, 1.0f);
+  vec4 magn = vec4(pos.x, pos.y, pos.z, 1.0f);
   passPos = magn.xyz;
   // vec4 magn = vec4(pos, 1.0f);
   gl_Position = fn_mat * magn;

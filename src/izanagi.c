@@ -187,6 +187,7 @@ struct object *__restrict parse_object_file(char *__restrict fname, uint32_t *__
     if (cb.flags & UNREADABLE_MASK) {
       break;
     }
+    // fprintf(stdout, "CLine: %u, tok: %s\n", line_number, tok);
     id = id_tok(tok);
     //id_to_str(id);
     switch (id) {
