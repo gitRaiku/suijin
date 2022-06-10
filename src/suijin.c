@@ -536,8 +536,8 @@ uint8_t run_suijin() {
     glBindVertexArray(vao1);
     glDrawArrays(GL_TRIANGLES, 0, objects[0].v.l / 8);
 
-    //glBindVertexArray(vao2);
-    //glDrawArrays(GL_TRIANGLES, 0, objects[0].v.l * 3);
+    glBindVertexArray(vao2);
+    glDrawArrays(GL_TRIANGLES, 0, objects[0].v.l * 3);
 
     if (frame % 30 == 0) {
       while (1) {
