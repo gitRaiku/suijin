@@ -49,9 +49,5 @@ void main() {
     FragColor = vec4(_result, 1.0f);
   } else {
     FragColor = vec4(passNorm, 1.0f);
-    return;
-    FragColor = vec4(vec3(dot(passNorm, vec3(0.0f, 1.0f, 0.0f))), 1.0f);
-    return;
-    FragColor = vec4(0.0f, 0.0f, 1.0f, 1.0f);
   }
 }

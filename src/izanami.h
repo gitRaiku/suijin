@@ -40,6 +40,20 @@ VECTOR_PUSH(name, btype, stype) \
 VECTOR_INIT(name, btype, stype) \
 VECTOR_TRIM(name, btype, stype)
 
+#define DEF_VECTOR_PUSH(name, btype, stype) \
+void name ##vp(btype v, stype val);
+
+#define DEF_VECTOR_INIT(name, btype, stype) \
+void name ##vi(btype v);
+
+#define DEF_VECTOR_TRIM(name, btype, stype) \
+void name ##vt(btype v);
+
+#define DEF_VECTOR_SUITE(name, btype, stype) \
+DEF_VECTOR_PUSH(name, btype, stype) \
+DEF_VECTOR_INIT(name, btype, stype) \
+DEF_VECTOR_TRIM(name, btype, stype)
+
 struct material {
   char name[64];
   v3 ambient;
@@ -57,6 +71,8 @@ struct matv {
   uint32_t l;
   uint32_t s;
 };
+
+DEF_VECTOR_SUITE(mat, struct matv *__restrict, struct material)
 
 #define LINEND_MASK   0b010 /// Read a line end
 #define UNREADABLE_MASK   0b100 /// There are still bytes left in the file

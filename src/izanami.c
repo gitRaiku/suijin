@@ -2,7 +2,6 @@
 
 VECTOR_SUITE(mat, struct matv *__restrict, struct material)
 
-
 char _getc(struct fbuf *__restrict cb) {
   if (cb->flags & UNREADABLE_MASK) {
     return '\0';

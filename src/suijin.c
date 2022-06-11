@@ -73,6 +73,9 @@ void read_uint32_t(FILE *__restrict stream, uint32_t *__restrict nr) {
     fgetc(stream);
   }
 }
+uint32_t __inline__ __attribute((pure)) max(uint32_t o1, uint32_t o2) {
+  return o1 > o2 ? o1 : o2;
+}
 
 void print_quat(quat q, const char *str) {
   fprintf(stdout, "%s: x = %f y = %f z = %f w = %f\n", str, q.x, q.y, q.z, q.w);
@@ -264,6 +267,10 @@ void update_camera_matrix() {
   matmul44(fn, proj, view);
 }
 
+uint32_t CDR = 0;
+uint32_t CDRO = 0;
+uint32_t lp0, lp1, lp2;
+
 void handle_input(GLFWwindow *__restrict window) {
   { 
     glfwGetCursorPos(window, &mouseX, &mouseY);
@@ -330,10 +337,32 @@ void handle_input(GLFWwindow *__restrict window) {
       cameraUpdate = 1;
     }
     if (KEY_PRESSED(GLFW_KEY_G)) {
-      cshading = 1;
+      if (lp0 == 0) {
+        cshading = 1 - cshading;
+      }
+      lp0 = 1;
+    } else {
+      lp0 = 0;
     }
-    if (KEY_PRESSED(GLFW_KEY_H)) {
-      cshading = 0;
+
+    if (KEY_PRESSED(GLFW_KEY_O)) {
+      if (lp1 == 0) {
+        CDR++;
+        CDR %= 4;
+      }
+      lp1 = 1;
+    } else {
+      lp1 = 0;
+    }
+
+    if (KEY_PRESSED(GLFW_KEY_P)) {
+      if (lp2 == 0) {
+        CDRO++;
+        CDRO %= 2;
+      }
+      lp2 = 1;
+    } else {
+      lp2 = 0;
     }
   }
 }
@@ -386,6 +415,37 @@ uint8_t check_frag_update(uint32_t *__restrict program, uint32_t vert) {
   return 0;
 }
 
+uint32_t mbSize = 0;
+
+void update_mat(uint32_t program, struct material *__restrict mat) {
+  program_set_float3v(program, "mat.ambient", mat->ambient);
+  program_set_float3v(program, "mat.diffuse", mat->diffuse);
+  program_set_float3v(program, "mat.spec", mat->spec);
+  program_set_float3v(program, "mat.emmisive", mat->emmisive);
+  program_set_float1(program, "mat.spece", mat->spece);
+  program_set_float1(program, "mat.transp", mat->transp);
+  program_set_float1(program, "mat.optd", mat->optd);
+  program_set_int1(program, "mat.illum", mat->illum);
+}
+
+void draw_obj(uint32_t program, struct matv *__restrict mats, struct object *__restrict obj) {
+  uint32_t li = 0;
+
+  update_mat(program, &mats->v[obj->m.v[0].m]);
+  glBufferSubData(GL_ARRAY_BUFFER, 0, obj->v.l * sizeof(float), obj->v.v);
+
+  {
+    int32_t i;
+    for(i = 1; i < obj->m.l; ++i) {
+      glDrawArrays(GL_TRIANGLES, li / 8, (obj->m.v[i].i - li) / 8);
+      li = obj->m.v[i].i;
+      update_mat(program, &mats->v[obj->m.v[i].m]);
+    }
+  }
+
+  glDrawArrays(GL_TRIANGLES, li / 8, (obj->v.l - li) / 8);
+}
+
 uint8_t run_suijin() {
   init_random();
   setbuf(stdout, NULL);
@@ -419,21 +479,30 @@ uint8_t run_suijin() {
       glDeleteShader(shaders[i]);
     }
   }
+
   {
     struct stat s;
     stat("shaders/frag.glsl", &s);
     la = s.st_ctim.tv_sec;
   }
-  
-  uint32_t vbo1, vao1;
+
+  mbSize = 0;
   {
-    glGenVertexArrays(1, &vao1);
-    glGenBuffers(1, &vbo1);
+    int32_t i;
+    for(i = 0; i < objl; ++i) {
+      mbSize = max(mbSize, objects[i].v.l);
+    }
+  }
+  
+  uint32_t vbo, vao;
+  {
+    glGenVertexArrays(1, &vao);
+    glGenBuffers(1, &vbo);
 
-    glBindVertexArray(vao1);
+    glBindVertexArray(vao);
 
-    glBindBuffer(GL_ARRAY_BUFFER, vbo1);
-    glBufferData(GL_ARRAY_BUFFER, objects[0].v.l * sizeof(float), objects[0].v.v, GL_STATIC_DRAW);
+    glBindBuffer(GL_ARRAY_BUFFER, vbo);
+    glBufferData(GL_ARRAY_BUFFER, mbSize * sizeof(float), NULL, GL_STATIC_DRAW);
 
     glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void *) (0 * sizeof(float)));
     glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void *) (3 * sizeof(float)));
@@ -442,24 +511,6 @@ uint8_t run_suijin() {
     glEnableVertexAttribArray(1);
     glEnableVertexAttribArray(2);
   }
-
-  uint32_t vbo2, vao2;
-  {
-    glGenVertexArrays(1, &vao2);
-    glGenBuffers(1, &vbo2);
-
-    glBindVertexArray(vao2);
-
-    glBindBuffer(GL_ARRAY_BUFFER, vbo2);
-    glBufferData(GL_ARRAY_BUFFER, objects[1].v.l * sizeof(float), objects[1].v.v, GL_STATIC_DRAW);
-
-    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void *) (0 * sizeof(float)));
-    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void *) (3 * sizeof(float)));
-    glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void *) (6 * sizeof(float)));
-    glEnableVertexAttribArray(0);
-    glEnableVertexAttribArray(1);
-    glEnableVertexAttribArray(2);
-  } // TODO: KMS
 
   memset(&initCam, 0, sizeof(initCam));
 
@@ -485,8 +536,6 @@ uint8_t run_suijin() {
   oldMouseX = 0.0;
   oldMouseY = 0.0;
 
-  struct material cmat;
-  cmat = mats.v[0];
   uint32_t frame = 0;
 
   while (!glfwWindowShouldClose(window)) {
@@ -505,23 +554,17 @@ uint8_t run_suijin() {
     }
 
     glUseProgram(program);
+
     program_set_mat4(program, "fn_mat", fn);
     program_set_int1(program, "shading", cshading);
-    program_set_float3v(program, "mat.ambient", cmat.ambient);
-    program_set_float3v(program, "mat.diffuse", cmat.diffuse);
-    program_set_float3v(program, "mat.spec", cmat.spec);
-    program_set_float3v(program, "mat.emmisive", cmat.emmisive);
-    program_set_float1(program, "mat.spece", cmat.spece);
-    program_set_float1(program, "mat.transp", cmat.transp);
-    program_set_float1(program, "mat.optd", cmat.optd);
-    program_set_int1(program, "mat.illum", cmat.illum);
     program_set_float3v(program, "camPos", cam.pos);
 
-    glBindVertexArray(vao1);
-    glDrawArrays(GL_TRIANGLES, 0, objects[0].v.l / 8);
-
-    glBindVertexArray(vao2);
-    glDrawArrays(GL_TRIANGLES, 0, objects[0].v.l * 3);
+    {
+      int32_t i;
+      for(i = 0; i < objl; ++i) {
+        draw_obj(program, &mats, objects + i);
+      }
+    }
 
     if (frame % 30 == 0) {
       while (1) {
@@ -538,9 +581,6 @@ uint8_t run_suijin() {
     glfwSwapBuffers(window);
     ltime = ctime;
   }
-
-  //free(q);
-  //free(d);
 
   glfwTerminate();
 

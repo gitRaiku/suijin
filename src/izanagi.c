@@ -5,6 +5,7 @@ FILE *__restrict of;
 // VECTOR_SUITE(v4, struct v4v *__restrict, v4)
 VECTOR_SUITE(v3, struct v3v *__restrict, v3)
 VECTOR_SUITE(v2, struct v2v *__restrict, v2)
+VECTOR_SUITE(mati, struct mativ *__restrict, struct mate)
 VECTOR_SUITE(float, struct floatv *__restrict, float)
 
 void facevp(struct facev *__restrict v, struct faceev val) {
@@ -31,16 +32,12 @@ void facevt(struct facev *__restrict v) {
 }
 
 void init_object(struct object *__restrict o) {
-  /*v3vi(&o->v);
-  v3vi(&o->n);
-  v2vi(&o->t);
-  facevi(&o->f);*/
+  o->name[0] = '\0';
   floatvi(&o->v);
-  o->smooth_shading = 0;
+  mativi(&o->m);
 }
 
 union OBJ_MEMBERS {
-  //vec4 v4;
   vec3 v3;
   vec2 v2;
   struct faceev fv; 
@@ -154,6 +151,16 @@ void add_i_dont_even_know(v3 *__restrict v, struct floatv *__restrict fv, struct
   floatvp(fv, texts->v[(uint32_t)v->y].y);
 }
 
+uint32_t gmi(struct matv *__restrict materials, char *__restrict matn) {
+  int32_t i;
+  for(i = 0; i < materials->l; ++i) {
+    if (strcmp(matn, materials->v[i].name) == 0) { 
+      return i;
+    }
+  }
+  return 0;
+}
+
 struct object *__restrict parse_object_file(char *__restrict fname, uint32_t *__restrict objl, struct matv *__restrict materials) {
   struct object *__restrict objs = NULL;
   struct fbuf cb;
@@ -226,7 +233,7 @@ struct object *__restrict parse_object_file(char *__restrict fname, uint32_t *__
         break;
       case USE_MATERIAL:
         next_token(tok, &cb);
-        /// USE MATERIAL
+        mativp(&objs[cobj].m, (struct mate) { gmi(materials, tok), objs[cobj].v.l });
         break;
       case OBJECT:
         if (cobj != -1) {
@@ -245,7 +252,7 @@ struct object *__restrict parse_object_file(char *__restrict fname, uint32_t *__
         break;
       case SMOOTH_SHADING:
         next_token(tok, &cb);
-        objs[cobj].smooth_shading = tok[0] == 'o' ? 0 : 1;
+        /// Smooth Shading
         break;
       case COMMENT:
         while ((cb.flags & LINEND_MASK) == 0) {
@@ -262,6 +269,7 @@ struct object *__restrict parse_object_file(char *__restrict fname, uint32_t *__
   free(norms.v);
   free(texts.v);
   floatvt(&objs[cobj].v);
+  matvt(materials);
 
   close(cb.fd);
 

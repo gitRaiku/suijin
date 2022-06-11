@@ -47,13 +47,20 @@ struct floatv {
   uint32_t s;
 };
 
+struct mate {
+  uint32_t m; // Material
+  uint32_t i; // Start Index
+};
+
+struct mativ {
+  struct mate *__restrict v;
+  uint32_t l;
+  uint32_t s;
+};
+
 struct object {
-  // struct   v3v v; // Vertices
-  // struct   v2v t; // Texture coords
-  // struct   v3v n; // Normals
-  // struct facev f; // Faces
   struct floatv v;
-  uint16_t smooth_shading;          
+  struct mativ m;
   char name[64];
 };
 
