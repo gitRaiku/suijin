@@ -36,7 +36,7 @@ struct pixel {
 #define PR_CHECK(call) if (call) { return 1; }
 #define KEY_PRESSED(key) (glfwGetKey(window, key) == GLFW_PRESS)
 
-double ctime, ltime;
+double _ctime, _ltime;
 double deltaTime;
 
 int32_t cshading = 0;
@@ -57,7 +57,7 @@ struct camera cam;
 
 uint8_t cameraUpdate = 1;
 #define ZOOM_SPEED 0.01f
-#define PAN_SPEED 0.1f
+#define PAN_SPEED 0.04f
 #define SENS 0.001f
 
 mat4 fn;
@@ -430,19 +430,40 @@ void update_mat(uint32_t program, struct material *__restrict mat) {
 
 void draw_obj(uint32_t program, struct matv *__restrict mats, struct object *__restrict obj) {
   uint32_t li = 0;
+  struct material *__restrict cmat;
 
-  update_mat(program, &mats->v[obj->m.v[0].m]);
+  cmat = &mats->v[obj->m.v[0].m];
+  update_mat(program, cmat);
   glBufferSubData(GL_ARRAY_BUFFER, 0, obj->v.l * sizeof(float), obj->v.v);
 
   {
     int32_t i;
     for(i = 1; i < obj->m.l; ++i) {
+      if (cmat->tamb.i != 0) {
+        glActiveTexture(GL_TEXTURE0);
+        glBindTexture(GL_TEXTURE_2D, cmat->tamb.i);
+        program_set_int1(program, "tex", 0);
+        program_set_int1(program, "hasTexture", 1);
+      } else {
+        program_set_int1(program, "hasTexture", 0);
+      }
+      
       glDrawArrays(GL_TRIANGLES, li / 8, (obj->m.v[i].i - li) / 8);
       li = obj->m.v[i].i;
-      update_mat(program, &mats->v[obj->m.v[i].m]);
+
+      cmat = &mats->v[obj->m.v[i].m];
+      update_mat(program, cmat);
     }
   }
 
+  if (cmat->tamb.i != 0) {
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, cmat->tamb.i);
+    program_set_int1(program, "tex", 0);
+    program_set_int1(program, "hasTexture", 1);
+  } else {
+    program_set_int1(program, "hasTexture", 0);
+  }
   glDrawArrays(GL_TRIANGLES, li / 8, (obj->v.l - li) / 8);
 }
 
@@ -461,7 +482,7 @@ uint8_t run_suijin() {
 
   uint32_t program;
 
-  ctime = ltime = deltaTime = 0;
+  _ctime = _ltime = deltaTime = 0;
 
 #define SHADERC 2
   uint32_t shaders[SHADERC];
@@ -540,8 +561,8 @@ uint8_t run_suijin() {
 
   while (!glfwWindowShouldClose(window)) {
     ++frame;
-    ctime = glfwGetTime();
-    deltaTime = ctime - ltime;
+    _ctime = glfwGetTime();
+    deltaTime = _ctime - _ltime;
 
     glClearColor(0.2f, 0.2f, 0.2f, 1.0f);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
@@ -579,7 +600,7 @@ uint8_t run_suijin() {
 
     glfwPollEvents();
     glfwSwapBuffers(window);
-    ltime = ctime;
+    _ltime = _ctime;
   }
 
   glfwTerminate();

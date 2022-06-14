@@ -9,6 +9,7 @@ Ks 0.500000 0.500000 0.500000
 Ke 0.000000 0.000000 0.000000
 Ni 1.450000
 d 1.000000
+# map_Ka f1.png
 map_Ka DoughTex.png
 illum 2
 

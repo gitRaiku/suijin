@@ -24,7 +24,7 @@ DEBUGGER = gdb
 
 DATE := $(shell date "+%Y-%m-%d")
 
-LFLAGS   = -lglfw -lm
+LFLAGS   = -lglfw -lm -lpng
 
 C_SRC = $(wildcard $(SRC_DIR)/*.c $(SRC_DIR)/*/*.c)
 L_SRC = $(wildcard $(LIB_DIR)/*.c $(LIB_DIR)/*/*.c)

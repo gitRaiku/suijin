@@ -5,13 +5,14 @@ layout (location = 2) in vec2 tex;
 
 out vec3 passNorm;
 out vec3 passPos;
+out vec2 passTex;
 
 uniform mat4 fn_mat;
 
 void main() {
+  passPos = pos;
   passNorm = norm;
-  vec4 magn = vec4(pos.x, pos.y, pos.z, 1.0f);
-  passPos = magn.xyz;
-  // vec4 magn = vec4(pos, 1.0f);
-  gl_Position = fn_mat * magn;
+  passTex = tex;
+
+  gl_Position = fn_mat * vec4(pos, 1.0f);
 }
