@@ -281,14 +281,13 @@ void handle_input(GLFWwindow *__restrict window) {
 
       oldMouseX = mouseX;
       oldMouseY = mouseY;
-  
-      //fprintf(stdout, "xoff: %f yoff: %f\n", xoff, yoff);
       
-      quat qx = gen_quat((v3) {0.0f, 1.0f, 0.0f}, -xoff * SENS);
-      quat qy = gen_quat((v3) {0.0f, 0.0f, 1.0f}, yoff * SENS);
+      quat qx = gen_quat(cam.up, -xoff * SENS);
+      quat qy = gen_quat(cross(*qv(&cam.orientation), cam.up), yoff * SENS);
+
       quat qr = qmul(qy, qx);
       quat qt = qmul(qmul(qr, cam.orientation), qconj(qr));
-      // print_quat(qt, "qt");
+      print_quat(qt, "qt");
       cam.orientation = qt;
 
       cameraUpdate = 1;
@@ -478,7 +477,7 @@ uint8_t run_suijin() {
 
   uint32_t objl;
   struct matv mats;
-  struct object *__restrict objects = parse_object_file("Dough.obj", &objl, &mats);
+  struct object *__restrict objects = parse_object_file("Cube.obj", &objl, &mats);
 
   uint32_t program;
 
@@ -543,7 +542,7 @@ uint8_t run_suijin() {
 
   initCam.up.y = 1.0f;
   initCam.fov = toRadians(90.0f);
-  initCam.pos = (vec3) { 5.0f, 5.0f, 5.0f };
+  initCam.pos = (vec3) { 0.0f, 8.0f, 0.0f };
   initCam.orientation = (quat) { 1.0f, 0.0f, 0.0f, 0.0f};
 
   memcpy(&cam, &initCam, sizeof(cam));

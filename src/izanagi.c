@@ -171,7 +171,6 @@ void get_texture(char *__restrict fname, struct texture *__restrict tex) {
   uint8_t *buf = read_png(fname, &tex->w, &tex->h);
 
   glBindTexture(GL_TEXTURE_2D, tex->i);
-  // 52 955
   glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, tex->w, tex->h, 0, GL_RGB, GL_UNSIGNED_BYTE, buf);
   glGenerateMipmap(GL_TEXTURE_2D);
 
@@ -180,7 +179,7 @@ void get_texture(char *__restrict fname, struct texture *__restrict tex) {
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
 }
 
 void parse_material(struct matv *__restrict mats, char *__restrict fname) {

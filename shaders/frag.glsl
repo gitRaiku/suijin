@@ -27,6 +27,7 @@ uniform int hasTexture;
 const float atten_const = 1.0f;
 const float atten_linear = 0.012f;
 const float atten_quad = 0.00032f;
+const vec3 base_light = vec3(0.001f);
 const vec3 lpos = vec3(10.0f);
 
 void main() {
@@ -40,7 +41,7 @@ void main() {
 
     vec3 ambient;
     if (hasTexture != 0) {
-      ambient = texture(tex, passTex).xyz;
+      ambient = base_light + texture(tex, passTex).xyz;
     } else {
       ambient = mat.ambient;
     }
@@ -56,8 +57,8 @@ void main() {
     float spec = pow(max(dot(viewDir, reflectDir), 0.0f), mat.spece);
     vec3 specular = mat.spec * spec;
 
-    // vec3 _result = (ambient + diffuse + specular) * attenuation;
-    vec3 _result = (ambient * diffuse + specular) * attenuation;
+    vec3 _result = (ambient + diffuse + specular) * attenuation;
+    // vec3 _result = (ambient * diffuse + specular) * attenuation; TODO: THIS AFTER I"M DONE
     FragColor = vec4(_result, 1.0f);
   } else {
     FragColor = vec4(passNorm, 1.0f);
