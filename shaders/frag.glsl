@@ -57,8 +57,7 @@ void main() {
     float spec = pow(max(dot(viewDir, reflectDir), 0.0f), mat.spece);
     vec3 specular = mat.spec * spec;
 
-    vec3 _result = (ambient + diffuse + specular) * attenuation;
-    // vec3 _result = (ambient * diffuse + specular) * attenuation; TODO: THIS AFTER I"M DONE
+    vec3 _result = (ambient * diffuse + specular) * attenuation;
     FragColor = vec4(_result, 1.0f);
   } else {
     FragColor = vec4(passNorm, 1.0f);

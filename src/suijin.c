@@ -478,7 +478,7 @@ uint8_t run_suijin() {
 
   uint32_t objl;
   struct matv mats;
-  struct object *__restrict objects = parse_object_file("Cube.obj", &objl, &mats);
+  struct object *__restrict objects = parse_object_file("Dough.obj", &objl, &mats);
 
   uint32_t program;
 
