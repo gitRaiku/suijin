@@ -53,6 +53,16 @@ vec3 __attribute((pure)) norm(vec3 v) {
   return res;
 }
 
+quat __attribute((pure)) qnorm(quat q) {
+  float dist = sqrtf(q.x * q.x + q.y * q.y + q.z * q.z + q.w * q.w);
+  quat res;
+  res.x = q.x / dist;
+  res.y = q.y / dist;
+  res.z = q.z / dist;
+  res.w = q.w / dist;
+  return res;
+}
+
 vec3 __attribute((pure)) cross(vec3 v1, vec3 v2) {
   vec3 res;
   res.x = v1.y * v2.z - v1.z * v2.y;

@@ -17,6 +17,8 @@ void quat_to_mat(mat3 ret, quat q);
 
 vec3 __attribute((pure)) norm(vec3 v);
 
+quat __attribute((pure)) qnorm(quat q);
+
 vec3 __attribute((pure)) cross(vec3 v1, vec3 v2);
 
 float __attribute((pure)) dot(vec3 v1, vec3 v2);

@@ -281,13 +281,14 @@ void handle_input(GLFWwindow *__restrict window) {
 
       oldMouseX = mouseX;
       oldMouseY = mouseY;
-      
+
       quat qx = gen_quat(cam.up, -xoff * SENS);
       quat qy = gen_quat(cross(*qv(&cam.orientation), cam.up), yoff * SENS);
 
       quat qr = qmul(qy, qx);
       quat qt = qmul(qmul(qr, cam.orientation), qconj(qr));
-      print_quat(qt, "qt");
+      qt = qnorm(qt);
+      //print_quat(cam.orientation, "qt");
       cam.orientation = qt;
 
       cameraUpdate = 1;
