@@ -16,6 +16,7 @@ CCFLAGS  = -ggdb3 -Og \
 					 -Wall -march=native -mtune=native -fmodulo-sched \
 					 -fstack-clash-protection \
 					 -pipe -I$(LIB_DIR)/glad \
+					 -fkeep-inline-functions \
 					 -DSUIJIN_DEBUG -D_FORTIFY_SOURCE=2
 
 LINKER   = $(CC)

@@ -59,7 +59,13 @@ void main() {
 
     vec3 _result = (ambient * diffuse + specular) * attenuation;
     FragColor = vec4(_result, 1.0f);
-  } else {
+  } else if (shading == 2) {
     FragColor = vec4(passNorm, 1.0f);
+  } else {
+    if (hasTexture != 0) {
+      FragColor = vec4(1.0f, 0.0f, 0.0f, 1.0f);
+    } else {
+      FragColor = vec4(0.0f, 0.0f, 1.0f, 1.0f);
+    }
   }
 }

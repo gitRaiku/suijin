@@ -10,26 +10,13 @@
 #include "shaders.h"
 #include "linalg.h"
 #include "izanagi.h"
+#include "nesaku.h"
 
 struct pos {
   float x;
   float y;
   float z;
   float w;
-};
-
-struct col {
-  float r;
-  float g;
-  float b;
-  float a;
-};
-#define COL_WHITE ((struct col) {1.0f, 1.0f, 1.0f, 0.2f})
-#define COL_BLACK ((struct col) {0.0f, 0.0f, 0.0f, 0.2f})
-
-struct pixel {
-  struct pos p;
-  struct col c;
 };
 
 #define GL_CHECK(call, message) if (!(call)) { fputs(message "! Aborting...\n", stderr); glfwTerminate(); exit(1); }
@@ -338,7 +325,8 @@ void handle_input(GLFWwindow *__restrict window) {
     }
     if (KEY_PRESSED(GLFW_KEY_G)) {
       if (lp0 == 0) {
-        cshading = 1 - cshading;
+        ++cshading;
+        cshading %= 3;
       }
       lp0 = 1;
     } else {
@@ -366,34 +354,6 @@ void handle_input(GLFWwindow *__restrict window) {
     }
   }
 }
-/* V V V V Vn Vn Vn Vt Vt */
-/*void quietus_add(void *__restrict buf, struct object *__restrict obj, uint32_t faceId, uint32_t elemId) {
-  memcpy(buf                                            , &obj->v.v[*(&obj->f.v[faceId].v.x + elemId)], sizeof(obj->v.v[0]));
-  memcpy(buf + sizeof(obj->v.v[0])                      , &obj->n.v[*(&obj->f.v[faceId].n.x + elemId)], sizeof(obj->n.v[0]));
-  memcpy(buf + sizeof(obj->v.v[0]) + sizeof(obj->n.v[0]), &obj->t.v[*(&obj->f.v[faceId].t.x + elemId)], sizeof(obj->t.v[0]));
-}
-
-void *__restrict quietus(struct object *__restrict obj, uint32_t *__restrict ql) {
-  size_t vs = sizeof(obj->v.v[0]);
-  size_t te = sizeof(obj->t.v[0]);
-  size_t no = sizeof(obj->n.v[0]);
-  size_t stride = vs + te + no;
-  void *__restrict buf = malloc(obj->f.l * 3 * stride);
-  int32_t i;
-  for(i = 0; i < obj->f.l; ++i) {
-    quietus_add(buf + 3 * i * stride + 0 * stride, obj, i, 0);
-    quietus_add(buf + 3 * i * stride + 1 * stride, obj, i, 1);
-    quietus_add(buf + 3 * i * stride + 2 * stride, obj, i, 2);
-  }
-  *ql = (obj->f.l * 3 * stride) / sizeof(float);
-  return buf;
-}*/
-
-void print_face(float *__restrict buf) {
-  fprintf(stdout, "    v: %f %f %f\n", buf[0], buf[1], buf[2]);
-  fprintf(stdout, "    n: %f %f %f\n", buf[3], buf[4], buf[5]);
-  fprintf(stdout, "    t: %f %f\n", buf[6], buf[7]);
-}
 
 time_t la;
 
@@ -415,9 +375,9 @@ uint8_t check_frag_update(uint32_t *__restrict program, uint32_t vert) {
   return 0;
 }
 
-uint32_t mbSize = 0;
-
 void update_mat(uint32_t program, struct material *__restrict mat) {
+  fprintf(stdout, "Using material %s\n", mat->name);
+  fprintf(stdout, "Mat tex: %u\n", mat->tamb.i);
   program_set_float3v(program, "mat.ambient", mat->ambient);
   program_set_float3v(program, "mat.diffuse", mat->diffuse);
   program_set_float3v(program, "mat.spec", mat->spec);
@@ -429,12 +389,30 @@ void update_mat(uint32_t program, struct material *__restrict mat) {
 }
 
 void draw_obj(uint32_t program, struct matv *__restrict mats, struct object *__restrict obj) {
+  if (obj->name[0] != 'M') {
+    //return;
+  }
+  fprintf(stdout, "Drawing %s: %u\n", obj->name, obj->vbo);
   uint32_t li = 0;
   struct material *__restrict cmat;
 
   cmat = &mats->v[obj->m.v[0].m];
   update_mat(program, cmat);
-  glBufferSubData(GL_ARRAY_BUFFER, 0, obj->v.l * sizeof(float), obj->v.v);
+  glBindBuffer(GL_ARRAY_BUFFER, obj->vbo);
+#define DUMP_BUF
+  
+#ifdef DUMP_BUF
+  double tempBuffer[40];
+  glGetBufferSubData(GL_ARRAY_BUFFER, 0, 40, tempBuffer);
+  fprintf(stdout, "Dumping buffer of size %u: ", obj->v.l);
+  {
+    int32_t i;
+    for(i = 0; i < 40; ++i) {
+      fprintf(stdout, "%f ", tempBuffer[i]);
+    }
+    fputc('\n', stdout);
+  }
+#endif
 
   {
     int32_t i;
@@ -448,6 +426,7 @@ void draw_obj(uint32_t program, struct matv *__restrict mats, struct object *__r
         program_set_int1(program, "hasTexture", 0);
       }
       
+      //fprintf(stdout, "Drawing from %u to %u\n", li / 8, (obj->m.v[i].i - li) / 8);
       glDrawArrays(GL_TRIANGLES, li / 8, (obj->m.v[i].i - li) / 8);
       li = obj->m.v[i].i;
 
@@ -464,6 +443,7 @@ void draw_obj(uint32_t program, struct matv *__restrict mats, struct object *__r
   } else {
     program_set_int1(program, "hasTexture", 0);
   }
+  //fprintf(stdout, "Drawing from %u to %u\n", li / 8, (obj->v.l - li) / 8);
   glDrawArrays(GL_TRIANGLES, li / 8, (obj->v.l - li) / 8);
 }
 
@@ -476,9 +456,15 @@ uint8_t run_suijin() {
 
   glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
 
-  uint32_t objl;
   struct matv mats;
-  struct object *__restrict objects = parse_object_file("Dough.obj", &objl, &mats);
+  struct objv objects;
+  matvi(&mats);
+  objvi(&objects);
+  //parse_folder(&objects, &mats, "Items/Mountain");
+  //parse_folder(&objects, &mats, "Items/Dough");
+  parse_folder(&objects, &mats, "Items/Plane");
+
+  objvt(&objects);
 
   uint32_t program;
 
@@ -507,23 +493,10 @@ uint8_t run_suijin() {
     la = s.st_ctim.tv_sec;
   }
 
-  mbSize = 0;
-  {
-    int32_t i;
-    for(i = 0; i < objl; ++i) {
-      mbSize = max(mbSize, objects[i].v.l);
-    }
-  }
-  
-  uint32_t vbo, vao;
+  uint32_t vao;
   {
     glGenVertexArrays(1, &vao);
-    glGenBuffers(1, &vbo);
-
     glBindVertexArray(vao);
-
-    glBindBuffer(GL_ARRAY_BUFFER, vbo);
-    glBufferData(GL_ARRAY_BUFFER, mbSize * sizeof(float), NULL, GL_STATIC_DRAW);
 
     glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void *) (0 * sizeof(float)));
     glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void *) (3 * sizeof(float)));
@@ -531,6 +504,8 @@ uint8_t run_suijin() {
     glEnableVertexAttribArray(0);
     glEnableVertexAttribArray(1);
     glEnableVertexAttribArray(2);
+
+    glBindVertexArray(0);
   }
 
   memset(&initCam, 0, sizeof(initCam));
@@ -543,7 +518,7 @@ uint8_t run_suijin() {
 
   initCam.up.y = 1.0f;
   initCam.fov = toRadians(90.0f);
-  initCam.pos = (vec3) { 0.0f, 8.0f, 0.0f };
+  initCam.pos = (vec3) { 5.0f, 3.0f, 2.0f };
   initCam.orientation = (quat) { 1.0f, 0.0f, 0.0f, 0.0f};
 
   memcpy(&cam, &initCam, sizeof(cam));
@@ -563,6 +538,7 @@ uint8_t run_suijin() {
     ++frame;
     _ctime = glfwGetTime();
     deltaTime = _ctime - _ltime;
+    fprintf(stdout, "Fps: %f\n", 1 / deltaTime);
 
     glClearColor(0.2f, 0.2f, 0.2f, 1.0f);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
@@ -575,6 +551,7 @@ uint8_t run_suijin() {
     }
 
     glUseProgram(program);
+    glBindVertexArray(vao);
 
     program_set_mat4(program, "fn_mat", fn);
     program_set_int1(program, "shading", cshading);
@@ -582,8 +559,8 @@ uint8_t run_suijin() {
 
     {
       int32_t i;
-      for(i = 0; i < objl; ++i) {
-        draw_obj(program, &mats, objects + i);
+      for(i = 0; i < objects.l; ++i) {
+        draw_obj(program, &mats, objects.v + i);
       }
     }
 

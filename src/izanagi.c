@@ -5,6 +5,7 @@ VECTOR_SUITE(v2, struct v2v *__restrict, v2)
 VECTOR_SUITE(mati, struct mativ *__restrict, struct mate)
 VECTOR_SUITE(float, struct floatv *__restrict, float)
 VECTOR_SUITE(mat, struct matv *__restrict, struct material)
+VECTOR_SUITE(obj, struct objv *__restrict, struct object)
 
 char _getc(struct fbuf *__restrict cb) {
   if (cb->flags & UNREADABLE_MASK) {
@@ -135,15 +136,19 @@ enum MIDS mid_tok(char *__restrict tok) {
   return MUNDEF;
 }
 
-uint8_t *__restrict read_png(char *__restrict fname, uint32_t *__restrict width, uint32_t *__restrict height) {
+uint8_t *__restrict read_png(char *__restrict fname, char *__restrict dname, uint32_t *__restrict width, uint32_t *__restrict height) {
   png_image img;
 
   memset(&img, 0, sizeof(img));
   img.version = PNG_IMAGE_VERSION;
 
-  if (png_image_begin_read_from_file(&img, fname) == 0) {
-    fprintf(stderr, "ERR1: %s\n", fname);
-    return NULL;
+  { /// TODO: Libpng openat
+    char tmpname[256];
+    snprintf(tmpname, 256, "%s/%s", dname, fname);
+    if (png_image_begin_read_from_file(&img, tmpname) == 0) {
+      fprintf(stderr, "ERR1: %s\n", fname);
+      return NULL;
+    }
   }
 
   png_bytep buf;
@@ -164,11 +169,11 @@ uint8_t *__restrict read_png(char *__restrict fname, uint32_t *__restrict width,
   return buf;
 }
 
-void get_texture(char *__restrict fname, struct texture *__restrict tex) {
+void get_texture(char *__restrict fname, char *__restrict dname, struct texture *__restrict tex) {
   glGenTextures(1, &tex->i);
 
   fprintf(stdout, "Ambient texture: [%s]\n", fname);
-  uint8_t *buf = read_png(fname, &tex->w, &tex->h);
+  uint8_t *buf = read_png(fname, dname, &tex->w, &tex->h);
 
   glBindTexture(GL_TEXTURE_2D, tex->i);
   glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, tex->w, tex->h, 0, GL_RGB, GL_UNSIGNED_BYTE, buf);
@@ -182,12 +187,10 @@ void get_texture(char *__restrict fname, struct texture *__restrict tex) {
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
 }
 
-void parse_material(struct matv *__restrict mats, char *__restrict fname) {
+void parse_material(struct matv *__restrict mats, uint32_t dfd, char *__restrict fname, char *__restrict dname) {
   struct material cmat = {0};
   memset(&cmat, 0, sizeof(cmat));
 
-  matvi(mats);
-  
   struct fbuf cb;
   memset(&cb, 0, sizeof(cb));
   char tok[128] = {0};
@@ -196,7 +199,7 @@ void parse_material(struct matv *__restrict mats, char *__restrict fname) {
   v3 om;
 
   cb.bufp = cb.bufl = 0;
-  cb.fd = open(fname, O_RDONLY);
+  cb.fd = openat(dfd, fname, O_RDONLY);
   if (cb.fd == -1) {
     fprintf(stderr, "Could not open '%s': %m\n", fname);
     exit(1);
@@ -266,7 +269,7 @@ void parse_material(struct matv *__restrict mats, char *__restrict fname) {
         break;
       case TAMB:
         next_token(tok, &cb);
-        get_texture(tok, &cmat.tamb);
+        get_texture(tok, dname, &cmat.tamb);
         break;
       default:
         fprintf(stderr, "Undefined token at %s:%u [%s]\n", fname, line_number, tok);
@@ -303,6 +306,7 @@ void facevt(struct facev *__restrict v) {
 }
 
 void init_object(struct object *__restrict o) {
+  memset(o, 0, sizeof(struct object));
   o->name[0] = '\0';
   floatvi(&o->v);
   mativi(&o->m);
@@ -432,31 +436,25 @@ uint32_t gmi(struct matv *__restrict materials, char *__restrict matn) {
   return 0;
 }
 
-struct object *__restrict parse_object_file(char *__restrict fname, uint32_t *__restrict objl, struct matv *__restrict materials) {
-  struct object *__restrict objs = NULL;
+void parse_object_file(struct objv *__restrict objs, struct matv *__restrict materials, uint32_t fd, uint32_t dfd, char *__restrict fname, char *__restrict dname) {
   struct fbuf cb;
   struct v3v verts;
   struct v3v norms;
   struct v2v texts;
+  struct object cobj;
   v3vi(&verts);
   v3vi(&norms);
   v2vi(&texts);
 
   memset(&cb, 0, sizeof(cb));
+  memset(&cobj, 0, sizeof(cobj));
   
   cb.bufp = cb.bufl = 0;
-  cb.fd = open(fname, O_RDONLY);
-  if (cb.fd == -1) {
-    fprintf(stderr, "Could not open '%s': %m\n", fname);
-    exit(1);
-  }
-
-  *objl = 0;
+  cb.fd = fd;
 
   char tok[128] = {0};
   enum IDS id;
   union OBJ_MEMBERS om;
-  uint32_t cobj = -1;
   uint32_t line_number = 0;
   while ((cb.flags & UNREADABLE_MASK) == 0) {
     ++line_number;
@@ -465,6 +463,7 @@ struct object *__restrict parse_object_file(char *__restrict fname, uint32_t *__
     if (cb.flags & UNREADABLE_MASK) {
       break;
     }
+    
     // fprintf(stdout, "CLine: %u, tok: %s\n", line_number, tok);
     id = id_tok(tok);
     //id_to_str(id);
@@ -493,29 +492,31 @@ struct object *__restrict parse_object_file(char *__restrict fname, uint32_t *__
             om.v3.x = read_float(&cb) - 1;
             om.v3.y = read_float(&cb) - 1;
             om.v3.z = read_float(&cb) - 1;
-            add_i_dont_even_know(&om.v3, &objs[cobj].v, &verts, &norms, &texts);
+            add_i_dont_even_know(&om.v3, &cobj.v, &verts, &norms, &texts);
           }
         }
         break;
       case MATERIAL_LIB:
         next_token(tok, &cb);
         fprintf(stdout, "Material lib: %s\n", tok);
-        parse_material(materials, tok);
+        parse_material(materials, dfd, tok, dname);
         break;
       case USE_MATERIAL:
         next_token(tok, &cb);
-        mativp(&objs[cobj].m, (struct mate) { gmi(materials, tok), objs[cobj].v.l });
+        mativp(&cobj.m, (struct mate) { gmi(materials, tok), cobj.v.l });
         break;
       case OBJECT:
-        if (cobj != -1) {
-          floatvt(&objs[cobj].v);
+        if (cobj.name[0] != '\0') {
+          glGenBuffers(1, &cobj.vbo);
+          glBindBuffer(GL_ARRAY_BUFFER, cobj.vbo);
+          glBufferData(GL_ARRAY_BUFFER, cobj.v.l * sizeof(float), cobj.v.v, GL_STATIC_DRAW);
+          mativt(&cobj.m);
+          free(cobj.v.v);
+          objvp(objs, cobj);
         }
-        objs = realloc(objs, sizeof(struct object) * (*objl + 1));
-        init_object(objs + *objl);
-        cobj = *objl;
-        ++*objl;
+        init_object(&cobj);
         next_token(tok, &cb);
-        strncpy(objs[cobj].name, tok, 64);
+        strncpy(cobj.name, tok, 64);
         break;
       case GROUP:
         next_token(tok, &cb);
@@ -536,13 +537,46 @@ struct object *__restrict parse_object_file(char *__restrict fname, uint32_t *__
     }
   }
   
+  glGenBuffers(1, &cobj.vbo);
+  glBindBuffer(GL_ARRAY_BUFFER, cobj.vbo);
+  glBufferData(GL_ARRAY_BUFFER, cobj.v.l * sizeof(float), cobj.v.v, GL_STATIC_DRAW);
+  glBindBuffer(GL_ARRAY_BUFFER, 0);
+  mativt(&cobj.m);
+  free(cobj.v.v);
+  objvp(objs, cobj);
+
   free(verts.v);
   free(norms.v);
   free(texts.v);
-  floatvt(&objs[cobj].v);
   matvt(materials);
+  objvt(objs);
 
   close(cb.fd);
-
-  return objs;
 }
+
+void parse_folder(struct objv *__restrict objs, struct matv *__restrict mats, char *__restrict dname) {
+  DIR *d = opendir(dname);
+  if (d == NULL) {
+    fprintf(stderr, "Could not open directory %s! %m\n", dname);
+    exit(1);
+  }
+
+  struct dirent *__restrict di;
+  char *r;
+  uint32_t fd, dfd;
+  while ((di = readdir(d)) != NULL) {
+    r = strstr(di->d_name, ".obj");
+    if (r != NULL) {
+      fprintf(stdout, "Got file %s/%s!\n", dname, di->d_name);
+      dfd = dirfd(d);
+      fd = openat(dfd, di->d_name, O_RDONLY);
+      parse_object_file(objs, mats, fd, dfd, di->d_name, dname); /// TODO: libpng openat
+      closedir(d);
+      return;
+    }
+  }
+
+  fprintf(stderr, "Couldn't find any .obj in %s!\n", dname);
+  closedir(d);
+}
+

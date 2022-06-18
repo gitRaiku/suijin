@@ -11,6 +11,7 @@
 #include <unistd.h>
 #include <string.h>
 #include <png.h>
+#include <dirent.h>
 
 #include "defs.h"
 #include "linalg.h"
@@ -97,18 +98,9 @@ struct matv {
   uint32_t s;
 };
 
-DEF_VECTOR_SUITE(mat, struct matv *__restrict, struct material)
-
 #define LINEND_MASK   0b010 /// Read a line end
 #define UNREADABLE_MASK   0b100 /// There are still bytes left in the file
 
-char _getc(struct fbuf *__restrict cb);
-
-float read_float(struct fbuf *__restrict cb);
-
-void next_token(char *__restrict tok, struct fbuf *__restrict cb);
-
-void parse_material(struct matv *__restrict mats, char *__restrict fname);
 
 struct v4v {
   v4 *__restrict v;
@@ -160,10 +152,20 @@ struct mativ {
 struct object {
   struct floatv v;
   struct mativ m;
+  uint32_t vbo;
   char name[64];
 };
 
-struct object *__restrict parse_object_file(char *__restrict fname, uint32_t *__restrict objl, struct matv *__restrict materials);
+struct objv {
+  struct object *__restrict v;
+  uint32_t l;
+  uint32_t s;
+};
+
+DEF_VECTOR_SUITE(mat, struct matv *__restrict, struct material)
+DEF_VECTOR_SUITE(obj, struct objv *__restrict, struct object)
+
+void parse_folder(struct objv *__restrict objs, struct matv *__restrict materials, char *__restrict fname);
 
 void destroy_object(struct object *__restrict obj);
 
