@@ -152,6 +152,7 @@ struct mativ {
 struct object {
   struct floatv v;
   struct mativ m;
+  uint32_t vao;
   uint32_t vbo;
   char name[64];
 };

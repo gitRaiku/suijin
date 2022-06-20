@@ -436,6 +436,22 @@ uint32_t gmi(struct matv *__restrict materials, char *__restrict matn) {
   return 0;
 }
 
+void create_vao(float *__restrict v, uint32_t s, uint32_t *__restrict vbo, uint32_t *__restrict vao) {
+  glGenVertexArrays(1, vao);
+  glGenBuffers(1, vbo);
+
+  glBindVertexArray(*vao);
+  glBindBuffer(GL_ARRAY_BUFFER, *vbo);
+  glBufferData(GL_ARRAY_BUFFER, s * sizeof(float), v, GL_STATIC_DRAW);
+
+  glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void *) (0 * sizeof(float)));
+  glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void *) (3 * sizeof(float)));
+  glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void *) (6 * sizeof(float)));
+  glEnableVertexAttribArray(0);
+  glEnableVertexAttribArray(1);
+  glEnableVertexAttribArray(2);
+}
+
 void parse_object_file(struct objv *__restrict objs, struct matv *__restrict materials, uint32_t fd, uint32_t dfd, char *__restrict fname, char *__restrict dname) {
   struct fbuf cb;
   struct v3v verts;
@@ -507,9 +523,8 @@ void parse_object_file(struct objv *__restrict objs, struct matv *__restrict mat
         break;
       case OBJECT:
         if (cobj.name[0] != '\0') {
-          glGenBuffers(1, &cobj.vbo);
-          glBindBuffer(GL_ARRAY_BUFFER, cobj.vbo);
-          glBufferData(GL_ARRAY_BUFFER, cobj.v.l * sizeof(float), cobj.v.v, GL_STATIC_DRAW);
+          create_vao(cobj.v.v, cobj.v.l, &cobj.vbo, &cobj.vao);
+
           mativt(&cobj.m);
           free(cobj.v.v);
           objvp(objs, cobj);
@@ -537,10 +552,7 @@ void parse_object_file(struct objv *__restrict objs, struct matv *__restrict mat
     }
   }
   
-  glGenBuffers(1, &cobj.vbo);
-  glBindBuffer(GL_ARRAY_BUFFER, cobj.vbo);
-  glBufferData(GL_ARRAY_BUFFER, cobj.v.l * sizeof(float), cobj.v.v, GL_STATIC_DRAW);
-  glBindBuffer(GL_ARRAY_BUFFER, 0);
+  create_vao(cobj.v.v, cobj.v.l, &cobj.vbo, &cobj.vao);
   mativt(&cobj.m);
   free(cobj.v.v);
   objvp(objs, cobj);

@@ -389,20 +389,19 @@ void update_mat(uint32_t program, struct material *__restrict mat) {
 }
 
 void draw_obj(uint32_t program, struct matv *__restrict mats, struct object *__restrict obj) {
-  if (obj->name[0] != 'M') {
-    //return;
-  }
-  fprintf(stdout, "Drawing %s: %u\n", obj->name, obj->vbo);
+  fprintf(stdout, "Drawing %s: %u\n", obj->name, obj->vao);
   uint32_t li = 0;
   struct material *__restrict cmat;
 
+  glBindVertexArray(obj->vao);
+
   cmat = &mats->v[obj->m.v[0].m];
   update_mat(program, cmat);
-  glBindBuffer(GL_ARRAY_BUFFER, obj->vbo);
 #define DUMP_BUF
   
 #ifdef DUMP_BUF
   double tempBuffer[40];
+  memset(tempBuffer, 0, sizeof(tempBuffer));
   glGetBufferSubData(GL_ARRAY_BUFFER, 0, 40, tempBuffer);
   fprintf(stdout, "Dumping buffer of size %u: ", obj->v.l);
   {
@@ -443,7 +442,7 @@ void draw_obj(uint32_t program, struct matv *__restrict mats, struct object *__r
   } else {
     program_set_int1(program, "hasTexture", 0);
   }
-  //fprintf(stdout, "Drawing from %u to %u\n", li / 8, (obj->v.l - li) / 8);
+  fprintf(stdout, "Drawing from %u to %u\n", li / 8, (obj->v.l - li) / 8);
   glDrawArrays(GL_TRIANGLES, li / 8, (obj->v.l - li) / 8);
 }
 
@@ -460,9 +459,9 @@ uint8_t run_suijin() {
   struct objv objects;
   matvi(&mats);
   objvi(&objects);
-  //parse_folder(&objects, &mats, "Items/Mountain");
-  //parse_folder(&objects, &mats, "Items/Dough");
-  parse_folder(&objects, &mats, "Items/Plane");
+  parse_folder(&objects, &mats, "Items/Mountain");
+  parse_folder(&objects, &mats, "Items/Dough");
+  //parse_folder(&objects, &mats, "Items/Plane");
 
   objvt(&objects);
 
@@ -491,21 +490,6 @@ uint8_t run_suijin() {
     struct stat s;
     stat("shaders/frag.glsl", &s);
     la = s.st_ctim.tv_sec;
-  }
-
-  uint32_t vao;
-  {
-    glGenVertexArrays(1, &vao);
-    glBindVertexArray(vao);
-
-    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void *) (0 * sizeof(float)));
-    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void *) (3 * sizeof(float)));
-    glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void *) (6 * sizeof(float)));
-    glEnableVertexAttribArray(0);
-    glEnableVertexAttribArray(1);
-    glEnableVertexAttribArray(2);
-
-    glBindVertexArray(0);
   }
 
   memset(&initCam, 0, sizeof(initCam));
@@ -551,7 +535,6 @@ uint8_t run_suijin() {
     }
 
     glUseProgram(program);
-    glBindVertexArray(vao);
 
     program_set_mat4(program, "fn_mat", fn);
     program_set_int1(program, "shading", cshading);
