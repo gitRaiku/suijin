@@ -27,7 +27,7 @@ uniform int hasTexture;
 const float atten_const = 1.0f;
 const float atten_linear = 0.012f;
 const float atten_quad = 0.00032f;
-const vec3 base_light = vec3(0.001f);
+const vec3 base_light = vec3(0.0f);
 const vec3 lpos = vec3(10.0f);
 
 void main() {
@@ -49,7 +49,7 @@ void main() {
     vec3 nVec = normalize(passNorm);
     vec3 dir = normalize(lpos - passPos);
 
-    float diff = max(dot(nVec, dir), 0.0f);
+    float diff = clamp(max(dot(nVec, dir), 0.0f) + 0.1f, 0.0f, 1.0f);
     vec3 diffuse = mat.diffuse * diff;
 
     vec3 viewDir = normalize(camPos - passPos);

@@ -5,28 +5,36 @@
 #include <stdint.h>
 #include <stdlib.h>
 #include <math.h>
+#include <string.h>
+#include <glad/glad.h>
 
 #include "defs.h"
+#include "izanagi.h"
 
 #define G(v, x, y, w) ((v)[(x) + (y) * (w)])
 
-struct ucol {
-  uint8_t r;
-  uint8_t g;
-  uint8_t b;
+struct fcol {
+  float r;
+  float g;
+  float b;
 };
 
 struct i2d {
+  struct fcol *__restrict v;
   uint32_t h;
   uint32_t w;
-  struct ucol *__restrict v;
+  uint64_t padding;
 };
 
 struct i3d {
   uint32_t h;
   uint32_t w;
   uint32_t d;
-  struct ucol *__restrict v;
+  struct fcol *__restrict v;
 };
+
+void update_texture(struct i2d *__restrict im, struct texture *__restrict tex);
+
+struct i2d *__restrict noise_w2d(uint32_t h, uint32_t w, float scale);
 
 #endif

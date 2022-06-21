@@ -173,7 +173,7 @@ void get_texture(char *__restrict fname, char *__restrict dname, struct texture 
   glGenTextures(1, &tex->i);
 
   fprintf(stdout, "Ambient texture: [%s]\n", fname);
-  uint8_t *buf = read_png(fname, dname, &tex->w, &tex->h);
+  uint8_t *buf = read_png(fname, dname, &tex->w, &tex->h); /// TODO: Unsigned byte doesn't work?????????????????????????
 
   glBindTexture(GL_TEXTURE_2D, tex->i);
   glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, tex->w, tex->h, 0, GL_RGB, GL_UNSIGNED_BYTE, buf);
@@ -183,8 +183,10 @@ void get_texture(char *__restrict fname, char *__restrict dname, struct texture 
 
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST_MIPMAP_NEAREST);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+  ////glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+  //glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
 }
 
 void parse_material(struct matv *__restrict mats, uint32_t dfd, char *__restrict fname, char *__restrict dname) {
@@ -523,7 +525,7 @@ void parse_object_file(struct objv *__restrict objs, struct matv *__restrict mat
         break;
       case MATERIAL_LIB:
         next_token(tok, &cb);
-        fprintf(stdout, "Material lib: %s\n", tok);
+        // fprintf(stdout, "Material lib: %s\n", tok);
         parse_material(materials, dfd, tok, dname);
         break;
       case USE_MATERIAL:
@@ -569,8 +571,6 @@ void parse_object_file(struct objv *__restrict objs, struct matv *__restrict mat
   free(verts.v);
   free(norms.v);
   free(texts.v);
-  matvt(materials);
-  objvt(objs);
 }
 
 struct minfo {
@@ -579,7 +579,6 @@ struct minfo {
 };
 
 enum MINFIDS { MINFCOMMENT, MINFSCALE, MINFPOS, MINFUNDEF };
-
 enum MINFIDS minfid_tok(char *__restrict tok) {
   switch (tok[0]) {
     case 's':
@@ -588,11 +587,11 @@ enum MINFIDS minfid_tok(char *__restrict tok) {
       return MINFPOS;
     case '\n':
     case '#':
-      return OCOMMENT;
+      return MINFCOMMENT;
     default:
-      return OUNDEF;
+      return MINFUNDEF;
   }
-  return OUNDEF;
+  return MINFUNDEF;
 }
 
 void parse_minfo_obj(struct minfo *__restrict cm, uint32_t fd, char *__restrict fname) {
@@ -656,12 +655,12 @@ void parse_folder(struct objv *__restrict objs, struct matv *__restrict mats, ch
   struct minfo cm = {0};
   while ((di = readdir(d)) != NULL) {
     if (strstr(di->d_name, ".obj")) {
-      fprintf(stdout, "Got object %s/%s!\n", dname, di->d_name);
+      // fprintf(stdout, "Got object %s/%s!\n", dname, di->d_name);
       fd = openat(dfd, di->d_name, O_RDONLY);
       parse_object_file(objs, mats, fd, dfd, di->d_name, dname); /// TODO: libpng openat
       close(fd);
     } else if (strstr(di->d_name, ".minfo")) {
-      fprintf(stdout, "Got minfo %s/%s!\n", dname, di->d_name);
+      // fprintf(stdout, "Got minfo %s/%s!\n", dname, di->d_name);
       fd = openat(dfd, di->d_name, O_RDONLY);
       parse_minfo_obj(&cm, fd, di->d_name);
       close(fd);

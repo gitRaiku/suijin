@@ -33,21 +33,36 @@ float wgd(uint32_t x, uint32_t y, uint32_t w, v2 *__restrict pts, uint32_t udx, 
   return sqrtf(m);
 }
 
-struct ucol f2c(float v) {
-  struct ucol res;
-  res.r = v * 255;
-  res.g = v * 255;
-  res.b = v * 255;
+struct fcol f2c(float v) {
+  struct fcol res;
+  res.r = v;
+  res.g = v;
+  res.b = v;
 
   return res;
+}
+
+void update_texture(struct i2d *__restrict im, struct texture *__restrict tex) {
+  tex->w = im->w;
+  tex->h = im->h;
+
+  glBindTexture(GL_TEXTURE_2D, tex->i);
+  glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, tex->w, tex->h, 0, GL_RGB, GL_FLOAT, im->v);
+  glGenerateMipmap(GL_TEXTURE_2D);
+
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST_MIPMAP_NEAREST);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
 }
 
 #define GI(px, py) G(pts, (px), (py), udy + 2).x = 1000000.0f; G(pts, (px), (py), udy + 2).y = 1000000.0f
 struct i2d *__restrict noise_w2d(uint32_t h, uint32_t w, float scale) {
   struct i2d *__restrict im = malloc(sizeof(struct i2d));
+
   im->h = h;
   im->w = w;
-  im->v = malloc(sizeof(im->v[0]) * h * w);
+  im->v = calloc(sizeof(im->v[0]), h * w);
 
   float dx = w / scale;
   float dy = h / scale;
