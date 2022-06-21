@@ -342,14 +342,14 @@ void handle_input(GLFWwindow *__restrict window) {
           cameraUpdate = 1;
           break;
         case ITEMS:
-          //fprintf(stdout, "% 3.3f % 3.3f\r", startY - mouseY, yoff);
           if (vals[curi] == NULL) {
             break;
           }
-          *vals[curi] += yoff * scal[curi];
+          *vals[curi] += -yoff * scal[curi];
           if (lims[curi].x != lims[curi].y) {
             *vals[curi] = clamp(*vals[curi], lims[curi].x, lims[curi].y);
           }
+          //fprintf(stdout, "%s -> %f\n", nms[curi], *vals[curi]);
           switch (curi) {
             case 1:
               fprintf(stdout, "Curscale: % 3.3f\r", objects.v[0].scale);
@@ -641,15 +641,19 @@ uint8_t run_suijin() {
   oldMouseY = 0.0;
 
   uint32_t frame = 0;
-  struct i2d *__restrict im;
+  struct i2d im;
+  uint32_t NH = 300;
+  uint32_t NW = 300;
+  im.v = calloc(sizeof(im.v[0]), NH * NW); 
 
-  float sc = 1.0f;
+  float sc = 150.0f;
 
   scal[0] = 0.1f;
   scal[1] = 0.1f;
   vals[0] = &sc;
   vals[1] = &objects.v[0].scale;
-  lims[0].x = lims[0].y = 0.0f;
+  lims[0].x = 0.5f;
+  lims[0].y = 100000.0f;
   lims[1].x = 0.0f;
   lims[1].y = 1000000000.0f;
 
@@ -662,10 +666,8 @@ uint8_t run_suijin() {
     glClearColor(0.2f, 0.2f, 0.2f, 1.0f);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-    im = noise_w2d(10, 10, sc);
-    update_texture(im, &mats.v[0].tamb);
-    free(im->v);
-    free(im);
+    noise_w2d(NH, NW, sc, &im);
+    update_texture(&im, &mats.v[0].tamb);
 
     handle_input(window);
 

@@ -35,6 +35,6 @@ struct i3d {
 
 void update_texture(struct i2d *__restrict im, struct texture *__restrict tex);
 
-struct i2d *__restrict noise_w2d(uint32_t h, uint32_t w, float scale);
+void noise_w2d(uint32_t h, uint32_t w, float scale, struct i2d *__restrict im);
 
 #endif

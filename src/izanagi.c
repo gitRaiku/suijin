@@ -172,7 +172,7 @@ uint8_t *__restrict read_png(char *__restrict fname, char *__restrict dname, uin
 void get_texture(char *__restrict fname, char *__restrict dname, struct texture *__restrict tex) {
   glGenTextures(1, &tex->i);
 
-  fprintf(stdout, "Ambient texture: [%s]\n", fname);
+  //fprintf(stdout, "Ambient texture: [%s]\n", fname);
   uint8_t *buf = read_png(fname, dname, &tex->w, &tex->h); /// TODO: Unsigned byte doesn't work?????????????????????????
 
   glBindTexture(GL_TEXTURE_2D, tex->i);

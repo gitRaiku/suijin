@@ -56,54 +56,95 @@ void update_texture(struct i2d *__restrict im, struct texture *__restrict tex) {
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
 }
 
+float dist2(float x, float y, v2 v) {
+  return P2(v.x - x) + P2(v.y - y);
+}
+
+struct fcol gnear(uint32_t x, uint32_t y, float scale, v2 *__restrict pts, uint32_t udx, uint32_t udy) {
+  float sx = x / scale;
+  float sy = y / scale;
+  uint32_t ux = (uint32_t) sx;
+  uint32_t uy = (uint32_t) sy;
+  float md = 100000.0f;
+  if (ux != 0) {
+    if (uy != 0) {
+      md = min(md, dist2(sx, sy, G(pts, ux - 1, uy - 1, udx)));
+    }
+
+      md = min(md, dist2(sx, sy, G(pts, ux - 1, uy    , udx)));
+
+    if (uy != udy) {
+      md = min(md, dist2(sx, sy, G(pts, ux - 1, uy + 1, udx)));
+    }
+  }
+  if (uy != 0) {
+      md = min(md, dist2(sx, sy, G(pts, ux    , uy - 1, udx)));
+  }
+
+      md = min(md, dist2(sx, sy, G(pts, ux    , uy    , udx)));
+
+  if (uy != udy) {
+      md = min(md, dist2(sx, sy, G(pts, ux    , uy + 1, udx)));
+  }
+  if (ux != udx) {
+    if (uy != 0) {
+      md = min(md, dist2(sx, sy, G(pts, ux + 1, uy - 1, udx)));
+    }
+
+      md = min(md, dist2(sx, sy, G(pts, ux + 1, uy    , udx)));
+
+    if (uy != udy) {
+      md = min(md, dist2(sx, sy, G(pts, ux + 1, uy + 1, udx)));
+    }
+  }
+  return f2c(sqrtf(md));
+}
+
 #define GI(px, py) G(pts, (px), (py), udy + 2).x = 1000000.0f; G(pts, (px), (py), udy + 2).y = 1000000.0f
-struct i2d *__restrict noise_w2d(uint32_t h, uint32_t w, float scale) {
-  struct i2d *__restrict im = malloc(sizeof(struct i2d));
+void noise_w2d(uint32_t h, uint32_t w, float scale, struct i2d *__restrict im) {
+  static float ps = 0.0f;
+  if (ps == scale) {
+    fprintf(stdout, "SKIP UPDATE\r");
+    return;
+  }
+  fprintf(stdout, "NOSK UPDATE\r");
+  ps = scale;
+  if (im == NULL) {
+    im = malloc(sizeof(struct i2d));
+  }
 
   im->h = h;
   im->w = w;
-  im->v = calloc(sizeof(im->v[0]), h * w);
+  if (im->v == NULL) {
+    im->v = calloc(sizeof(im->v[0]), h * w);
+  }
 
   float dx = w / scale;
   float dy = h / scale;
   uint32_t udx = (uint32_t)dx;
   uint32_t udy = (uint32_t)dy;
+  //fprintf(stdout, "Got dx and dy: %3u %3u\r", udx, udy);
 
-  v2 *__restrict pts = malloc(sizeof(v2) * (udx + 2) * (udy + 2));
-  GI(0      , 0      );
-  GI(udx + 1, 0      );
-  GI(0      , udy + 1);
-  GI(udx + 1, udy + 1);
-
+  v2 *__restrict pts = calloc(sizeof(v2), udx * udy);
+  
   {
-    uint32_t i, j;
-    for (i = 0; i < udx; ++i) {
-      GI(i + 1, 0      );
-      GI(i + 1, udy + 1);
-    }
-
-    for (i = 0; i < udy; ++i) {
-      GI(0      , i + 1);
-      GI(udx + 1, i + 1);
-    }
-
+    int32_t i, j;
     for (i = 0; i < udx; ++i) {
       for (j = 0; j < udy; ++j) {
-        G(pts, i + 1, j + 1, udy + 2).x = ((float)i + rf()) * scale;
-        G(pts, i + 1, j + 1, udy + 2).y = ((float)j + rf()) * scale;
+        G(pts, i, j, udx).x = i * scale + rf();
+        G(pts, i, j, udx).y = j * scale + rf();
       }
     }
 
-    for (i = 0; i < w; ++i) {
-      for (j = 0; j < h; ++j) {
-        G(im->v, i, j, w) = f2c(wgd(i, j, w, pts, udx, udy, scale));
+    for (i = 0; i < h; ++i) {
+      for (j = 0; j < w; ++j) {
+        G(im->v, i, j, w) = gnear(i, j, scale, pts, udx, udy);
       }
     }
   }
 
+
   free(pts);
-  
-  return im;
 }
 
 struct i2d *__restrict noise_p2d(uint32_t octave, uint32_t freq, uint32_t scale, uint32_t h, uint32_t w) {
