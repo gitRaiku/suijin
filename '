@@ -578,35 +578,18 @@ struct minfo {
   float scale;
 };
 
-enum MINFIDS { MINFCOMMENT, MINFSCALE, MINFPOS, MINFUNDEF };
-
-enum MINFIDS minfid_tok(char *__restrict tok) {
-  switch (tok[0]) {
-    case 's':
-      return MINFSCALE;
-    case 'p':
-      return MINFPOS;
-    case '\n':
-    case '#':
-      return OCOMMENT;
-    default:
-      return OUNDEF;
-  }
-  return OUNDEF;
-}
-
-void parse_minfo_obj(struct minfo *__restrict cm, uint32_t fd, char *__restrict fname) {
+void parse_minfo_obj(&struct minfo cm, uint32_t fd) {
   struct fbuf cb;
-  uint32_t line_number = 0;
-  char tok[128] = {0};
-  enum MINFIDS id;
+  uint32_t line_number;
 
   memset(&cb, 0, sizeof(cb));
-  memset(cm, 0, sizeof(*cm));
-
   cb.bufp = cb.bufl = 0;
   cb.fd = fd;
 
+  char tok[128] = {0};
+  enum MINIDS id;
+  union OBJ_MEMBERS om;
+  uint32_t line_number = 0;
   while ((cb.flags & UNREADABLE_MASK) == 0) {
     ++line_number;
     cb.flags &= ~LINEND_MASK;
@@ -615,17 +598,68 @@ void parse_minfo_obj(struct minfo *__restrict cm, uint32_t fd, char *__restrict 
       break;
     }
     
-    id = minfid_tok(tok);
+    // fprintf(stdout, "CLine: %u, tok: %s\n", line_number, tok);
+    id = id_tok(tok);
+    //id_to_str(id);
     switch (id) {
-      case MINFSCALE:
-        cm->scale = read_float(&cb);
+      case VERTEX:
+        om.v3.x = read_float(&cb);
+        om.v3.y = read_float(&cb);
+        om.v3.z = read_float(&cb);
+        v3vp(&verts, om.v3);
         break;
-      case MINFPOS:
-        cm->pos.x = read_float(&cb);
-        cm->pos.y = read_float(&cb);
-        cm->pos.z = read_float(&cb);
+      case TEXTURE_COORDS:
+        om.v2.x = read_float(&cb);
+        om.v2.y = read_float(&cb);
+        v2vp(&texts, om.v2);
         break;
-      case MINFCOMMENT:
+      case VERTEX_NORMAL:
+        om.v3.x = read_float(&cb);
+        om.v3.y = read_float(&cb);
+        om.v3.z = read_float(&cb);
+        v3vp(&norms, om.v3);
+        break;
+      case FACE:
+        {
+          int32_t i;
+          for(i = 0; i < 3; ++i) {
+            om.v3.x = read_float(&cb) - 1;
+            om.v3.y = read_float(&cb) - 1;
+            om.v3.z = read_float(&cb) - 1;
+            add_i_dont_even_know(&om.v3, &cobj.v, &verts, &norms, &texts);
+          }
+        }
+        break;
+      case MATERIAL_LIB:
+        next_token(tok, &cb);
+        fprintf(stdout, "Material lib: %s\n", tok);
+        parse_material(materials, dfd, tok, dname);
+        break;
+      case USE_MATERIAL:
+        next_token(tok, &cb);
+        mativp(&cobj.m, (struct mate) { gmi(materials, tok), cobj.v.l });
+        break;
+      case OBJECT:
+        if (cobj.name[0] != '\0') {
+          create_vao(cobj.v.v, cobj.v.l, &cobj.vbo, &cobj.vao);
+
+          mativt(&cobj.m);
+          free(cobj.v.v);
+          objvp(objs, cobj);
+        }
+        init_object(&cobj);
+        next_token(tok, &cb);
+        strncpy(cobj.name, tok, 64);
+        break;
+      case GROUP:
+        next_token(tok, &cb);
+        /// GROUP
+        break;
+      case SMOOTH_SHADING:
+        next_token(tok, &cb);
+        /// Smooth Shading
+        break;
+      case OCOMMENT:
         while ((cb.flags & LINEND_MASK) == 0) {
           next_token(tok, &cb);
         }
@@ -635,12 +669,17 @@ void parse_minfo_obj(struct minfo *__restrict cm, uint32_t fd, char *__restrict 
         break;
     }
   }
-}
+  
+  create_vao(cobj.v.v, cobj.v.l, &cobj.vbo, &cobj.vao);
+  mativt(&cobj.m);
+  free(cobj.v.v);
+  objvp(objs, cobj);
 
-void apply_minfo(struct object *__restrict o, struct minfo *__restrict cm) {
-  o->scale = cm->scale;
-  o->pos = cm->pos;
-  update_affine_matrix(o);
+  free(verts.v);
+  free(norms.v);
+  free(texts.v);
+  matvt(materials);
+  objvt(objs);
 }
 
 void parse_folder(struct objv *__restrict objs, struct matv *__restrict mats, char *__restrict dname) {
@@ -651,29 +690,27 @@ void parse_folder(struct objv *__restrict objs, struct matv *__restrict mats, ch
   }
 
   struct dirent *__restrict di;
+  char *r;
   uint32_t fd, dfd;
-  dfd = dirfd(d);
-  struct minfo cm = {0};
+  struct minfo cm;
   while ((di = readdir(d)) != NULL) {
     if (strstr(di->d_name, ".obj")) {
-      fprintf(stdout, "Got object %s/%s!\n", dname, di->d_name);
+      fprintf(stdout, "Got file %s/%s!\n", dname, di->d_name);
+      dfd = dirfd(d);
       fd = openat(dfd, di->d_name, O_RDONLY);
       parse_object_file(objs, mats, fd, dfd, di->d_name, dname); /// TODO: libpng openat
       close(fd);
+      closedir(d);
+      return;
     } else if (strstr(di->d_name, ".minfo")) {
-      fprintf(stdout, "Got minfo %s/%s!\n", dname, di->d_name);
       fd = openat(dfd, di->d_name, O_RDONLY);
-      parse_minfo_obj(&cm, fd, di->d_name);
+      parse_minfo_obj(&cm, fd);
       close(fd);
     }
   }
 
-  if (cm.scale != 0.0f) {
-    apply_minfo(objs->v + objs->l - 1, &cm);
-  }
+  apply_minfo(objs->v + objs->l - 1, &cm);
 
-  if (objs->v[objs->l - 1].name[0] == '\0') {
-    fprintf(stderr, "Couldn't find any .obj in %s!\n", dname);
-  }
+  fprintf(stderr, "Couldn't find any .obj in %s!\n", dname);
   closedir(d);
 }

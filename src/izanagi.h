@@ -152,8 +152,15 @@ struct mativ {
 struct object {
   struct floatv v;
   struct mativ m;
+
   uint32_t vao;
   uint32_t vbo;
+
+  float scale;
+  v3 pos;
+
+  mat4 aff;
+
   char name[64];
 };
 
@@ -169,5 +176,7 @@ DEF_VECTOR_SUITE(obj, struct objv *__restrict, struct object)
 void parse_folder(struct objv *__restrict objs, struct matv *__restrict materials, char *__restrict fname);
 
 void destroy_object(struct object *__restrict obj);
+
+void update_affine_matrix(struct object *__restrict obj);
 
 #endif
