@@ -5,7 +5,7 @@
 #include <math.h>
 #include <string.h>
 
-#include "defs.h"
+#include "util.h"
 
 quat __attribute((pure)) gen_quat(vec3 axis, float rot);
 

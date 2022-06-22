@@ -8,10 +8,12 @@
 #include <string.h>
 #include <glad/glad.h>
 
-#include "defs.h"
+#include "util.h"
 #include "izanagi.h"
 
 #define G(v, x, y, w) ((v)[(x) + (y) * (w)])
+
+extern float pscale;
 
 struct fcol {
   float r;

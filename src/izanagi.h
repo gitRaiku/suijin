@@ -1,8 +1,6 @@
 #ifndef IZANAGI_H
 #define IZANAGI_H
 
-#include "defs.h"
-
 #include <glad/glad.h>
 #include <stdio.h>
 #include <stdint.h>
@@ -13,7 +11,7 @@
 #include <png.h>
 #include <dirent.h>
 
-#include "defs.h"
+#include "util.h"
 #include "linalg.h"
 
 #define VECTOR_PUSH(name, btype, stype)               \

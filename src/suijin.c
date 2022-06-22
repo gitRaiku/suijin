@@ -12,13 +12,6 @@
 #include "izanagi.h"
 #include "nesaku.h"
 
-struct pos {
-  float x;
-  float y;
-  float z;
-  float w;
-};
-
 #define GL_CHECK(call, message) if (!(call)) { fputs(message "! Aborting...\n", stderr); glfwTerminate(); exit(1); }
 #define PR_CHECK(call) if (call) { return 1; }
 #define KEY_PRESSED(key) (glfwGetKey(window, key) == GLFW_PRESS)
@@ -52,80 +45,6 @@ uint8_t cameraUpdate = 1;
 
 mat4 fn;
 
-void read_uint32_t(FILE *__restrict stream, uint32_t *__restrict nr) {
-  uint8_t ch;
-  *nr = 0;
-  while ((ch = fgetc(stream)) && ('0' <= ch && ch <= '9')) {
-    *nr *= 10;
-    *nr += ch - '0';
-  }
-  if (ch == '\r') {
-    fgetc(stream);
-  }
-}
-
-uint32_t __inline__ __attribute((pure)) max(uint32_t o1, uint32_t o2) {
-  return o1 > o2 ? o1 : o2;
-}
-
-void print_quat(quat q, const char *str) {
-  fprintf(stdout, "%s: x = %f y = %f z = %f w = %f\n", str, q.x, q.y, q.z, q.w);
-}
-
-void print_vec3(vec3 v, const char *str) {
-  fprintf(stdout, "%s: x = %f y = %f z = %f\n", str, v.x, v.y, v.z);
-}
-
-void print_mat3(mat3 m, const char *name) {
-  fprintf(stdout, "Printing %s\n", name);
-  int32_t i, j;
-  for (i = 0; i < 3; ++i) {
-    for (j = 0; j < 3; ++j) {
-      fprintf(stdout, "%f ", m[i][j]);
-    }
-    fputc('\n', stdout);
-  }
-}
-
-void print_mat(mat4 m, const char *name) {
-  fprintf(stdout, "Printing %s\n", name);
-  int32_t i, j;
-  for (i = 0; i < 4; ++i) {
-    for (j = 0; j < 4; ++j) {
-      fprintf(stdout, "%f ", m[i][j]);
-    }
-    fputc('\n', stdout);
-  }
-}
-
-struct keypress { /// TODO: Organise
-  uint8_t iskb;
-  int32_t key;
-  int32_t scancode;
-  int32_t action;
-  int32_t mod;
-};
-
-#define CKQL 256
-struct ckq {
-  struct keypress v[CKQL];
-  uint32_t s;
-  uint32_t e;
-};
-
-void ckpush(struct ckq *__restrict cq, struct keypress *__restrict kp) {
-  cq->v[cq->e] = *kp;
-  ++cq->e;
-  cq->e %= CKQL;
-}
-
-struct keypress cktop(struct ckq *__restrict cq) {
-  struct keypress kp = cq->v[cq->s];
-  ++cq->s;
-  cq->s %= CKQL;
-  return kp;
-}
-
 void callback_error(int error, const char *desc) {
     fprintf(stderr, "GLFW error, no %i, desc %s\n", error, desc);
 }
@@ -138,20 +57,6 @@ void callback_window_resize(GLFWwindow *window, int width, int height) {
     initCam.ratio = cam.ratio = (float) width / (float) height;
     cameraUpdate = 1;
     // fprintf(stdout, "Window Resize To: %ix%i\n", width, height);
-}
-
-void init_random() {
-  uint32_t seed = 0;
-  uint32_t randfd = open("/dev/urandom", O_RDONLY);
-  if (randfd == -1) {
-    fputs("Could not open /dev/urandom, not initalizing crng!\n", stderr);
-    return;
-  }
-  if (read(randfd, &seed, sizeof(seed)) == -1) {
-    fputs("Could not initalize crng!\n", stderr);
-    return;
-  }
-  srand(seed);
 }
 
 GLFWwindow *window_init() {
@@ -195,39 +100,6 @@ GLFWwindow *window_init() {
     return window;
 }
 
-float __attribute((pure)) __inline__ toRadians(float o) {
-  return o * M_PI / 180.0f;
-}
-
-uint8_t __attribute((pure)) __inline__ epsilon_equals(float o1, float o2) {
-  return fabsf(o1 - o2) < 0.000000001;
-}
-
-float rfloat(float lb, float ub) {
-  return ((float)rand() / (float)RAND_MAX) * (ub - lb) + lb;
-}
-
-float __attribute((pure)) __inline__ lerp(float bottomLim, float topLim, float progress) {
-  return (topLim - bottomLim) * progress + bottomLim;
-}
-
-float __attribute((pure)) clamp(float val, float lb, float ub) {
-  if (val <= lb) {
-    return lb;
-  }
-  if (val >= ub) {
-    return ub;
-  }
-  return val;
-}
-
-struct pos matmul(mat3 mat,struct pos p) {
-  struct pos res = {0};
-  res.x = p.x * mat[0][0] + p.y * mat[0][1] + mat[0][2];
-  res.y = p.x * mat[1][0] + p.y * mat[1][1] + mat[1][2];
-  return res;
-}
-
 void create_projection_matrix(mat4 m, float angle, float ratio, float near, float far) {
   memset(m, 0, sizeof(mat4));
   float tanHalfAngle = tanf(angle / 2.0f);
@@ -236,10 +108,6 @@ void create_projection_matrix(mat4 m, float angle, float ratio, float near, floa
   m[2][2] = -(far + near) / (far - near);
   m[3][2] = -1.0f;
   m[2][3] = -(2.0f * far * near) / (far - near);
-}
-
-vec3 __inline__ __attribute((pure)) *__restrict qv(quat *__restrict q) {
-  return (v3 *__restrict) q;
 }
 
 void create_lookat_matrix(mat4 m) {
@@ -283,10 +151,6 @@ void update_camera_matrix() {
   matmul44(fn, proj, view);
 }
 
-void print_keypress(char *__restrict ch, struct keypress kp) {
-  fprintf(stdout, "%s%u %u %u %u\n", ch, kp.key, kp.scancode, kp.action, kp.mod);
-}
-
 struct ckq keypresses = {0};
 void kbp_callback(GLFWwindow *window, int key, int scancode, int action, int mod) {
   struct keypress kp = {0};
@@ -316,7 +180,7 @@ enum MOVEMEMENTS ms = CAMERA;
 uint32_t curi = 0;
 float *vals[10];
 float scal[10];
-char *nms[10] = { "NSCALE", "OSCALE" };
+char *nms[10] = { "NSCALE", "OSCALE", "PSCALE" };
 v2 lims[10];
 double startY = 0;
 void handle_input(GLFWwindow *__restrict window) {
@@ -349,7 +213,7 @@ void handle_input(GLFWwindow *__restrict window) {
           if (lims[curi].x != lims[curi].y) {
             *vals[curi] = clamp(*vals[curi], lims[curi].x, lims[curi].y);
           }
-          //fprintf(stdout, "%s -> %f\n", nms[curi], *vals[curi]);
+          fprintf(stdout, "%s -> %f\n", nms[curi], *vals[curi]);
           switch (curi) {
             case 1:
               fprintf(stdout, "Curscale: % 3.3f\r", objects.v[0].scale);
@@ -646,16 +510,20 @@ uint8_t run_suijin() {
   uint32_t NW = 300;
   im.v = calloc(sizeof(im.v[0]), NH * NW); 
 
-  float sc = 150.0f;
+  float sc = 43.0f;
 
   scal[0] = 0.1f;
   scal[1] = 0.1f;
+  scal[2] = 0.0001f;
   vals[0] = &sc;
   vals[1] = &objects.v[0].scale;
-  lims[0].x = 0.5f;
-  lims[0].y = 100000.0f;
+  vals[2] = &pscale;
+  lims[0].x = 1.0f;
+  lims[0].y = NH;
   lims[1].x = 0.0f;
   lims[1].y = 1000000000.0f;
+  lims[2].x = 0.0f;
+  lims[2].y = 1.0f;
 
   while (!glfwWindowShouldClose(window)) {
     ++frame;

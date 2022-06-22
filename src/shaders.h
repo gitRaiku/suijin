@@ -9,7 +9,7 @@
 #include <unistd.h>
 #include <sys/stat.h>
 
-#include "defs.h"
+#include "util.h"
 
 uint8_t shader_get(const char *__restrict const path, uint32_t shaderType, uint32_t *__restrict shader);
 
