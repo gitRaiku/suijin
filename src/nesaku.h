@@ -35,8 +35,10 @@ struct i3d {
   struct fcol *__restrict v;
 };
 
+void dump_image_to_file(char *__restrict fname, struct i2d *__restrict im);
+
 void update_texture(struct i2d *__restrict im, struct texture *__restrict tex);
 
-void noise_w2d(uint32_t h, uint32_t w, float scale, struct i2d *__restrict im);
+void noise_w2d(uint32_t h, uint32_t w, float scale, struct i2d *__restrict im, uint8_t reset);
 
 #endif

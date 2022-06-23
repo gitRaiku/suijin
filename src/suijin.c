@@ -43,6 +43,7 @@ uint8_t cameraUpdate = 1;
 #define PAN_SPEED 0.04f
 #define SENS 0.001f
 
+
 mat4 fn;
 
 void callback_error(int error, const char *desc) {
@@ -173,7 +174,7 @@ void mbp_callback(GLFWwindow *window, int button, int action, int mod) {
   //print_keypress("Got keypress: ", kp);
 }
 
-uint32_t CDR, CDRO;
+uint32_t CDR, CDRO; /// HANDLE INPUT
 uint32_t lp[3];
 enum MOVEMEMENTS { CAMERA, ITEMS };
 enum MOVEMEMENTS ms = CAMERA;
@@ -183,6 +184,8 @@ float scal[10];
 char *nms[10] = { "NSCALE", "OSCALE", "PSCALE" };
 v2 lims[10];
 double startY = 0;
+uint8_t nwr = 0;
+uint8_t dumpTex = 0;
 void handle_input(GLFWwindow *__restrict window) {
   { 
     glfwGetCursorPos(window, &mouseX, &mouseY);
@@ -193,7 +196,6 @@ void handle_input(GLFWwindow *__restrict window) {
       oldMouseY = mouseY;
       switch (ms) {
         case CAMERA:
-
           quat qx = gen_quat(cam.up, -xoff * SENS);
           quat qy = gen_quat(cross(*qv(&cam.orientation), cam.up), yoff * SENS);
 
@@ -213,13 +215,13 @@ void handle_input(GLFWwindow *__restrict window) {
           if (lims[curi].x != lims[curi].y) {
             *vals[curi] = clamp(*vals[curi], lims[curi].x, lims[curi].y);
           }
-          fprintf(stdout, "%s -> %f\n", nms[curi], *vals[curi]);
-          switch (curi) {
-            case 1:
-              fprintf(stdout, "Curscale: % 3.3f\r", objects.v[0].scale);
-              update_affine_matrix(objects.v);
-              break;
-          }
+          fprintf(stdout, "%s -> % 3.3f\r", nms[curi], *vals[curi]);
+          //switch (curi) {
+          //case 1:
+          //  fprintf(stdout, "Curscale: % 3.3f\r", objects.v[0].scale);
+          //  update_affine_matrix(objects.v);
+          //  break;
+          //}
           break;
       }
     }
@@ -239,27 +241,38 @@ void handle_input(GLFWwindow *__restrict window) {
             lp[1] = 1 - lp[1];
           }
           break;
+        case GLFW_KEY_R:
+          if (kp.action == 1) {
+            nwr = 1;
+          }
+          break;
+        case GLFW_KEY_F:
+          if (kp.action == 1) {
+            dumpTex = 1;
+          }
+          break;
         default:
           break;
       }
     } else {
-      switch(kp.key) {
-        case GLFW_MOUSE_BUTTON_LEFT:
-          if (kp.action == GLFW_PRESS) {
+      if (kp.action == GLFW_PRESS) {
+        switch(kp.key) {
+          case GLFW_MOUSE_BUTTON_LEFT:
             startY = mouseY;
             ms = ITEMS;
-          } else {
-            ms = CAMERA;
-          }
-          break;
-        case GLFW_MOUSE_BUTTON_RIGHT:
-          if (kp.action != GLFW_PRESS) {
             break;
-          }
-          ++curi;
-          curi %= 10;
-          fprintf(stdout, "New curi %u [%s]\n", curi, nms[curi]);
-          break;
+          case GLFW_MOUSE_BUTTON_RIGHT:
+            ++curi;
+            curi %= 10;
+            fprintf(stdout, "New curi %u [%s]\n", curi, nms[curi]);
+            break;
+        }
+      } else {
+        switch(kp.key) {
+          case GLFW_MOUSE_BUTTON_LEFT:
+            ms = CAMERA;
+            break;
+        }
       }
     }
   }
@@ -510,7 +523,7 @@ uint8_t run_suijin() {
   uint32_t NW = 300;
   im.v = calloc(sizeof(im.v[0]), NH * NW); 
 
-  float sc = 43.0f;
+  float sc = 28.5f;
 
   scal[0] = 0.1f;
   scal[1] = 0.1f;
@@ -528,16 +541,21 @@ uint8_t run_suijin() {
   while (!glfwWindowShouldClose(window)) {
     ++frame;
     _ctime = glfwGetTime();
-    // fprintf(stdout, "%2.3f - %2.3f %2.3f %2.3f - %2.3f %2.3f %2.3f %2.3f\r", cam.fov, cam.pos.x, cam.pos.y, cam.pos.z, cam.orientation.x, cam.orientation.y, cam.orientation.z, cam.orientation.w);
     deltaTime = _ctime - _ltime;
 
     glClearColor(0.2f, 0.2f, 0.2f, 1.0f);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-    noise_w2d(NH, NW, sc, &im);
-    update_texture(&im, &mats.v[0].tamb);
-
     handle_input(window);
+
+    if (dumpTex) {
+      dump_image_to_file("tex.png", &im);
+      dumpTex = 0;
+    }
+
+    noise_w2d(NH, NW, sc, &im, nwr);
+    nwr = 0;
+    update_texture(&im, &mats.v[0].tamb);
 
     if (cameraUpdate) {
       update_camera_matrix();

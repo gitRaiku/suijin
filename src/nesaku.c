@@ -10,6 +10,83 @@ float rf() {
   return (float)rand() / (float)RAND_MAX;
 }
 
+void dump_image_to_file(char *__restrict fname, struct i2d *__restrict im) {
+   FILE *__restrict fp;
+   png_structp pp;
+   png_infop pi;
+   
+   fp = fopen(fname, "wb");
+   if (fp == NULL) {
+     fprintf(stderr, "Could not open %s for writing! %m\n", fname);
+     exit(1);
+   }
+
+   pp = png_create_write_struct(PNG_LIBPNG_VER_STRING, NULL, NULL, NULL);
+   if (pp == NULL) {
+      fclose(fp);
+      fprintf(stderr, "Could not create write struct for %s!\n", fname);
+      exit(1);
+   }
+
+   pi = png_create_info_struct(pp);
+   if (pi == NULL) {
+      fclose(fp);
+      png_destroy_write_struct(&pp,  NULL);
+      fprintf(stderr, "Could not create info struct for %s!\n", fname);
+      exit(1);
+   }
+
+   if (setjmp(png_jmpbuf(pp))) {
+      fclose(fp);
+      png_destroy_write_struct(&pp, &pi);
+      fprintf(stderr, "Error png write for %s!\n", fname);
+      exit(1);
+   }
+
+    png_set_IHDR (pp,
+                  pi,
+                  im->w,
+                  im->h,
+                  8,
+                  PNG_COLOR_TYPE_RGB,
+                  PNG_INTERLACE_NONE,
+                  PNG_COMPRESSION_TYPE_DEFAULT,
+                  PNG_FILTER_TYPE_DEFAULT);
+
+    png_byte **rp = malloc(im->h * sizeof(im->v[0]));
+    {
+      int32_t i, j;
+      for(i = 0; i < im->h; ++i) {
+        png_byte *__restrict rw = malloc(sizeof(uint8_t) * 3 * im->h);
+        rp[i] = rw;
+        for(j = 0; j < im->h; ++j) {
+          rw[j * 3 + 0] = (uint8_t)(G(im->v, i, j, im->w).r * 255.0f);
+          rw[j * 3 + 1] = (uint8_t)(G(im->v, i, j, im->w).g * 255.0f);
+          rw[j * 3 + 2] = (uint8_t)(G(im->v, i, j, im->w).b * 255.0f);
+        }
+      }
+    }
+
+
+   png_init_io(pp, fp);
+
+   png_set_rows(pp, pi, rp);
+   png_write_png(pp, pi, PNG_TRANSFORM_IDENTITY, NULL);
+
+   {
+     int32_t i;
+     for(i = 0; i < im->h; ++i) {
+       free(rp[i]);
+     }
+     free(rp);
+   }
+
+   png_destroy_write_struct(&pp, &pi);
+
+   fclose(fp);
+
+   fprintf(stdout, "Dumped current image to %s!\n", fname);
+}
 struct fcol f2c(float v) {
   struct fcol res;
   res.r = v;
@@ -90,13 +167,20 @@ struct fcol gnear(uint32_t x, uint32_t y, float scale, v2 *__restrict pts, uint3
   return inv(f2c(clamp(scale * pscale * sqrtf(md), 0.0f, 1.0f)));
 }
 
-void noise_w2d(uint32_t h, uint32_t w, float scale, struct i2d *__restrict im) {
-  static struct i2d *__restrict tmp;
-  if (tmp == NULL) {
-    tmp = calloc(sizeof(struct i2d), 1);
-    tmp->v = calloc(sizeof(tmp->v[0]), h * w);
+void noise_w2d(uint32_t h, uint32_t w, float scale, struct i2d *__restrict im, uint8_t reset) {
+  static uint32_t lh = 0;
+  static uint32_t lw = 0; 
+  static float lsc = 0.0f;
+  static float lps = 0.0f;
+  static struct i2d *__restrict loim = NULL;
+  if (lh == h && lw == w && lsc == scale && loim == im && lps == pscale && reset == 0) {
+    return;
   }
-  srand(0);
+  lh = h;
+  lw = w;
+  lsc = scale;
+  loim = im;
+  lps = pscale;
 
   if (im == NULL) {
     im = malloc(sizeof(struct i2d));
@@ -123,7 +207,6 @@ void noise_w2d(uint32_t h, uint32_t w, float scale, struct i2d *__restrict im) {
         G(pts, i, j, udx).y = (j + rf()) * scale;
       }
     }
-// AAAAAAAA 129 286
 
     for (i = 0; i < h; ++i) {
       for (j = 0; j < w; ++j) {
@@ -131,8 +214,6 @@ void noise_w2d(uint32_t h, uint32_t w, float scale, struct i2d *__restrict im) {
       }
     }
   }
-
-  memcpy(tmp->v, im->v, sizeof(im->v[0]) * h * w);
 
   free(pts);
 }

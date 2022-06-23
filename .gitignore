@@ -23,7 +23,9 @@ suijin
 *.o
 src/.deps
 shaders/*.spv
+bin/*
 logout
+tex.png
 
 # Get rid of the gdb history
 .gdb_history
