@@ -16,16 +16,15 @@
 # !configure.ac
 !Makefile
 
-# Get rid of the resulting binary
-suijin
-
-# Get rid of leftover object files
+# Get rid of leftovers from running
 *.o
 src/.deps
 shaders/*.spv
 bin/*
 logout
 tex.png
+suijin
+*.log
 
 # Get rid of the gdb history
 .gdb_history

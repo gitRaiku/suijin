@@ -155,7 +155,7 @@ uint8_t *__restrict read_png(char *__restrict fname, char *__restrict dname, uin
 
   img.format = PNG_FORMAT_RGB;
 
-  buf = malloc(PNG_IMAGE_SIZE(img));
+  buf = malloc(PNG_IMAGE_SIZE(img) + 3);
 
   if (png_image_finish_read(&img, NULL, buf, 0, NULL) == 0) {
     fprintf(stderr, "ERR2: %s\n", fname);

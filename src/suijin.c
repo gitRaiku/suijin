@@ -181,7 +181,7 @@ enum MOVEMEMENTS ms = CAMERA;
 uint32_t curi = 0;
 float *vals[10];
 float scal[10];
-char *nms[10] = { "NSCALE", "OSCALE", "PSCALE" };
+char *nms[10] = { "NSCALE", "OSCALE", "PSCALE", "OCTAVES", "PERSISTANCE", "HEIGHT", "WIDTH" };
 v2 lims[10];
 double startY = 0;
 uint8_t nwr = 0;
@@ -216,12 +216,11 @@ void handle_input(GLFWwindow *__restrict window) {
             *vals[curi] = clamp(*vals[curi], lims[curi].x, lims[curi].y);
           }
           fprintf(stdout, "%s -> % 3.3f\r", nms[curi], *vals[curi]);
-          //switch (curi) {
-          //case 1:
-          //  fprintf(stdout, "Curscale: % 3.3f\r", objects.v[0].scale);
-          //  update_affine_matrix(objects.v);
-          //  break;
-          //}
+          switch (curi) {
+            case 1:
+              update_affine_matrix(&objects.v[0]);
+              break;
+          }
           break;
       }
     }
@@ -243,6 +242,7 @@ void handle_input(GLFWwindow *__restrict window) {
           break;
         case GLFW_KEY_R:
           if (kp.action == 1) {
+            new_perlin_perms();
             nwr = 1;
           }
           break;
@@ -519,24 +519,38 @@ uint8_t run_suijin() {
 
   uint32_t frame = 0;
   struct i2d im;
-  uint32_t NH = 300;
-  uint32_t NW = 300;
+  uint32_t NH = 500;
+  uint32_t NW = 500;
+  float oct = 1.0f;
+  float pers = 1.0f;
   im.v = calloc(sizeof(im.v[0]), NH * NW); 
 
   float sc = 28.5f;
 
-  scal[0] = 0.1f;
-  scal[1] = 0.1f;
-  scal[2] = 0.0001f;
   vals[0] = &sc;
-  vals[1] = &objects.v[0].scale;
-  vals[2] = &pscale;
+  scal[0] = 0.1f;
   lims[0].x = 1.0f;
   lims[0].y = NH;
+
+  vals[1] = &objects.v[0].scale;
+  scal[1] = 0.1f;
   lims[1].x = 0.0f;
   lims[1].y = 1000000000.0f;
+
+  vals[2] = &pscale;
+  scal[2] = 0.0001f;
   lims[2].x = 0.0f;
   lims[2].y = 1.0f;
+
+  vals[3] = &oct;
+  scal[3] = 0.1f;
+  lims[3].x = 0.0f;
+  lims[3].y = 100.0f;
+
+  vals[4] = &pers;
+  scal[4] = 0.1f;
+  lims[4].x = 0.0f;
+  lims[4].y = 100.0f;
 
   while (!glfwWindowShouldClose(window)) {
     ++frame;
@@ -553,7 +567,8 @@ uint8_t run_suijin() {
       dumpTex = 0;
     }
 
-    noise_w2d(NH, NW, sc, &im, nwr);
+    //noise_w2d(NH, NW, sc, &im, nwr);
+    noise_p2d(NH, NW, (uint32_t)oct, pers, sc, &im);
     nwr = 0;
     update_texture(&im, &mats.v[0].tamb);
 
@@ -595,6 +610,15 @@ uint8_t run_suijin() {
     glfwSwapBuffers(window);
     _ltime = _ctime;
     //fprintf(stdout, "Fps: %3.5f\r", 1 / deltaTime);
+  }
+
+  {
+    int32_t i;
+    for(i = 0; i < objects.l; ++i) {
+      free(objects.v[i].m.v);
+    }
+    free(objects.v);
+    free(mats.v);
   }
 
   glfwTerminate();

@@ -81,6 +81,8 @@ struct ckq {
 
 void read_uint32_t(FILE *__restrict stream, uint32_t *__restrict nr);
 
+void swap(uint8_t *__restrict o1, uint8_t *__restrict o2); // INLINE
+
 uint32_t __attribute((pure)) max(uint32_t o1, uint32_t o2); // INLINE
 
 void print_quat(quat q, const char *str);
