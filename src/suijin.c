@@ -30,6 +30,7 @@ struct camera {
 };
 
 double mouseX, mouseY;
+float mx, my;
 double oldMouseX, oldMouseY;
 
 struct camera initCam;
@@ -37,6 +38,8 @@ struct camera cam;
 
 struct matv mats;
 struct objv objects;
+struct matv uim;
+struct objv uio;
 
 uint8_t cameraUpdate = 1;
 #define ZOOM_SPEED 0.01f
@@ -45,6 +48,7 @@ uint8_t cameraUpdate = 1;
 
 
 mat4 fn;
+int windowW, windowH;
 
 void callback_error(int error, const char *desc) {
     fprintf(stderr, "GLFW error, no %i, desc %s\n", error, desc);
@@ -57,6 +61,8 @@ void callback_window_resize(GLFWwindow *window, int width, int height) {
     glViewport(0, 0, width, height);
     initCam.ratio = cam.ratio = (float) width / (float) height;
     cameraUpdate = 1;
+    windowW = width;
+    windowH = height;
     // fprintf(stdout, "Window Resize To: %ix%i\n", width, height);
 }
 
@@ -71,6 +77,8 @@ GLFWwindow *window_init() {
     glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE);
 #endif
 
+    windowW = 1920;
+    windowH = 1080;
     window = glfwCreateWindow(1080, 1920, "suijin", NULL, NULL);
     GL_CHECK(window, "Failed to create the window!");
 
@@ -176,7 +184,7 @@ void mbp_callback(GLFWwindow *window, int button, int action, int mod) {
 
 uint32_t CDR, CDRO; /// HANDLE INPUT
 uint32_t lp[3];
-enum MOVEMEMENTS { CAMERA, ITEMS };
+enum MOVEMEMENTS { CAMERA, ITEMS, UI };
 enum MOVEMEMENTS ms = CAMERA;
 uint32_t curi = 0;
 float *vals[10];
@@ -186,14 +194,18 @@ v2 lims[10];
 double startY = 0;
 uint8_t nwr = 0;
 uint8_t dumpTex = 0;
+float p1, p2;
 void handle_input(GLFWwindow *__restrict window) {
-  { 
+  { // CURSOR
     glfwGetCursorPos(window, &mouseX, &mouseY);
+
     if ((mouseX != oldMouseX) || (mouseY != oldMouseY)) {
       double xoff = mouseX - oldMouseX;
       double yoff = mouseY - oldMouseY;
       oldMouseX = mouseX;
       oldMouseY = mouseY;
+      mx = (mouseX / windowW) * 2 - 1;
+      my = (mouseY / windowH) * 2 - 1;
       switch (ms) {
         case CAMERA:
           quat qx = gen_quat(cam.up, -xoff * SENS);
@@ -215,12 +227,14 @@ void handle_input(GLFWwindow *__restrict window) {
           if (lims[curi].x != lims[curi].y) {
             *vals[curi] = clamp(*vals[curi], lims[curi].x, lims[curi].y);
           }
-          fprintf(stdout, "%s -> % 3.3f\r", nms[curi], *vals[curi]);
+          //fprintf(stdout, "%s -> % 3.3f\r", nms[curi], *vals[curi]);
           switch (curi) {
             case 1:
               update_affine_matrix(&objects.v[0]);
               break;
-          }
+         }
+          break;
+        case UI:
           break;
       }
     }
@@ -232,14 +246,6 @@ void handle_input(GLFWwindow *__restrict window) {
     //print_keypress("Processing keypress: ", kp);
     if (kp.iskb) {
       switch(kp.key) {
-        case GLFW_KEY_G:
-          lp[0] = kp.action == 1;
-          break;
-        case GLFW_KEY_T:
-          if (kp.action == 1) {
-            lp[1] = 1 - lp[1];
-          }
-          break;
         case GLFW_KEY_R:
           if (kp.action == 1) {
             new_perlin_perms();
@@ -251,6 +257,17 @@ void handle_input(GLFWwindow *__restrict window) {
             dumpTex = 1;
           }
           break;
+        case GLFW_KEY_TAB:
+          if (kp.action == 1) {
+            ms = UI;
+            glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
+            glfwSetCursorPos(window, windowW / 2.0, windowH / 2.0);
+          } else if (kp.action == 0) {
+            ms = CAMERA;
+            lp[1] = 0;
+            glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+          }
+          break;
         default:
           break;
       }
@@ -258,8 +275,12 @@ void handle_input(GLFWwindow *__restrict window) {
       if (kp.action == GLFW_PRESS) {
         switch(kp.key) {
           case GLFW_MOUSE_BUTTON_LEFT:
-            startY = mouseY;
-            ms = ITEMS;
+            if (ms == CAMERA) {
+              startY = mouseY;
+              ms = ITEMS;
+            } else if (ms == UI) {
+              lp[1] = 1;
+            }
             break;
           case GLFW_MOUSE_BUTTON_RIGHT:
             ++curi;
@@ -270,14 +291,18 @@ void handle_input(GLFWwindow *__restrict window) {
       } else {
         switch(kp.key) {
           case GLFW_MOUSE_BUTTON_LEFT:
-            ms = CAMERA;
+            if (ms == ITEMS) {
+              ms = CAMERA;
+            } else if (ms == UI) {
+              lp[1] = 0;
+            }
             break;
         }
       }
     }
   }
 
-  {
+  { // KEY_PRESSED
     float cpanSpeed = PAN_SPEED + KEY_PRESSED(GLFW_KEY_LEFT_SHIFT) * PAN_SPEED;
     if (KEY_PRESSED(GLFW_KEY_EQUAL) && KEY_PRESSED(GLFW_KEY_LEFT_SHIFT)) {
       cam.fov += cam.fov * ZOOM_SPEED;
@@ -329,11 +354,11 @@ void handle_input(GLFWwindow *__restrict window) {
 time_t la; // check_frag_update
 uint8_t check_frag_update(uint32_t *__restrict program, uint32_t vert) {
   struct stat s;
-  stat("shaders/frag.glsl", &s);
+  stat("shaders/vf.glsl", &s);
   if (s.st_ctim.tv_sec != la) {
     uint32_t shaders[2];
     shaders[0] = vert;
-    if (shader_get("shaders/frag.glsl", GL_FRAGMENT_SHADER, shaders + 1)) {
+    if (shader_get("shaders/vf.glsl", GL_FRAGMENT_SHADER, shaders + 1)) {
       return 2;
     } else {
       program_get(2, shaders, program);
@@ -345,10 +370,7 @@ uint8_t check_frag_update(uint32_t *__restrict program, uint32_t vert) {
   return 0;
 }
 
-
 void update_mat(uint32_t program, struct material *__restrict mat) {
-  //fprintf(stdout, "Using material %s\n", mat->name);
-  //fprintf(stdout, "Mat tex: %u\n", mat->tamb.i);
   program_set_float3v(program, "mat.ambient", mat->ambient);
   program_set_float3v(program, "mat.diffuse", mat->diffuse);
   program_set_float3v(program, "mat.spec", mat->spec);
@@ -359,7 +381,7 @@ void update_mat(uint32_t program, struct material *__restrict mat) {
   program_set_int1(program, "mat.illum", mat->illum);
 }
 
-void draw_obj(uint32_t program, struct matv *__restrict mats, struct object *__restrict obj) {
+void draw_obj(uint32_t program, struct matv *__restrict m, struct object *__restrict obj) {
   uint32_t li = 0;
   struct material *__restrict cmat;
 
@@ -367,25 +389,8 @@ void draw_obj(uint32_t program, struct matv *__restrict mats, struct object *__r
 
   program_set_mat4(program, "affine", obj->aff);
 
-  cmat = &mats->v[obj->m.v[0].m];
+  cmat = &m->v[obj->m.v[0].m];
   update_mat(program, cmat);
-//#define DUMP_BUF
-  
-#ifdef DUMP_BUF
-  float tempBuf[256];
-  memset(tempBuf, 0, sizeof(tempBuf));
-  glGetBufferSubData(GL_ARRAY_BUFFER, 0, obj->v.l * sizeof(float), tempBuf);
-  fprintf(stdout, "Dumping buffer of size %u:\n", obj->v.l);
-  {
-    int32_t i;
-    for(i = 0; i < obj->v.l / 8; ++i) {
-      fprintf(stdout, "%i: % 3.3f % 3.3f % 3.3f / % 3.3f % 3.3f % 3.3f / % 3.3f % 3.3f\n", i, tempBuf[i * 8 + 0], tempBuf[i * 8 + 1], tempBuf[i * 8 + 2], 
-                                                              tempBuf[i * 8 + 3], tempBuf[i * 8 + 4], tempBuf[i * 8 + 5], 
-                                                              tempBuf[i * 8 + 6], tempBuf[i * 8 + 7]);
-    }
-    fputc('\n', stdout);
-  }
-#endif
 
   {
     int32_t i;
@@ -399,11 +404,10 @@ void draw_obj(uint32_t program, struct matv *__restrict mats, struct object *__r
         program_set_int1(program, "hasTexture", 0);
       }
       
-      //fprintf(stdout, "Drawing from %u to %u\n", li / 8, (obj->m.v[i].i - li) / 8);
       glDrawArrays(GL_TRIANGLES, li / 8, (obj->m.v[i].i - li) / 8);
       li = obj->m.v[i].i;
 
-      cmat = &mats->v[obj->m.v[i].m];
+      cmat = &m->v[obj->m.v[i].m];
       update_mat(program, cmat);
     }
   }
@@ -417,26 +421,51 @@ void draw_obj(uint32_t program, struct matv *__restrict mats, struct object *__r
     program_set_int1(program, "hasTexture", 0);
   }
 
-//#define DUMP_IMG
-  
-#ifdef DUMP_IMG
-  uint8_t tB[1024];
-  memset(tB, 0, sizeof(tB));
-  glGetTexImage(GL_TEXTURE_2D, 0, GL_RGB, GL_UNSIGNED_BYTE, tB);
-  fprintf(stdout, "Dumping img of size %u:\n", 10 * 10 * 3);
-  {
-    int32_t i, j;
-    for (i = 0; i < 10; ++i) {
-      for (j = 0; j < 10; ++j) {
-        fprintf(stdout, "%06X ", tB[(i + j * 10) * 3 + 0] << 16 | tB[(i + j * 10) * 3 + 1] << 8 | tB[(i + j * 10) * 3 + 2]);
-      }
-      fputc('\n', stdout);
-    }
-  }
-#endif
-
-  //fprintf(stdout, "Drawing from %u to %u\n", li / 8, (obj->v.l - li) / 8);
   glDrawArrays(GL_TRIANGLES, li / 8, (obj->v.l - li) / 8);
+}
+
+#define MC 2
+struct mod {
+  char name[50];
+  float lbound;
+  float ubound;
+  float xpos;
+  float ypos;
+  float scale;
+  mat4 aff;
+  float *__restrict val;
+};
+struct mod mods[MC];
+uint32_t selectedUi = 0;
+
+void create_affine_matrix(mat4 m, float scale, float x, float y, float z) {
+  m[0][0] = scale; m[0][1] =     0; m[0][2] =     0; m[0][3] = x; 
+  m[1][0] =     0; m[1][1] = scale; m[1][2] =     0; m[1][3] = y; 
+  m[2][0] =     0; m[2][1] =     0; m[2][2] = scale; m[2][3] = z; 
+  m[3][0] =     0; m[3][1] =     0; m[3][2] =     0; m[3][3] = 1; 
+}
+
+void draw_ui(uint32_t mi, uint32_t program, struct matv *__restrict m, struct object *__restrict o) {
+#define cm mods[mi]
+  glBindVertexArray(o->vao);
+  create_affine_matrix(cm.aff, cm.scale, cm.xpos, -cm.ypos, 0.0f);
+  program_set_mat4(program, "affine", cm.aff);
+
+  struct material *__restrict cmat = &m->v[o->m.v[0].m];
+
+  if (lp[1] == 0 &&
+      (fabs(mx - cm.xpos) <= cm.scale) &&
+      (fabs(my - cm.ypos) <= cm.scale)) {
+    selectedUi = mi;
+  }
+
+  glActiveTexture(GL_TEXTURE0);
+  glBindTexture(GL_TEXTURE_2D, cmat->tamb.i);
+  program_set_int1(program, "tex", 0);
+  program_set_int1(program, "hasTexture", 1);
+
+  glDrawArrays(GL_TRIANGLES, 0, o->v.l / 4);
+#undef cm
 }
 
 uint8_t run_suijin() {
@@ -450,42 +479,52 @@ uint8_t run_suijin() {
   glfwSetMouseButtonCallback(window, mbp_callback);
 
   glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
-  // TODO: RENABLE THIS
+
+  glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
 
   matvi(&mats);
   objvi(&objects);
+
+  matvi(&uim);
+  objvi(&uio);
   
-  //parse_folder(&objects, &mats, "Items/Mountain");
-  //parse_folder(&objects, &mats, "Items/Dough");
-  parse_folder(&objects, &mats, "Items/Plane");
+  parse_folder(&objects, &mats, "Items/Mountain", 0);
+  //parse_folder(&objects, &mats, "Items/Dough", 0);
+  parse_folder(&uio, &uim, "Items/Plane", 1);
 
   matvt(&mats);
   objvt(&objects);
 
-  uint32_t program;
+  matvt(&uim);
+  objvt(&uio);
+
+  uint32_t nprog, mprog;
 
   _ctime = _ltime = deltaTime = 0;
 
-#define SHADERC 2
+#define SHADERC 4
   uint32_t shaders[SHADERC];
   {
-    const char          *paths[SHADERC] = { "shaders/vert.glsl", "shaders/frag.glsl" };
-    const uint32_t shaderTypes[SHADERC] = { GL_VERTEX_SHADER   , GL_FRAGMENT_SHADER  };
+    const char          *paths[SHADERC] = { "shaders/vv.glsl", "shaders/vf.glsl", 
+                                            "shaders/mv.glsl", "shaders/mf.glsl"};
+    const uint32_t shaderTypes[SHADERC] = { GL_VERTEX_SHADER   , GL_FRAGMENT_SHADER,
+                                            GL_VERTEX_SHADER   , GL_FRAGMENT_SHADER  };
     uint32_t i;
     for (i = 0; i < SHADERC; ++i) {
       PR_CHECK(shader_get(paths[i], shaderTypes[i], shaders + i));
     }
 
-    PR_CHECK(program_get(2, shaders, &program));
+    PR_CHECK(program_get(2, shaders    , &nprog));
+    PR_CHECK(program_get(2, shaders + 2, &mprog));
 
-    for (i = 1; i < SHADERC; ++i) { // TODO: REMOVE
+    for (i = 0; i < SHADERC; ++i) { // TODO: REMOVE
       glDeleteShader(shaders[i]);
     }
   }
 
   {
     struct stat s;
-    stat("shaders/frag.glsl", &s);
+    stat("shaders/vf.glsl", &s);
     la = s.st_ctim.tv_sec;
   }
 
@@ -499,12 +538,10 @@ uint8_t run_suijin() {
 
   initCam.up.y = 1.0f;
   initCam.fov = toRadians(90.0f);
-  initCam.pos = (vec3) { 0.0f, 0.0f, 0.0f };
+  /*initCam.pos = (vec3) { 0.0f, 0.0f, 0.0f };
+  initCam.orientation = (quat) { 1.0f, 0.0f, 0.0f, 0.0f};*/
+  initCam.pos = (vec3) { 0.0f, 60.0f, 0.0f };
   initCam.orientation = (quat) { 1.0f, 0.0f, 0.0f, 0.0f};
-  /*
-  initCam.pos = (vec3) { 60.0f, 60.0f, 30.0f };
-  initCam.orientation = (quat) { 0.819f, 0.353f, 0.453f, 0.0f};
-  */
 
   memcpy(&cam, &initCam, sizeof(cam));
 
@@ -518,40 +555,9 @@ uint8_t run_suijin() {
   oldMouseY = 0.0;
 
   uint32_t frame = 0;
-  struct i2d im;
-  uint32_t NH = 500;
-  uint32_t NW = 500;
-  float oct = 1.0f;
-  float pers = 1.0f;
-  im.v = calloc(sizeof(im.v[0]), NH * NW); 
 
-  float sc = 28.5f;
-
-  vals[0] = &sc;
-  scal[0] = 0.1f;
-  lims[0].x = 1.0f;
-  lims[0].y = NH;
-
-  vals[1] = &objects.v[0].scale;
-  scal[1] = 0.1f;
-  lims[1].x = 0.0f;
-  lims[1].y = 1000000000.0f;
-
-  vals[2] = &pscale;
-  scal[2] = 0.0001f;
-  lims[2].x = 0.0f;
-  lims[2].y = 1.0f;
-
-  vals[3] = &oct;
-  scal[3] = 0.1f;
-  lims[3].x = 0.0f;
-  lims[3].y = 100.0f;
-
-  vals[4] = &pers;
-  scal[4] = 0.1f;
-  lims[4].x = 0.0f;
-  lims[4].y = 100.0f;
-
+  mods[0].scale = 0.2f;
+  mods[1].scale = 0.3f;
   while (!glfwWindowShouldClose(window)) {
     ++frame;
     _ctime = glfwGetTime();
@@ -559,45 +565,48 @@ uint8_t run_suijin() {
 
     glClearColor(0.2f, 0.2f, 0.2f, 1.0f);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+    glEnable(GL_DEPTH_TEST);
 
     handle_input(window);
-
-    if (dumpTex) {
-      dump_image_to_file("tex.png", &im);
-      dumpTex = 0;
-    }
-
-    //noise_w2d(NH, NW, sc, &im, nwr);
-    noise_p2d(NH, NW, (uint32_t)oct, pers, sc, &im);
-    nwr = 0;
-    update_texture(&im, &mats.v[0].tamb);
 
     if (cameraUpdate) {
       update_camera_matrix();
       cameraUpdate = 0;
     }
 
-    glUseProgram(program);
+    { // NPROG
+      glUseProgram(nprog);
 
-    program_set_mat4(program, "fn_mat", fn);
-    program_set_int1(program, "shading", cshading);
-    program_set_float3v(program, "camPos", cam.pos);
-
-    if (lp[1]) {
-      objects.v[0].scale += 0.01f;
-      update_affine_matrix(&objects.v[0]);
-    }
-
-    {
+      program_set_mat4(nprog, "fn_mat", fn);
+      program_set_int1(nprog, "shading", cshading);
+      program_set_float3v(nprog, "camPos", cam.pos);
       int32_t i;
       for(i = 0; i < objects.l; ++i) {
-        draw_obj(program, &mats, objects.v + i);
+        draw_obj(nprog, &mats, objects.v + i);
       }
+    }
+
+    if (lp[1] == 0) {
+      selectedUi = 1001;
+    }
+    { // MPROG
+      glUseProgram(mprog);
+      glDisable(GL_DEPTH_TEST);
+
+      int32_t i;
+      for(i = 0; i < MC; ++i) {
+        draw_ui(i, mprog, &uim, uio.v);
+      }
+    }
+
+    if (lp[1] && selectedUi != 1001) {
+      mods[selectedUi].xpos = mx;
+      mods[selectedUi].ypos = my;
     }
 
     if (frame % 30 == 0) {
       while (1) {
-        uint8_t r = check_frag_update(&program, shaders[0]);
+        uint8_t r = check_frag_update(&nprog, shaders[0]);
         if (r < 2) {
           break;
         } else {
@@ -609,7 +618,6 @@ uint8_t run_suijin() {
     glfwPollEvents();
     glfwSwapBuffers(window);
     _ltime = _ctime;
-    //fprintf(stdout, "Fps: %3.5f\r", 1 / deltaTime);
   }
 
   {
@@ -619,6 +627,15 @@ uint8_t run_suijin() {
     }
     free(objects.v);
     free(mats.v);
+  }
+
+  {
+    int32_t i;
+    for(i = 0; i < uio.l; ++i) {
+      free(uio.v[i].m.v);
+    }
+    free(uio.v);
+    free(uim.v);
   }
 
   glfwTerminate();

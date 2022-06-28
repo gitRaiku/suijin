@@ -119,6 +119,20 @@ void update_texture(struct i2d *__restrict im, struct texture *__restrict tex) {
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
 }
 
+void update_texture_ub(struct i2du *__restrict im, struct texture *__restrict tex) {
+  tex->w = im->w;
+  tex->h = im->h;
+
+  glBindTexture(GL_TEXTURE_2D, tex->i);
+  glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, tex->w, tex->h, 0, GL_RGB, GL_UNSIGNED_BYTE, im->v);
+  glGenerateMipmap(GL_TEXTURE_2D);
+
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST_MIPMAP_NEAREST);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+}
+
 #define P2(x) ((x)*(x))
 float dist2(float x, float y, v2 v) {
   return P2(v.x - x) + P2(v.y - y);

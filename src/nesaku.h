@@ -22,8 +22,21 @@ struct fcol {
   float b;
 };
 
+struct fcolu {
+  uint8_t r;
+  uint8_t g;
+  uint8_t b;
+};
+
 struct i2d {
   struct fcol *__restrict v;
+  uint32_t h;
+  uint32_t w;
+  uint64_t padding;
+};
+
+struct i2du {
+  struct fcolu *__restrict v;
   uint32_t h;
   uint32_t w;
   uint64_t padding;
@@ -39,6 +52,8 @@ struct i3d {
 void dump_image_to_file(char *__restrict fname, struct i2d *__restrict im);
 
 void update_texture(struct i2d *__restrict im, struct texture *__restrict tex);
+
+void update_texture_ub(struct i2du *__restrict im, struct texture *__restrict tex);
 
 void noise_w2d(uint32_t h, uint32_t w, float scale, struct i2d *__restrict im, uint8_t reset);
 

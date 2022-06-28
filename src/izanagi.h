@@ -171,7 +171,7 @@ struct objv {
 DEF_VECTOR_SUITE(mat, struct matv *__restrict, struct material)
 DEF_VECTOR_SUITE(obj, struct objv *__restrict, struct object)
 
-void parse_folder(struct objv *__restrict objs, struct matv *__restrict materials, char *__restrict fname);
+void parse_folder(struct objv *__restrict objs, struct matv *__restrict mats, char *__restrict dname, uint8_t otype);
 
 void destroy_object(struct object *__restrict obj);
 
