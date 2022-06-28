@@ -194,7 +194,7 @@ v2 lims[10];
 double startY = 0;
 uint8_t nwr = 0;
 uint8_t dumpTex = 0;
-float p1, p2;
+float mxoff, myoff;
 void handle_input(GLFWwindow *__restrict window) {
   { // CURSOR
     glfwGetCursorPos(window, &mouseX, &mouseY);
@@ -457,6 +457,8 @@ void draw_ui(uint32_t mi, uint32_t program, struct matv *__restrict m, struct ob
       (fabs(mx - cm.xpos) <= cm.scale) &&
       (fabs(my - cm.ypos) <= cm.scale)) {
     selectedUi = mi;
+    mxoff = cm.xpos - mx;
+    myoff = cm.ypos - my;
   }
 
   glActiveTexture(GL_TEXTURE0);
@@ -600,8 +602,8 @@ uint8_t run_suijin() {
     }
 
     if (lp[1] && selectedUi != 1001) {
-      mods[selectedUi].xpos = mx;
-      mods[selectedUi].ypos = my;
+      mods[selectedUi].xpos = mx + mxoff;
+      mods[selectedUi].ypos = my + myoff;
     }
 
     if (frame % 30 == 0) {
