@@ -172,8 +172,7 @@ uint8_t *__restrict read_png(char *__restrict fname, char *__restrict dname, uin
 void get_texture(char *__restrict fname, char *__restrict dname, struct texture *__restrict tex) {
   glGenTextures(1, &tex->i);
 
-  //fprintf(stdout, "Ambient texture: [%s]\n", fname);
-  uint8_t *buf = read_png(fname, dname, &tex->w, &tex->h); /// TODO: Unsigned byte doesn't work?????????????????????????
+  uint8_t *buf = read_png(fname, dname, &tex->w, &tex->h);
 
   glBindTexture(GL_TEXTURE_2D, tex->i);
   glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB8, tex->w, tex->h, 0, GL_RGB, GL_UNSIGNED_BYTE, buf);
@@ -426,8 +425,7 @@ void destroy_object(struct object *__restrict obj) {
   // Free materials separately
 }
 
-void add_i_dont_even_know(v3 *__restrict v, struct floatv *__restrict fv, struct v3v *__restrict verts, struct v3v *__restrict norms, struct v2v *__restrict texts, uint8_t type) {
-  if (type == 0) {
+void add_i_dont_even_know(v3 *__restrict v, struct floatv *__restrict fv, struct v3v *__restrict verts, struct v3v *__restrict norms, struct v2v *__restrict texts) {
     floatvp(fv, verts->v[(uint32_t)v->x].x); // TODO: Boy do i love shite code
     floatvp(fv, verts->v[(uint32_t)v->x].y);
     floatvp(fv, verts->v[(uint32_t)v->x].z);
@@ -436,12 +434,6 @@ void add_i_dont_even_know(v3 *__restrict v, struct floatv *__restrict fv, struct
     floatvp(fv, norms->v[(uint32_t)v->z].z);
     floatvp(fv, texts->v[(uint32_t)v->y].x);
     floatvp(fv, texts->v[(uint32_t)v->y].y);
-  } else {
-    floatvp(fv, verts->v[(uint32_t)v->x].y);
-    floatvp(fv, verts->v[(uint32_t)v->x].z);
-    floatvp(fv, texts->v[(uint32_t)v->y].x);
-    floatvp(fv, texts->v[(uint32_t)v->y].y);
-  }
 }
 
 uint32_t gmi(struct matv *__restrict materials, char *__restrict matn) {
@@ -454,7 +446,7 @@ uint32_t gmi(struct matv *__restrict materials, char *__restrict matn) {
   return 0;
 }
 
-void create_vao(float *__restrict v, uint32_t s, uint32_t *__restrict vbo, uint32_t *__restrict vao, uint8_t type) {
+void create_vao(float *__restrict v, uint32_t s, uint32_t *__restrict vbo, uint32_t *__restrict vao) {
   glGenVertexArrays(1, vao);
   glGenBuffers(1, vbo);
 
@@ -462,22 +454,15 @@ void create_vao(float *__restrict v, uint32_t s, uint32_t *__restrict vbo, uint3
   glBindBuffer(GL_ARRAY_BUFFER, *vbo);
   glBufferData(GL_ARRAY_BUFFER, s * sizeof(float), v, GL_STATIC_DRAW);
 
-  if (type == 0) {
-    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void *) (0 * sizeof(float)));
-    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void *) (3 * sizeof(float)));
-    glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void *) (6 * sizeof(float)));
-    glEnableVertexAttribArray(0);
-    glEnableVertexAttribArray(1);
-    glEnableVertexAttribArray(2);
-  } else {
-    glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(float), (void *) (0 * sizeof(float)));
-    glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(float), (void *) (2 * sizeof(float)));
-    glEnableVertexAttribArray(0);
-    glEnableVertexAttribArray(1);
-  }
+  glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void *) (0 * sizeof(float)));
+  glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void *) (3 * sizeof(float)));
+  glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void *) (6 * sizeof(float)));
+  glEnableVertexAttribArray(0);
+  glEnableVertexAttribArray(1);
+  glEnableVertexAttribArray(2);
 }
 
-void parse_object_file(struct objv *__restrict objs, struct matv *__restrict materials, uint32_t fd, uint32_t dfd, char *__restrict fname, char *__restrict dname, uint8_t type) {
+void parse_object_file(struct objv *__restrict objs, struct matv *__restrict materials, uint32_t fd, uint32_t dfd, char *__restrict fname, char *__restrict dname) {
   struct fbuf cb;
   struct v3v verts;
   struct v3v norms;
@@ -533,7 +518,7 @@ void parse_object_file(struct objv *__restrict objs, struct matv *__restrict mat
             om.v3.x = read_float(&cb) - 1;
             om.v3.y = read_float(&cb) - 1;
             om.v3.z = read_float(&cb) - 1;
-            add_i_dont_even_know(&om.v3, &cobj.v, &verts, &norms, &texts, type);
+            add_i_dont_even_know(&om.v3, &cobj.v, &verts, &norms, &texts);
           }
         }
         break;
@@ -548,7 +533,7 @@ void parse_object_file(struct objv *__restrict objs, struct matv *__restrict mat
         break;
       case OBJECT:
         if (cobj.name[0] != '\0') {
-          create_vao(cobj.v.v, cobj.v.l, &cobj.vbo, &cobj.vao, type);
+          create_vao(cobj.v.v, cobj.v.l, &cobj.vbo, &cobj.vao);
 
           mativt(&cobj.m);
           free(cobj.v.v);
@@ -577,7 +562,7 @@ void parse_object_file(struct objv *__restrict objs, struct matv *__restrict mat
     }
   }
   
-  create_vao(cobj.v.v, cobj.v.l, &cobj.vbo, &cobj.vao, type);
+  create_vao(cobj.v.v, cobj.v.l, &cobj.vbo, &cobj.vao);
   mativt(&cobj.m);
   free(cobj.v.v);
   objvp(objs, cobj);
@@ -656,7 +641,7 @@ void apply_minfo(struct object *__restrict o, struct minfo *__restrict cm) {
   update_affine_matrix(o);
 }
 
-void parse_folder(struct objv *__restrict objs, struct matv *__restrict mats, char *__restrict dname, uint8_t otype) {
+void parse_folder(struct objv *__restrict objs, struct matv *__restrict mats, char *__restrict dname) {
   DIR *d = opendir(dname);
   if (d == NULL) {
     fprintf(stderr, "Could not open directory %s! %m\n", dname);
@@ -671,7 +656,7 @@ void parse_folder(struct objv *__restrict objs, struct matv *__restrict mats, ch
     if (strstr(di->d_name, ".obj")) {
       // fprintf(stdout, "Got object %s/%s!\n", dname, di->d_name);
       fd = openat(dfd, di->d_name, O_RDONLY);
-      parse_object_file(objs, mats, fd, dfd, di->d_name, dname, otype); /// TODO: libpng openat
+      parse_object_file(objs, mats, fd, dfd, di->d_name, dname); /// TODO: libpng openat
       close(fd);
     } else if (strstr(di->d_name, ".minfo")) {
       // fprintf(stdout, "Got minfo %s/%s!\n", dname, di->d_name);

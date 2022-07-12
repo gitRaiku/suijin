@@ -14,6 +14,13 @@
 #include "util.h"
 #include "linalg.h"
 
+#define VECSTRUCT(name, type) \
+struct name ##v {       \
+  type *__restrict v;   \
+  uint32_t l;           \
+  uint32_t s;           \
+}
+
 #define VECTOR_PUSH(name, btype, stype)               \
 void name ##vp(btype v, stype val) {                  \
   if (v->l == v->s) {                                 \
@@ -90,62 +97,28 @@ struct material {
   //struct texture trefl;  // Reflection
 };
 
-struct matv {
-  struct material *__restrict v;
-  uint32_t l;
-  uint32_t s;
-};
+VECSTRUCT(mat, struct material);
 
 #define LINEND_MASK   0b010 /// Read a line end
 #define UNREADABLE_MASK   0b100 /// There are still bytes left in the file
-
-
-struct v4v {
-  v4 *__restrict v;
-  uint32_t l;
-  uint32_t s;
-};
-
-struct v3v {
-  v3 *__restrict v;
-  uint32_t l;
-  uint32_t s;
-};
-
-struct v2v {
-  v2 *__restrict v;
-  uint32_t l;
-  uint32_t s;
-};
+VECSTRUCT(v4, v4);
+VECSTRUCT(v3, v3);
+VECSTRUCT(v2, v2);
 
 struct faceev {
   uv3 v;
   uv3 t;
   uv3 n;
 };
-
-struct facev {
-  struct faceev *v;
-  uint32_t l;
-  uint32_t s;
-};
-
-struct floatv {
-  float *v;
-  uint32_t l;
-  uint32_t s;
-};
+VECSTRUCT(face, struct faceev);
+VECSTRUCT(float, float);
 
 struct mate {
   uint32_t m; // Material
   uint32_t i; // Start Index
 };
 
-struct mativ {
-  struct mate *__restrict v;
-  uint32_t l;
-  uint32_t s;
-};
+VECSTRUCT(mati, struct mate);
 
 struct object {
   struct floatv v;
@@ -162,16 +135,14 @@ struct object {
   char name[64];
 };
 
-struct objv {
-  struct object *__restrict v;
-  uint32_t l;
-  uint32_t s;
-};
+VECSTRUCT(obj, struct object);
 
 DEF_VECTOR_SUITE(mat, struct matv *__restrict, struct material)
 DEF_VECTOR_SUITE(obj, struct objv *__restrict, struct object)
 
-void parse_folder(struct objv *__restrict objs, struct matv *__restrict mats, char *__restrict dname, uint8_t otype);
+uint8_t *__restrict read_png(char *__restrict fname, char *__restrict dname, uint32_t *__restrict width, uint32_t *__restrict height);
+
+void parse_folder(struct objv *__restrict objs, struct matv *__restrict mats, char *__restrict dname);
 
 void destroy_object(struct object *__restrict obj);
 

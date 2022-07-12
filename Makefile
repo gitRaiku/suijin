@@ -14,10 +14,12 @@ MOD_DIR  = .mod
 CC       = gcc
 CCFLAGS  = -ggdb3 -Og \
 					 -Wall -march=native -mtune=native -fmodulo-sched \
-					 -fstack-clash-protection \
+					 -fstack-clash-protection -pthread \
 					 -pipe -I$(LIB_DIR)/glad \
 					 -fkeep-inline-functions \
-					 -DSUIJIN_DEBUG -D_FORTIFY_SOURCE=2
+					 -I/usr/include/freetype2 \
+					 -D_FORTIFY_SOURCE=2 
+					 # -DSUIJIN_DEBUG 
 
 LINKER   = $(CC)
 
@@ -25,7 +27,7 @@ DEBUGGER = gdb
 
 DATE := $(shell date "+%Y-%m-%d")
 
-LFLAGS   = -lglfw -lm -lpng
+LFLAGS   = -lglfw -lm -lpng -lfreetype
 
 C_SRC = $(wildcard $(SRC_DIR)/*.c $(SRC_DIR)/*/*.c)
 L_SRC = $(wildcard $(LIB_DIR)/*.c $(LIB_DIR)/*/*.c)
