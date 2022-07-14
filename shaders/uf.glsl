@@ -12,6 +12,6 @@ void main() {
     FragColor = vec4(texture(tex, texCoords).r);
   } else {
     //FragColor = vec4(0.094, 0.094, 0.094, 1.0f);
-    FragColor = vec4(0.5, 0.5, 0.5, 0.8f);
+    FragColor = vec4(0.5, 0.5, 0.5, 0.2f);
   }
 }

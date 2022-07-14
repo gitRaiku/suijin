@@ -435,7 +435,7 @@ void draw_obj(uint32_t program, struct matv *__restrict m, struct object *__rest
 
 struct tbox {
   char text[64];
-  uint32_t height;
+  float scale;
 };
 
 struct fslider {
@@ -476,7 +476,7 @@ void add_title(struct mchv *__restrict m, char *__restrict t) {
   mc.c = malloc(sizeof(struct tbox));
 #define tmc ((struct tbox *)mc.c)
   strncpy(tmc->text, t, sizeof(tmc->text));
-  tmc->height = 20;
+  tmc->scale = 1.0f;
 #undef tmc
 
   mchvp(m, mc);
@@ -559,7 +559,7 @@ uint32_t utf8_to_unicode(char *__restrict str, uint32_t l) {
 
   --l;
   while (l) {
-    ++*str;
+    ++str;
     res <<= 6;
     res |= *str & 0x3F;
     --l;
@@ -589,18 +589,14 @@ uint32_t draw_textbox(float x, uint32_t y, struct tbox *__restrict t) {
 
       update_bw_tex(&ctex, slot->bitmap.rows, slot->bitmap.width, slot->bitmap.buffer);
 
-      //fprintf(stdout, "%c %u\n", *ct, slot->bitmap.rows);
-      //draw_square(x + P3 * P1 * px * iwinw, y + py + P3 * P2 * (mh - slot->bitmap.rows) * iwinh, P3 * slot->bitmap.width, P3 * slot->bitmap.rows, ctex);
-
       int32_t ymax = ftface->bbox.yMax >> 6;
       int32_t advance = ftface->glyph->metrics.horiAdvance >> 6;
       int32_t fw = ftface->glyph->metrics.width >> 6;
+      int32_t fh = ftface->glyph->metrics.height >> 6;
       int32_t xoff = (advance - fw) >> 1;
       int32_t yoff = ymax - (ftface->glyph->metrics.horiBearingY >> 6);
 
-      // fprintf(stdout, "%c - %4i %4i %4i %4i %4i\n", *ct, ymax, advance, fw, xoff, yoff);
-      
-      draw_square(px + x + xoff, y + yoff, fw, ymax, ctex);
+      draw_square(x + (px + xoff) * t->scale, y + yoff * t->scale, fw * t->scale, fh * t->scale, ctex);
 
       px += advance;
 
@@ -674,8 +670,8 @@ void reset_ft() {
   }
   FT_CHECK(FT_Init_FreeType(&ftlib), "Could not initialize the freetype lib");
 
-  //FT_CHECK(FT_New_Face(ftlib, "Resources/Fonts/Koruri/Koruri-Regular.ttf", 0, &ftface), "Could not load the font");
-  FT_CHECK(FT_New_Face(ftlib, "Resources/Fonts/JetBrains/jetbrainsmono.ttf", 0, &ftface), "Could not load the font");
+  FT_CHECK(FT_New_Face(ftlib, "Resources/Fonts/Koruri/Koruri-Regular.ttf", 0, &ftface), "Could not load the font");
+  // FT_CHECK(FT_New_Face(ftlib, "Resources/Fonts/JetBrains/jetbrainsmono.ttf", 0, &ftface), "Could not load the font");
   FT_CHECK(FT_Set_Pixel_Sizes(ftface, 0, (int32_t)42), "Could not set pixel sizes");
   FT_CHECK(FT_Select_Charmap(ftface, FT_ENCODING_UNICODE), "Could not select char map");
 }
@@ -766,10 +762,9 @@ uint8_t run_suijin() {
   uint32_t frame = 0;
 
   mchvi(&mods[0].children);
-  //add_title(&mods[0].children, "Cină de 日本");
-  add_title(&mods[0].children, "am paqatufît");
-  mods[0].px = 500.0f;
-  mods[0].py = 500.0f;
+  add_title(&mods[0].children, "日本語の文字も効きますよ！");
+  mods[0].px = 50.0f;
+  mods[0].py = 50.0f;
   mods[0].sx = 25.0f;
   mods[0].sy = 25.0f;
   mchvt(&mods[0].children);
