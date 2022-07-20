@@ -111,8 +111,8 @@ GLFWwindow *window_init() {
         glfwGetVersion(&glfw_major, &glfw_minor, &glfw_revision);
         fprintf(stdout, "With the runtime GLFW version of %i %i %i\n",
                 glfw_major,
-                glfw_minor,
-                glfw_revision);
+       1        glfw_minor,
+       1        glfw_revision);
     }
 #endif
 
@@ -200,7 +200,7 @@ void reset_ft();
 uint32_t curi = 0;
 float *vals[10];
 float scal[10];
-char *nms[10] = { "P1", "P2", "P3", "P4", "PERSISTANCE", "HEIGHT", "WIDTH" };
+char *nms[10] = { "A", "P2", "P3", "P4", "PERSISTANCE", "HEIGHT", "WIDTH" };
 v2 lims[10];
 double startY = 0;
 uint8_t nwr = 0;
@@ -476,7 +476,7 @@ void add_title(struct mchv *__restrict m, char *__restrict t) {
   mc.c = malloc(sizeof(struct tbox));
 #define tmc ((struct tbox *)mc.c)
   strncpy(tmc->text, t, sizeof(tmc->text));
-  tmc->scale = 1.0f;
+  tmc->scale = 0.55f;
 #undef tmc
 
   mchvp(m, mc);
@@ -589,12 +589,11 @@ uint32_t draw_textbox(float x, uint32_t y, struct tbox *__restrict t) {
 
       update_bw_tex(&ctex, slot->bitmap.rows, slot->bitmap.width, slot->bitmap.buffer);
 
-      int32_t ymax = ftface->bbox.yMax >> 6;
-      int32_t advance = ftface->glyph->metrics.horiAdvance >> 6;
-      int32_t fw = ftface->glyph->metrics.width >> 6;
-      int32_t fh = ftface->glyph->metrics.height >> 6;
-      int32_t xoff = (advance - fw) >> 1;
-      int32_t yoff = ymax - (ftface->glyph->metrics.horiBearingY >> 6);
+      const int32_t advance = ftface->glyph->metrics.horiAdvance >> 6;
+      const int32_t fw = ftface->glyph->metrics.width >> 6;
+      const int32_t fh = ftface->glyph->metrics.height >> 6;
+      const int32_t xoff = ftface->glyph->metrics.horiBearingX >> 6;
+      const int32_t yoff = (ftface->bbox.yMax - ftface->glyph->metrics.horiBearingY) >> 6;
 
       draw_square(x + (px + xoff) * t->scale, y + yoff * t->scale, fw * t->scale, fh * t->scale, ctex);
 
@@ -604,14 +603,14 @@ uint32_t draw_textbox(float x, uint32_t y, struct tbox *__restrict t) {
     }
   }
 
-  return 0;
+  return (uint32_t)(36.0f * t->scale);
 }
 
 uint32_t draw_slider(float x, uint32_t y, struct tbox *__restrict t) {
   return 0;
 }
 
-void draw_ui(uint32_t mi) {
+void draw_node(uint32_t mi) {
 #define cm mods[mi]
   if (lp[1] == 0 &&
       (0 <= mouseX - cm.px && mouseX - cm.px <= cm.sx) &&
@@ -629,10 +628,10 @@ void draw_ui(uint32_t mi) {
     for(i = 0; i < cm.children.l; ++i) {
       switch (cm.children.v[i].id) {
         case MTEXT_BOX:
-          cy += draw_textbox(cm.px - cm.sx / 2, cm.py, cm.children.v[i].c);
+          cy += draw_textbox(cm.px, cm.py + cy, cm.children.v[i].c) + 11;
           break;
         case MFSLIDER:
-          cy += draw_slider(cm.px - cm.sx * iwinw, cm.py, cm.children.v[i].c);
+          cy += draw_slider(cm.px, cm.py + cy, cm.children.v[i].c);
           break;
       }
     }
@@ -763,26 +762,23 @@ uint8_t run_suijin() {
 
   mchvi(&mods[0].children);
   add_title(&mods[0].children, "日本語の文字も効きますよ！");
+  add_title(&mods[0].children, "English too!");
+  add_title(&mods[0].children, "apquijf！");
   mods[0].px = 50.0f;
   mods[0].py = 50.0f;
-  mods[0].sx = 25.0f;
-  mods[0].sy = 25.0f;
+  mods[0].sx = 300.0f;
+  mods[0].sy = 500.0f;
   mchvt(&mods[0].children);
 
-  P1 = 1.7f;
-  P2 = 1.2f;
-  P3 = 1.0f;
-  P4 = 42.0f;
 
-  vals[0] = &P1;
-  vals[1] = &P2;
-  vals[2] = &P3;
-  vals[3] = &P4;
+  vals[0] = &((struct tbox *)mods[0].children.v[0].c)[0].scale;
+  lims[0] = (v2) { 0.0f, 100.0f };
+  scal[0] = 0.1f;
 
-  scal[0] = scal[1] = scal[2] = 0.1f;
-  scal[3] = 1.0f;
-  lims[0] = lims[1] = lims[2] = (v2) {-1000.0f, 1000.0f};
-  lims[3] = (v2) {1.0f, 30000.0f};
+  vals[1] = &P1;
+  lims[1] = (v2) { 0.0f, 100.0f };
+  scal[1] = 0.1f;
+
 
   reset_ft();
 
@@ -823,7 +819,7 @@ uint8_t run_suijin() {
 
       int32_t i;
       for(i = 0; i < MC; ++i) {
-        draw_ui(i);
+        draw_node(i);
       }
     }
 
