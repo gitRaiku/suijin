@@ -46,6 +46,23 @@ struct camera cam;
 struct matv mats;
 struct objv objects;
 
+enum UIT {
+  UIT_CANNOT, UIT_CAN, UIT_NODE, UIT_SLIDERK
+};
+
+union KMS {
+  uint32_t u32;
+  float *__restrict fp;
+};
+
+struct uiSelection {
+  enum UIT t;
+  union KMS id;
+  int32_t dx, dy;
+};
+
+struct uiSelection selui;
+
 uint8_t cameraUpdate = 1;
 #define ZOOM_SPEED 0.01f
 #define PAN_SPEED 0.04f
@@ -273,7 +290,7 @@ void handle_input(GLFWwindow *__restrict window) {
             glfwSetCursorPos(window, windowW / 2.0, windowH / 2.0);
           } else if (kp.action == 0) {
             ms = CAMERA;
-            lp[1] = 0;
+            selui.t = UIT_CANNOT;
             glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
           }
           break;
@@ -288,7 +305,7 @@ void handle_input(GLFWwindow *__restrict window) {
               startY = mouseY;
               ms = ITEMS;
             } else if (ms == UI) {
-              lp[1] = 1;
+              selui.t = UIT_CAN;
             }
             break;
           case GLFW_MOUSE_BUTTON_RIGHT:
@@ -303,7 +320,7 @@ void handle_input(GLFWwindow *__restrict window) {
             if (ms == ITEMS) {
               ms = CAMERA;
             } else if (ms == UI) {
-              lp[1] = 0;
+              selui.t = UIT_CANNOT;
             }
             break;
         }
@@ -467,7 +484,6 @@ struct mod {
   struct mchv children;
 };
 struct mod mods[MC];
-uint32_t selectedUi = 0;
 
 void add_title(struct mchv *__restrict m, char *__restrict t, float sc) {
   struct mchild mc;
@@ -602,11 +618,11 @@ uint32_t draw_textbox(float x, uint32_t y, struct tbox *__restrict t) {
 
       update_bw_tex(&ctex, slot->bitmap.rows, slot->bitmap.width, slot->bitmap.buffer);
 
-      const int32_t advance = ftface->glyph->metrics.horiAdvance >> 6;
-      const int32_t fw = ftface->glyph->metrics.width >> 6;
-      const int32_t fh = ftface->glyph->metrics.height >> 6;
-      const int32_t xoff = ftface->glyph->metrics.horiBearingX >> 6;
-      const int32_t yoff = (ftface->bbox.yMax - ftface->glyph->metrics.horiBearingY) >> 6;
+      int32_t advance = ftface->glyph->metrics.horiAdvance >> 6;
+      int32_t fw = ftface->glyph->metrics.width >> 6;
+      int32_t fh = ftface->glyph->metrics.height >> 6;
+      int32_t xoff = ftface->glyph->metrics.horiBearingX >> 6;
+      int32_t yoff = (ftface->bbox.yMax - ftface->glyph->metrics.horiBearingY) >> 6;
 
       draw_square(x + (px + xoff) * t->scale, y + yoff * t->scale, fw * t->scale, fh * t->scale, ctex);
 
@@ -619,18 +635,27 @@ uint32_t draw_textbox(float x, uint32_t y, struct tbox *__restrict t) {
   return t->bp;
 }
 
-uint32_t draw_slider(float x, uint32_t y, struct mod *__restrict cm, struct fslider *__restrict t) {
-  uint32_t xoff = (*t->val - t->lims.x) / (t->lims.y - t->lims.x) * (cm->sx - cm->lp - cm->rp);
-  draw_square(x + cm->lp / 2, y + 8, cm->sx - cm->lp - cm->rp, 5, 0); // Line
-  draw_square(x + xoff, y, 20, 20, 0);
+uint32_t sS = 21;
 
-  if (lp[1] == 0 &&
-      (0 <= mouseX - x - xoff && mouseX - x - xoff <= 20) &&
-      (0 <= mouseY - y && mouseY - y <= 20)) { 
-    // selectedUi = ;
-    fprintf(stdout, "AAAAAAAAAA");
-    /*mxoff = cm.px - mouseX;
-    myoff = cm.py - mouseY;*/
+uint32_t draw_slider(float x, uint32_t y, struct mod *__restrict cm, struct fslider *__restrict t) {
+  int32_t tlen = cm->sx - cm->lp - cm->rp - sS;
+  float   rlen = t->lims.y - t->lims.x;
+  int32_t xoff = (*t->val - t->lims.x) / rlen * tlen;
+  draw_square(x + sS / 2, y + sS * 0.375f, cm->sx - cm->lp - cm->rp - sS, sS / 4, 0); // Line
+  draw_square(x + xoff, y, sS, sS, 0);
+
+
+  if (selui.t == UIT_CAN &&
+      (0 <= mouseX - x - xoff && mouseX - x - xoff <= sS) &&
+      (0 <= mouseY - y && mouseY - y <= sS)) { 
+    selui.t = UIT_SLIDERK;
+    selui.id.fp = t->val;
+    selui.dx = mouseX;
+    selui.dy = *t->val;
+  }
+
+  if (selui.t == UIT_SLIDERK && selui.id.fp == t->val) {
+    *t->val = clamp(selui.dy + (mouseX - selui.dx) / tlen * rlen, t->lims.x, t->lims.y);
   }
 
   return t->bp;
@@ -638,14 +663,6 @@ uint32_t draw_slider(float x, uint32_t y, struct mod *__restrict cm, struct fsli
 
 void draw_node(uint32_t mi) {
 #define cm mods[mi]
-  if (lp[1] == 0 &&
-      (0 <= mouseX - cm.px && mouseX - cm.px <= cm.sx) &&
-      (0 <= mouseY - cm.py && mouseY - cm.py <= cm.sy)) { 
-    selectedUi = mi;
-    mxoff = cm.px - mouseX;
-    myoff = cm.py - mouseY;
-  }
-
   draw_square(cm.px, cm.py, cm.sx, cm.sy, 0);
 
   {
@@ -661,6 +678,20 @@ void draw_node(uint32_t mi) {
           break;
       }
     }
+  }
+
+  if (selui.t == UIT_CAN &&
+      (0 <= mouseX - cm.px && mouseX - cm.px <= cm.sx) &&
+      (0 <= mouseY - cm.py && mouseY - cm.py <= cm.sy)) { 
+    selui.t = UIT_NODE;
+    selui.id.u32 = mi;
+    selui.dx = cm.px - mouseX;
+    selui.dy = cm.py - mouseY;
+  }
+
+  if (selui.t == UIT_NODE && selui.id.u32 == mi) {
+    cm.px = mouseX + selui.dx;
+    cm.py = mouseY + selui.dy;
   }
 #undef cm
 }
@@ -737,9 +768,9 @@ uint8_t run_suijin() {
 #define SHADERC 4
   uint32_t shaders[SHADERC];
   {
-    const char          *paths[SHADERC] = { "shaders/vv.glsl", "shaders/vf.glsl", 
+    char          *paths[SHADERC] = { "shaders/vv.glsl", "shaders/vf.glsl", 
                                             "shaders/uv.glsl", "shaders/uf.glsl"};
-    const uint32_t shaderTypes[SHADERC] = { GL_VERTEX_SHADER   , GL_FRAGMENT_SHADER,
+    uint32_t shaderTypes[SHADERC] = { GL_VERTEX_SHADER   , GL_FRAGMENT_SHADER,
                                             GL_VERTEX_SHADER   , GL_FRAGMENT_SHADER  };
     uint32_t i;
     for (i = 0; i < SHADERC; ++i) {
@@ -842,9 +873,6 @@ uint8_t run_suijin() {
       }
     }
 
-    if (lp[1] == 0) {
-      selectedUi = 1001;
-    }
     { // UPROG
       glUseProgram(uprog);
       glDisable(GL_DEPTH_TEST);
@@ -853,11 +881,6 @@ uint8_t run_suijin() {
       for(i = 0; i < MC; ++i) {
         draw_node(i);
       }
-    }
-
-    if (lp[1] && selectedUi != 1001) {
-      mods[selectedUi].px = mouseX + mxoff;
-      mods[selectedUi].py = mouseY + myoff;
     }
 
     if (frame % 30 == 0) {
