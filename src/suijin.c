@@ -436,16 +436,13 @@ void draw_obj(uint32_t program, struct matv *__restrict m, struct object *__rest
 struct tbox {
   char text[64];
   float scale;
+  uint32_t bp;
 };
 
 struct fslider {
   float *__restrict val;
-  uint32_t height;
-};
-
-union MCI {
-  struct tbox t;
-  struct fslider s;
+  v2 lims;
+  uint32_t bp;
 };
 
 enum MCHID {
@@ -462,21 +459,37 @@ VECTOR_SUITE(mch, struct mchv *__restrict, struct mchild)
 
 #define MC 1
 struct mod {
-  float px, py;
-  float sx, sy;
+  float px, py;    // Pos
+  float sx, sy;    // Size
+  uint32_t lp, rp; // Left, right padding
+  uint32_t bp, tp; // Bottom, top padding
   mat4 aff;
   struct mchv children;
 };
 struct mod mods[MC];
 uint32_t selectedUi = 0;
 
-void add_title(struct mchv *__restrict m, char *__restrict t) {
+void add_title(struct mchv *__restrict m, char *__restrict t, float sc) {
   struct mchild mc;
   mc.id = MTEXT_BOX;
   mc.c = malloc(sizeof(struct tbox));
 #define tmc ((struct tbox *)mc.c)
   strncpy(tmc->text, t, sizeof(tmc->text));
-  tmc->scale = 0.55f;
+  tmc->scale = sc;
+  tmc->bp = (uint32_t) 36.0f * sc;
+#undef tmc
+
+  mchvp(m, mc);
+}
+
+void add_slider(struct mchv *__restrict m, float *__restrict v, v2 lims) {
+  struct mchild mc;
+  mc.id = MFSLIDER;
+  mc.c = malloc(sizeof(struct fslider));
+#define tmc ((struct fslider *)mc.c)
+  tmc->val = v;
+  tmc->lims = lims;
+  tmc->bp = 36;
 #undef tmc
 
   mchvp(m, mc);
@@ -603,11 +616,24 @@ uint32_t draw_textbox(float x, uint32_t y, struct tbox *__restrict t) {
     }
   }
 
-  return (uint32_t)(36.0f * t->scale);
+  return t->bp;
 }
 
-uint32_t draw_slider(float x, uint32_t y, struct tbox *__restrict t) {
-  return 0;
+uint32_t draw_slider(float x, uint32_t y, struct mod *__restrict cm, struct fslider *__restrict t) {
+  uint32_t xoff = (*t->val - t->lims.x) / (t->lims.y - t->lims.x) * (cm->sx - cm->lp - cm->rp);
+  draw_square(x + cm->lp / 2, y + 8, cm->sx - cm->lp - cm->rp, 5, 0); // Line
+  draw_square(x + xoff, y, 20, 20, 0);
+
+  if (lp[1] == 0 &&
+      (0 <= mouseX - x - xoff && mouseX - x - xoff <= 20) &&
+      (0 <= mouseY - y && mouseY - y <= 20)) { 
+    // selectedUi = ;
+    fprintf(stdout, "AAAAAAAAAA");
+    /*mxoff = cm.px - mouseX;
+    myoff = cm.py - mouseY;*/
+  }
+
+  return t->bp;
 }
 
 void draw_node(uint32_t mi) {
@@ -624,14 +650,14 @@ void draw_node(uint32_t mi) {
 
   {
     int32_t i;
-    uint32_t cy = 0;
+    uint32_t cy = cm.tp;
     for(i = 0; i < cm.children.l; ++i) {
       switch (cm.children.v[i].id) {
         case MTEXT_BOX:
-          cy += draw_textbox(cm.px, cm.py + cy, cm.children.v[i].c) + 11;
+          cy += draw_textbox(cm.px + cm.lp, cm.py + cy, cm.children.v[i].c) + 11;
           break;
         case MFSLIDER:
-          cy += draw_slider(cm.px, cm.py + cy, cm.children.v[i].c);
+          cy += draw_slider(cm.px + cm.lp, cm.py + cy, &cm, cm.children.v[i].c) + 11;
           break;
       }
     }
@@ -761,13 +787,19 @@ uint8_t run_suijin() {
   uint32_t frame = 0;
 
   mchvi(&mods[0].children);
-  add_title(&mods[0].children, "日本語の文字も効きますよ！");
-  add_title(&mods[0].children, "English too!");
-  add_title(&mods[0].children, "apquijf！");
+  add_title(&mods[0].children, "日本語の文字も効きますよ！", 0.55f);
+  add_title(&mods[0].children, "English too!", 1.0f);
+  add_title(&mods[0].children, "apquijf！", 0.5f);
+  add_slider(&mods[0].children, &mods[0].sy, (v2) { 0.0f, 700.0f });
   mods[0].px = 50.0f;
   mods[0].py = 50.0f;
   mods[0].sx = 300.0f;
   mods[0].sy = 500.0f;
+  mods[0].bp = 20;
+  mods[0].tp = 20;
+  mods[0].lp = 20;
+  mods[0].rp = 20;
+
   mchvt(&mods[0].children);
 
 
