@@ -44,7 +44,7 @@ struct camera initCam;
 struct camera cam;
 
 struct matv mats;
-struct objv objects;
+struct modv mods;
 
 enum UIT {
   UIT_CANNOT, UIT_CAN, UIT_NODE, UIT_SLIDERK
@@ -65,13 +65,12 @@ struct uiSelection selui;
 
 uint8_t cameraUpdate = 1;
 #define ZOOM_SPEED 0.01f
-#define PAN_SPEED 0.04f
+#define PAN_SPEED 13.0f
 #define SENS 0.001f
 
 mat4 fn;
 int windowW, windowH;
 float iwinw, iwinh;
-float P1, P2, P3, P4;
 
 void callback_error(int error, const char *desc) {
     fprintf(stderr, "GLFW error, no %i, desc %s\n", error, desc);
@@ -329,7 +328,7 @@ void handle_input(GLFWwindow *__restrict window) {
   }
 
   { // KEY_PRESSED
-    float cpanSpeed = PAN_SPEED + KEY_PRESSED(GLFW_KEY_LEFT_SHIFT) * PAN_SPEED;
+    float cpanSpeed = (PAN_SPEED + KEY_PRESSED(GLFW_KEY_LEFT_SHIFT) * PAN_SPEED) * deltaTime;
     if (KEY_PRESSED(GLFW_KEY_EQUAL) && KEY_PRESSED(GLFW_KEY_LEFT_SHIFT)) {
       cam.fov += cam.fov * ZOOM_SPEED;
       cameraUpdate = 1;
@@ -407,20 +406,20 @@ void update_mat(uint32_t program, struct material *__restrict mat) {
   program_set_int1(program, "mat.illum", mat->illum);
 }
 
-void draw_obj(uint32_t program, struct matv *__restrict m, struct object *__restrict obj) {
+void draw_model(uint32_t program, struct matv *__restrict m, struct model *__restrict mod, mat4 aff) {
   uint32_t li = 0;
   struct material *__restrict cmat;
 
-  glBindVertexArray(obj->vao);
+  glBindVertexArray(mod->vao);
 
-  program_set_mat4(program, "affine", obj->aff);
+  program_set_mat4(program, "affine", aff);
 
-  cmat = &m->v[obj->m.v[0].m];
+  cmat = &m->v[mod->m.v[0].m];
   update_mat(program, cmat);
 
   {
     int32_t i;
-    for(i = 1; i < obj->m.l; ++i) {
+    for(i = 1; i < mod->m.l; ++i) {
       if (cmat->tamb.i != 0) {
         glActiveTexture(GL_TEXTURE0);
         glBindTexture(GL_TEXTURE_2D, cmat->tamb.i);
@@ -430,10 +429,10 @@ void draw_obj(uint32_t program, struct matv *__restrict m, struct object *__rest
         program_set_int1(program, "hasTexture", 0);
       }
       
-      glDrawArrays(GL_TRIANGLES, li / 8, (obj->m.v[i].i - li) / 8);
-      li = obj->m.v[i].i;
+      glDrawArrays(GL_TRIANGLES, li / 8, (mod->m.v[i].i - li) / 8);
+      li = mod->m.v[i].i;
 
-      cmat = &m->v[obj->m.v[i].m];
+      cmat = &m->v[mod->m.v[i].m];
       update_mat(program, cmat);
     }
   }
@@ -447,7 +446,7 @@ void draw_obj(uint32_t program, struct matv *__restrict m, struct object *__rest
     program_set_int1(program, "hasTexture", 0);
   }
 
-  glDrawArrays(GL_TRIANGLES, li / 8, (obj->v.l - li) / 8);
+  glDrawArrays(GL_TRIANGLES, li / 8, (mod->v.l - li) / 8);
 }
 
 struct tbox {
@@ -475,7 +474,7 @@ VECSTRUCT(mch, struct mchild);
 VECTOR_SUITE(mch, struct mchv *__restrict, struct mchild)
 
 #define MC 2
-struct mod {
+struct node {
   float px, py;    // Pos
   float sx, sy;    // Size
   uint32_t lp, rp; // Left, right padding
@@ -483,9 +482,9 @@ struct mod {
   mat4 aff;
   struct mchv children;
 };
-struct mod mods[MC];
+struct node nodes[MC];
 
-void add_title(struct mod *__restrict m, char *__restrict t, float sc) {
+void add_title(struct node *__restrict m, char *__restrict t, float sc) {
   struct mchild mc;
   mc.id = MTEXT_BOX;
   mc.c = malloc(sizeof(struct tbox));
@@ -498,7 +497,7 @@ void add_title(struct mod *__restrict m, char *__restrict t, float sc) {
   mchvp(&m->children, mc);
 }
 
-void add_slider(struct mod *__restrict m, float *__restrict v, float lb, float ub) {
+void add_slider(struct node *__restrict m, float *__restrict v, float lb, float ub) {
   struct mchild mc;
   mc.id = MFSLIDER;
   mc.c = malloc(sizeof(struct fslider));
@@ -656,7 +655,7 @@ uint32_t draw_textbox(float x, uint32_t y, struct tbox *__restrict t) {
 
 uint32_t sS = 21;
 
-uint32_t draw_slider(float x, uint32_t y, struct mod *__restrict cm, struct fslider *__restrict t) {
+uint32_t draw_slider(float x, uint32_t y, struct node *__restrict cm, struct fslider *__restrict t) {
   int32_t tlen = cm->sx - cm->lp - cm->rp - sS;
   float   rlen = t->lims.y - t->lims.x;
   int32_t xoff = (*t->val - t->lims.x) / rlen * tlen;
@@ -681,7 +680,7 @@ uint32_t draw_slider(float x, uint32_t y, struct mod *__restrict cm, struct fsli
 }
 
 void draw_node(uint32_t mi) {
-#define cm mods[mi]
+#define cm nodes[mi]
   draw_squarec(cm.px, cm.py, cm.sx, cm.sy, 0x181818FF);
 
   {
@@ -768,17 +767,51 @@ uint8_t run_suijin() {
   glLineWidth(3.0);
   glEnable(GL_DEPTH_TEST);
   glEnable(GL_BLEND);
-  glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA); 
+  glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
-  matvi(&mats);
-  objvi(&objects);
+  struct objv objs;
 
-  parse_folder(&objects, &mats, "Resources/Items/Mountain");
-  //parse_folder(&objects, &mats, "Resources/Items/Dough");
-  //parse_folder(&objects, &uim, "Resources/Items/Plane");
+  { /// Asset loading
+    modvi(&mods);
+    matvi(&mats);
 
-  matvt(&mats);
-  objvt(&objects);
+    parse_folder(&mods, &mats, "Resources/Items/Mountain");
+    parse_folder(&mods, &mats, "Resources/Items/Dough");
+    //parse_folder(&mods, &uim, "Resources/Items/Plane");
+    
+    matvt(&mats);
+    modvt(&mods);
+  }
+
+  {
+    struct object cobj;
+
+    objvi(&objs);
+    init_object(&cobj, "MIAN");
+
+    struct minf cm;
+    
+    cm.scale = 10.0f;
+    cm.m = 0;
+    cm.pos = (v3) {0.0f, 0.0f, 0.0f};
+    maff(&cm);
+    minfvp(&cobj.mins, cm);
+    objvp(&objs, cobj);
+
+    init_object(&cobj, "DOUGH");
+    cm.m = 1;
+    cm.scale = 10.0f;
+    cm.pos = (v3) {-60.0f, 40.0f, -30.0f};
+    maff(&cm);
+    minfvp(&cobj.mins, cm);
+
+    cm.m = 2;
+    minfvp(&cobj.mins, cm);
+    objvp(&objs, cobj);
+
+    minfvt(&cobj.mins);
+    objvt(&objs);
+  }
 
   uint32_t nprog;
 
@@ -835,45 +868,6 @@ uint8_t run_suijin() {
   oldMouseY = 0.0;
 
   uint32_t frame = 0;
-
-  mchvi(&mods[0].children);
-  add_title(&mods[0], "日本語の文字も効きますよ！", 0.3f);
-  add_title(&mods[0], "English too!", 0.5f);
-  add_title(&mods[0], "apquijf！", 0.4f);
-  add_title(&mods[0], "Height", 0.3f);
-  add_slider(&mods[0], &mods[0].sy, 0.0f, 700.0f);
-  add_title(&mods[0], "Width", 0.3f);
-  add_slider(&mods[0], &mods[1].sx, 0.0f, 700.0f);
-  add_title(&mods[0], "Size", 0.3f);
-  add_slider(&mods[0], &mods[0].sy, 0.0f, 700.0f);
-  mods[0].px = 50.0f;
-  mods[0].py = 50.0f;
-  mods[0].sx = 300.0f;
-  mods[0].sy = 500.0f;
-  mods[0].bp = 20;
-  mods[0].tp = 20;
-  mods[0].lp = 20;
-  mods[0].rp = 20;
-  mchvt(&mods[0].children);
-
-  mchvi(&mods[1].children);
-  add_title(&mods[1], "Height", 0.3f);
-  add_slider(&mods[1], &mods[1].sy, 0.0f, 700.0f);
-  add_title(&mods[1], "Width", 0.3f);
-  add_slider(&mods[1], &mods[0].sx, 0.0f, 700.0f);
-  add_title(&mods[1], "Size", 0.3f);
-  add_slider(&mods[1], &mods[1].sy, 0.0f, 700.0f);
-  mods[1].px = 50.0f;
-  mods[1].py = 50.0f;
-  mods[1].sx = 300.0f;
-  mods[1].sy = 500.0f;
-  mods[1].bp = 20;
-  mods[1].tp = 20;
-  mods[1].lp = 20;
-  mods[1].rp = 20;
-  mchvt(&mods[1].children);
-
-
   reset_ft();
 
   while (!glfwWindowShouldClose(window)) {
@@ -898,9 +892,11 @@ uint8_t run_suijin() {
       program_set_mat4(nprog, "fn_mat", fn);
       program_set_int1(nprog, "shading", cshading);
       program_set_float3v(nprog, "camPos", cam.pos);
-      int32_t i;
-      for(i = 0; i < objects.l; ++i) {
-        draw_obj(nprog, &mats, objects.v + i);
+      int32_t i, j;
+      for(i = 0; i < objs.l; ++i) {
+        for(j = 0; j < objs.v[i].mins.l; ++j) {
+          draw_model(nprog, &mats, mods.v + objs.v[i].mins.v[j].m, objs.v[i].mins.v[j].aff);
+        }
       }
     }
 
@@ -930,14 +926,14 @@ uint8_t run_suijin() {
     _ltime = _ctime;
   }
 
-  {
+  /*{
     int32_t i;
-    for(i = 0; i < objects.l; ++i) {
-      free(objects.v[i].m.v);
+    for(i = 0; i < mods.l; ++i) {
+      destroy_model(mods.v + i);
     }
-    free(objects.v);
+    free(mods.v);
     free(mats.v);
-  }
+  }*/
 
   glfwTerminate();
 

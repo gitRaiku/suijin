@@ -120,32 +120,48 @@ struct mate {
 
 VECSTRUCT(mati, struct mate);
 
-struct object {
+struct model {
   struct floatv v;
   struct mativ m;
 
   uint32_t vao;
   uint32_t vbo;
 
+  char name[64];
+};
+
+
+struct minf {
+  uint32_t m;
   float scale;
   v3 pos;
 
   mat4 aff;
+};
 
+VECSTRUCT(minf, struct minf);
+
+struct object {
+  struct minfv mins;
   char name[64];
 };
 
+VECSTRUCT(mod, struct model);
 VECSTRUCT(obj, struct object);
 
+DEF_VECTOR_SUITE(minf, struct minfv *__restrict, struct minf)
 DEF_VECTOR_SUITE(mat, struct matv *__restrict, struct material)
+DEF_VECTOR_SUITE(mod, struct modv *__restrict, struct model)
 DEF_VECTOR_SUITE(obj, struct objv *__restrict, struct object)
 
 uint8_t *__restrict read_png(char *__restrict fname, char *__restrict dname, uint32_t *__restrict width, uint32_t *__restrict height);
 
-void parse_folder(struct objv *__restrict objs, struct matv *__restrict mats, char *__restrict dname);
+void parse_folder(struct modv *__restrict mods, struct matv *__restrict mats, char *__restrict dname);
 
-void destroy_object(struct object *__restrict obj);
+void init_object(struct object *__restrict o, char *__restrict name);
 
-void update_affine_matrix(struct object *__restrict obj);
+void destroy_model(struct model *__restrict mod);
+
+void maff(struct minf *__restrict m);
 
 #endif

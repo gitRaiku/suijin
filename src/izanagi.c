@@ -5,7 +5,9 @@ VECTOR_SUITE(v2, struct v2v *__restrict, v2)
 VECTOR_SUITE(mati, struct mativ *__restrict, struct mate)
 VECTOR_SUITE(float, struct floatv *__restrict, float)
 VECTOR_SUITE(mat, struct matv *__restrict, struct material)
+VECTOR_SUITE(mod, struct modv *__restrict, struct model)
 VECTOR_SUITE(obj, struct objv *__restrict, struct object)
+VECTOR_SUITE(minf, struct minfv *__restrict, struct minf)
 
 char _getc(struct fbuf *__restrict cb) {
   if (cb->flags & UNREADABLE_MASK) {
@@ -306,20 +308,24 @@ void facevt(struct facev *__restrict v) {
   }
 }
 
-void update_affine_matrix(struct object *__restrict obj) {
-  obj->aff[0][0] = obj->scale; obj->aff[0][1] =          0; obj->aff[0][2] =          0; obj->aff[0][3] = obj->pos.x; 
-  obj->aff[1][0] =          0; obj->aff[1][1] = obj->scale; obj->aff[1][2] =          0; obj->aff[1][3] = obj->pos.y; 
-  obj->aff[2][0] =          0; obj->aff[2][1] =          0; obj->aff[2][2] = obj->scale; obj->aff[2][3] = obj->pos.z; 
-  obj->aff[3][0] =          0; obj->aff[3][1] =          0; obj->aff[3][2] =          0; obj->aff[3][3] =          1; 
+void maff(struct minf *__restrict m) {
+  m->aff[0][0] = m->scale; m->aff[0][1] =        0; m->aff[0][2] =        0; m->aff[0][3] = m->pos.x; 
+  m->aff[1][0] =        0; m->aff[1][1] = m->scale; m->aff[1][2] =        0; m->aff[1][3] = m->pos.y; 
+  m->aff[2][0] =        0; m->aff[2][1] =        0; m->aff[2][2] = m->scale; m->aff[2][3] = m->pos.z; 
+  m->aff[3][0] =        0; m->aff[3][1] =        0; m->aff[3][2] =        0; m->aff[3][3] =        1; 
 }
 
-void init_object(struct object *__restrict o) {
+void init_model(struct model *__restrict m) {
+  memset(m, 0, sizeof(struct model));
+  floatvi(&m->v);
+  mativi(&m->m);
+}
+
+void init_object(struct object *__restrict o, char *__restrict name) {
   memset(o, 0, sizeof(struct object));
-  o->name[0] = '\0';
-  o->scale = 1.0f;
-  update_affine_matrix(o);
-  floatvi(&o->v);
-  mativi(&o->m);
+
+  minfvi(&o->mins);
+  strncpy(o->name, name, 64);
 }
 
 union OBJ_MEMBERS {
@@ -366,65 +372,6 @@ enum IDS id_tok(char tok[64]) {
   return OUNDEF;
 }
 
-void id_to_str(enum IDS id) {
-  char *VE = "VERTEX";
-  char *TE = "TEXTURE_COORDS";
-  char *VN = "VERTEX_NORMAL";
-  char *FA = "FACE";
-  char *ML = "MATERIAL_LIB";
-  char *UM = "USE_MATERIAL";
-  char *OB = "OBJECT";
-  char *GR = "GROUP";
-  char *SM = "SMOOTH_SHADING";
-  char *CO = "OCOMMENT";
-  char *UN = "OUNDEF";
-  char *s = UN;
-  switch (id) {
-    case VERTEX:
-      s = VE;
-      break;
-    case TEXTURE_COORDS:
-      s = TE;
-      break;
-    case VERTEX_NORMAL:
-      s = VN;
-      break;
-    case FACE:
-      s = FA;
-      break;
-    case MATERIAL_LIB:
-      s = ML;
-      break;
-    case USE_MATERIAL:
-      s = UM;
-      break;
-    case OBJECT:
-      s = OB;
-      break;
-    case GROUP:
-      s = GR;
-      break;
-    case SMOOTH_SHADING:
-      s = SM;
-      break;
-    case OCOMMENT:
-      s = CO;
-      break;
-    case OUNDEF:
-      s = UN;
-      break;
-  }
-  fprintf(stdout, "Got id %u [%s]\n", id, s);
-}
-
-void destroy_object(struct object *__restrict obj) {
-  /*free(obj->v.v);
-  free(obj->t.v);
-  free(obj->n.v);
-  free(obj->f.v);*/
-  // Free materials separately
-}
-
 void add_i_dont_even_know(v3 *__restrict v, struct floatv *__restrict fv, struct v3v *__restrict verts, struct v3v *__restrict norms, struct v2v *__restrict texts) {
     floatvp(fv, verts->v[(uint32_t)v->x].x); // TODO: Boy do i love shite code
     floatvp(fv, verts->v[(uint32_t)v->x].y);
@@ -462,18 +409,18 @@ void create_vao(float *__restrict v, uint32_t s, uint32_t *__restrict vbo, uint3
   glEnableVertexAttribArray(2);
 }
 
-void parse_object_file(struct objv *__restrict objs, struct matv *__restrict materials, uint32_t fd, uint32_t dfd, char *__restrict fname, char *__restrict dname) {
+void parse_model_file(struct modv *__restrict mods, struct matv *__restrict materials, uint32_t fd, uint32_t dfd, char *__restrict fname, char *__restrict dname) {
   struct fbuf cb;
   struct v3v verts;
   struct v3v norms;
   struct v2v texts;
-  struct object cobj;
+  struct model cmod;
   v3vi(&verts);
   v3vi(&norms);
   v2vi(&texts);
 
   memset(&cb, 0, sizeof(cb));
-  memset(&cobj, 0, sizeof(cobj));
+  memset(&cmod, 0, sizeof(cmod));
   
   cb.bufp = cb.bufl = 0;
   cb.fd = fd;
@@ -518,7 +465,7 @@ void parse_object_file(struct objv *__restrict objs, struct matv *__restrict mat
             om.v3.x = read_float(&cb) - 1;
             om.v3.y = read_float(&cb) - 1;
             om.v3.z = read_float(&cb) - 1;
-            add_i_dont_even_know(&om.v3, &cobj.v, &verts, &norms, &texts);
+            add_i_dont_even_know(&om.v3, &cmod.v, &verts, &norms, &texts);
           }
         }
         break;
@@ -529,19 +476,19 @@ void parse_object_file(struct objv *__restrict objs, struct matv *__restrict mat
         break;
       case USE_MATERIAL:
         next_token(tok, &cb);
-        mativp(&cobj.m, (struct mate) { gmi(materials, tok), cobj.v.l });
+        mativp(&cmod.m, (struct mate) { gmi(materials, tok), cmod.v.l });
         break;
       case OBJECT:
-        if (cobj.name[0] != '\0') {
-          create_vao(cobj.v.v, cobj.v.l, &cobj.vbo, &cobj.vao);
+        if (cmod.name[0] != '\0') {
+          create_vao(cmod.v.v, cmod.v.l, &cmod.vbo, &cmod.vao);
 
-          mativt(&cobj.m);
-          free(cobj.v.v);
-          objvp(objs, cobj);
+          mativt(&cmod.m);
+          free(cmod.v.v);
+          modvp(mods, cmod);
         }
-        init_object(&cobj);
+        init_model(&cmod);
         next_token(tok, &cb);
-        strncpy(cobj.name, tok, 64);
+        strncpy(cmod.name, tok, 64);
         break;
       case GROUP:
         next_token(tok, &cb);
@@ -562,86 +509,17 @@ void parse_object_file(struct objv *__restrict objs, struct matv *__restrict mat
     }
   }
   
-  create_vao(cobj.v.v, cobj.v.l, &cobj.vbo, &cobj.vao);
-  mativt(&cobj.m);
-  free(cobj.v.v);
-  objvp(objs, cobj);
+  create_vao(cmod.v.v, cmod.v.l, &cmod.vbo, &cmod.vao);
+  mativt(&cmod.m);
+  free(cmod.v.v);
+  modvp(mods, cmod);
 
   free(verts.v);
   free(norms.v);
   free(texts.v);
 }
 
-struct minfo {
-  vec3 pos;
-  float scale;
-};
-
-enum MINFIDS { MINFCOMMENT, MINFSCALE, MINFPOS, MINFUNDEF };
-enum MINFIDS minfid_tok(char *__restrict tok) {
-  switch (tok[0]) {
-    case 's':
-      return MINFSCALE;
-    case 'p':
-      return MINFPOS;
-    case '\n':
-    case '#':
-      return MINFCOMMENT;
-    default:
-      return MINFUNDEF;
-  }
-  return MINFUNDEF;
-}
-
-void parse_minfo_obj(struct minfo *__restrict cm, uint32_t fd, char *__restrict fname) {
-  struct fbuf cb;
-  uint32_t line_number = 0;
-  char tok[128] = {0};
-  enum MINFIDS id;
-
-  memset(&cb, 0, sizeof(cb));
-  memset(cm, 0, sizeof(*cm));
-
-  cb.bufp = cb.bufl = 0;
-  cb.fd = fd;
-
-  while ((cb.flags & UNREADABLE_MASK) == 0) {
-    ++line_number;
-    cb.flags &= ~LINEND_MASK;
-    next_token(tok, &cb);
-    if (cb.flags & UNREADABLE_MASK) {
-      break;
-    }
-    
-    id = minfid_tok(tok);
-    switch (id) {
-      case MINFSCALE:
-        cm->scale = read_float(&cb);
-        break;
-      case MINFPOS:
-        cm->pos.x = read_float(&cb);
-        cm->pos.y = read_float(&cb);
-        cm->pos.z = read_float(&cb);
-        break;
-      case MINFCOMMENT:
-        while ((cb.flags & LINEND_MASK) == 0) {
-          next_token(tok, &cb);
-        }
-        break;
-      default:
-        fprintf(stderr, "Undefined token at %s:%u [%s]\n", fname, line_number, tok);
-        break;
-    }
-  }
-}
-
-void apply_minfo(struct object *__restrict o, struct minfo *__restrict cm) {
-  o->scale = cm->scale;
-  o->pos = cm->pos;
-  update_affine_matrix(o);
-}
-
-void parse_folder(struct objv *__restrict objs, struct matv *__restrict mats, char *__restrict dname) {
+void parse_folder(struct modv *__restrict mods, struct matv *__restrict mats, char *__restrict dname) {
   DIR *d = opendir(dname);
   if (d == NULL) {
     fprintf(stderr, "Could not open directory %s! %m\n", dname);
@@ -651,27 +529,22 @@ void parse_folder(struct objv *__restrict objs, struct matv *__restrict mats, ch
   struct dirent *__restrict di;
   uint32_t fd, dfd;
   dfd = dirfd(d);
-  struct minfo cm = {0};
   while ((di = readdir(d)) != NULL) {
     if (strstr(di->d_name, ".obj")) {
-      // fprintf(stdout, "Got object %s/%s!\n", dname, di->d_name);
       fd = openat(dfd, di->d_name, O_RDONLY);
-      parse_object_file(objs, mats, fd, dfd, di->d_name, dname); /// TODO: libpng openat
-      close(fd);
-    } else if (strstr(di->d_name, ".minfo")) {
-      // fprintf(stdout, "Got minfo %s/%s!\n", dname, di->d_name);
-      fd = openat(dfd, di->d_name, O_RDONLY);
-      parse_minfo_obj(&cm, fd, di->d_name);
+      parse_model_file(mods, mats, fd, dfd, di->d_name, dname); /// TODO: libpng openat
       close(fd);
     }
   }
 
-  if (cm.scale != 0.0f) {
-    apply_minfo(objs->v + objs->l - 1, &cm);
-  }
-
-  if (objs->v[objs->l - 1].name[0] == '\0') {
+  if (mods->v[mods->l - 1].name[0] == '\0') {
     fprintf(stderr, "Couldn't find any .obj in %s!\n", dname);
   }
   closedir(d);
+}
+
+void destroy_model(struct model *__restrict mod) {
+  free(mod->v.v);
+  free(mod->m.v);
+  free(mod);
 }
