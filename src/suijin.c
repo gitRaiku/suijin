@@ -474,7 +474,7 @@ struct mchild {
 VECSTRUCT(mch, struct mchild);
 VECTOR_SUITE(mch, struct mchv *__restrict, struct mchild)
 
-#define MC 1
+#define MC 2
 struct mod {
   float px, py;    // Pos
   float sx, sy;    // Size
@@ -485,7 +485,7 @@ struct mod {
 };
 struct mod mods[MC];
 
-void add_title(struct mchv *__restrict m, char *__restrict t, float sc) {
+void add_title(struct mod *__restrict m, char *__restrict t, float sc) {
   struct mchild mc;
   mc.id = MTEXT_BOX;
   mc.c = malloc(sizeof(struct tbox));
@@ -495,20 +495,20 @@ void add_title(struct mchv *__restrict m, char *__restrict t, float sc) {
   tmc->bp = (uint32_t) 36.0f * sc;
 #undef tmc
 
-  mchvp(m, mc);
+  mchvp(&m->children, mc);
 }
 
-void add_slider(struct mchv *__restrict m, float *__restrict v, v2 lims) {
+void add_slider(struct mod *__restrict m, float *__restrict v, float lb, float ub) {
   struct mchild mc;
   mc.id = MFSLIDER;
   mc.c = malloc(sizeof(struct fslider));
 #define tmc ((struct fslider *)mc.c)
   tmc->val = v;
-  tmc->lims = lims;
+  tmc->lims = (v2) {lb, ub};
   tmc->bp = 36;
 #undef tmc
 
-  mchvp(m, mc);
+  mchvp(&m->children, mc);
 }
 
 void identity_matrix(mat4 m) {
@@ -526,7 +526,7 @@ void create_affine_matrix(mat4 m, float xs, float ys, float zs, float x, float y
 }
 
 uint32_t uvao, uprog; // Draw Square
-void draw_square(float px, float py, float sx, float sy, uint32_t tex) {
+void draw_squaret(float px, float py, float sx, float sy, uint32_t tex) {
   mat4 aff;
   glUseProgram(uprog);
   glBindVertexArray(uvao);
@@ -546,6 +546,25 @@ void draw_square(float px, float py, float sx, float sy, uint32_t tex) {
 
   glDrawArrays(GL_TRIANGLE_FAN, 0, 4);
 }
+
+void draw_squarec(float px, float py, float sx, float sy, uint32_t col) {
+  mat4 aff;
+  glUseProgram(uprog);
+  glBindVertexArray(uvao);
+  float cpx = ((px + sx / 2) * iwinw) * 2 - 1;
+  float cpy = ((py + sy / 2) * iwinh) * 2 - 1;
+  create_affine_matrix(aff, sx, sy, 1.0f, cpx, -cpy, 0.0f);
+  program_set_mat4(uprog, "affine", aff);
+
+  program_set_int1(uprog, "hasTexture", 0);
+  program_set_float4(uprog, "col", ((col & 0xFF000000) >> 24) / 255.0f, 
+                                   ((col & 0x00FF0000) >> 16) / 255.0f,
+                                   ((col & 0x0000FF00) >>  8) / 255.0f, 
+                                   ((col & 0x000000FF) >>  0) / 255.0f);
+
+  glDrawArrays(GL_TRIANGLE_FAN, 0, 4);
+}
+
 
 struct TG {
   uint32_t index;
@@ -624,7 +643,7 @@ uint32_t draw_textbox(float x, uint32_t y, struct tbox *__restrict t) {
       int32_t xoff = ftface->glyph->metrics.horiBearingX >> 6;
       int32_t yoff = (ftface->bbox.yMax - ftface->glyph->metrics.horiBearingY) >> 6;
 
-      draw_square(x + (px + xoff) * t->scale, y + yoff * t->scale, fw * t->scale, fh * t->scale, ctex);
+      draw_squaret(x + (px + xoff) * t->scale, y + yoff * t->scale, fw * t->scale, fh * t->scale, ctex);
 
       px += advance;
 
@@ -641,8 +660,8 @@ uint32_t draw_slider(float x, uint32_t y, struct mod *__restrict cm, struct fsli
   int32_t tlen = cm->sx - cm->lp - cm->rp - sS;
   float   rlen = t->lims.y - t->lims.x;
   int32_t xoff = (*t->val - t->lims.x) / rlen * tlen;
-  draw_square(x + sS / 2, y + sS * 0.375f, cm->sx - cm->lp - cm->rp - sS, sS / 4, 0); // Line
-  draw_square(x + xoff, y, sS, sS, 0);
+  draw_squarec(x + sS / 2, y + sS * 0.375f, cm->sx - cm->lp - cm->rp - sS, sS / 4, 0xC2C2C2FF); // Line
+  draw_squarec(x + xoff, y, sS, sS, 0x323232FF);
 
 
   if (selui.t == UIT_CAN &&
@@ -663,7 +682,7 @@ uint32_t draw_slider(float x, uint32_t y, struct mod *__restrict cm, struct fsli
 
 void draw_node(uint32_t mi) {
 #define cm mods[mi]
-  draw_square(cm.px, cm.py, cm.sx, cm.sy, 0);
+  draw_squarec(cm.px, cm.py, cm.sx, cm.sy, 0x181818FF);
 
   {
     int32_t i;
@@ -728,7 +747,7 @@ void reset_ft() {
 
   FT_CHECK(FT_New_Face(ftlib, "Resources/Fonts/Koruri/Koruri-Regular.ttf", 0, &ftface), "Could not load the font");
   // FT_CHECK(FT_New_Face(ftlib, "Resources/Fonts/JetBrains/jetbrainsmono.ttf", 0, &ftface), "Could not load the font");
-  FT_CHECK(FT_Set_Pixel_Sizes(ftface, 0, (int32_t)42), "Could not set pixel sizes");
+  FT_CHECK(FT_Set_Pixel_Sizes(ftface, 0, (int32_t)72), "Could not set pixel sizes");
   FT_CHECK(FT_Select_Charmap(ftface, FT_ENCODING_UNICODE), "Could not select char map");
 }
 
@@ -818,10 +837,15 @@ uint8_t run_suijin() {
   uint32_t frame = 0;
 
   mchvi(&mods[0].children);
-  add_title(&mods[0].children, "日本語の文字も効きますよ！", 0.55f);
-  add_title(&mods[0].children, "English too!", 1.0f);
-  add_title(&mods[0].children, "apquijf！", 0.5f);
-  add_slider(&mods[0].children, &mods[0].sy, (v2) { 0.0f, 700.0f });
+  add_title(&mods[0], "日本語の文字も効きますよ！", 0.3f);
+  add_title(&mods[0], "English too!", 0.5f);
+  add_title(&mods[0], "apquijf！", 0.4f);
+  add_title(&mods[0], "Height", 0.3f);
+  add_slider(&mods[0], &mods[0].sy, 0.0f, 700.0f);
+  add_title(&mods[0], "Width", 0.3f);
+  add_slider(&mods[0], &mods[1].sx, 0.0f, 700.0f);
+  add_title(&mods[0], "Size", 0.3f);
+  add_slider(&mods[0], &mods[0].sy, 0.0f, 700.0f);
   mods[0].px = 50.0f;
   mods[0].py = 50.0f;
   mods[0].sx = 300.0f;
@@ -830,17 +854,24 @@ uint8_t run_suijin() {
   mods[0].tp = 20;
   mods[0].lp = 20;
   mods[0].rp = 20;
-
   mchvt(&mods[0].children);
 
-
-  vals[0] = &((struct tbox *)mods[0].children.v[0].c)[0].scale;
-  lims[0] = (v2) { 0.0f, 100.0f };
-  scal[0] = 0.1f;
-
-  vals[1] = &P1;
-  lims[1] = (v2) { 0.0f, 100.0f };
-  scal[1] = 0.1f;
+  mchvi(&mods[1].children);
+  add_title(&mods[1], "Height", 0.3f);
+  add_slider(&mods[1], &mods[1].sy, 0.0f, 700.0f);
+  add_title(&mods[1], "Width", 0.3f);
+  add_slider(&mods[1], &mods[0].sx, 0.0f, 700.0f);
+  add_title(&mods[1], "Size", 0.3f);
+  add_slider(&mods[1], &mods[1].sy, 0.0f, 700.0f);
+  mods[1].px = 50.0f;
+  mods[1].py = 50.0f;
+  mods[1].sx = 300.0f;
+  mods[1].sy = 500.0f;
+  mods[1].bp = 20;
+  mods[1].tp = 20;
+  mods[1].lp = 20;
+  mods[1].rp = 20;
+  mchvt(&mods[1].children);
 
 
   reset_ft();
