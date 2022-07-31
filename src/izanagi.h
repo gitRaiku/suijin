@@ -163,7 +163,10 @@ DEF_VECTOR_SUITE(minf, struct minfv *__restrict, struct minf)
 DEF_VECTOR_SUITE(mat, struct matv *__restrict, struct material)
 DEF_VECTOR_SUITE(mod, struct modv *__restrict, struct model)
 DEF_VECTOR_SUITE(obj, struct objv *__restrict, struct object)
+
+//CAN DEL
 DEF_VECTOR_SUITE(float, struct floatv *__restrict, float)
+DEF_VECTOR_SUITE(mati, struct mativ *__restrict, struct mate)
 
 uint8_t *__restrict read_png(char *__restrict fname, char *__restrict dname, uint32_t *__restrict width, uint32_t *__restrict height);
 
@@ -175,6 +178,7 @@ void destroy_model(struct model *__restrict mod);
 
 void maff(struct minf *__restrict m);
 
+// CAN DEL
 void init_model(struct model *__restrict m);
 
 void create_vao(float *__restrict v, uint32_t s, uint32_t *__restrict vbo, uint32_t *__restrict vao);

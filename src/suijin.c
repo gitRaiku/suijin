@@ -810,14 +810,13 @@ uint8_t run_suijin() {
     floatvp(&cm.v, mods.v[0].exy.y);
     floatvp(&cm.v, mods.v[0].exz.y);
     floatvp(&cm.v, 1.0f); floatvp(&cm.v, 1.0f); floatvp(&cm.v, 1.0f); floatvp(&cm.v, 1.0f); floatvp(&cm.v, 1.0f); 
-
     mativp(&cm.m, (struct mate) { 1, 0 });
 
     create_vao(cm.v.v, cm.v.l, &cm.vbo, &cm.vao);
     modvp(&mods, cm);
 
     init_model(&cm);
-    strncpy(cm.name, "bb1", 64);
+    strncpy(cm.name, "bb2", 64);
 
     floatvp(&cm.v, mods.v[1].exx.x);
     floatvp(&cm.v, mods.v[1].exy.x);
@@ -833,7 +832,6 @@ uint8_t run_suijin() {
     floatvp(&cm.v, mods.v[1].exy.y);
     floatvp(&cm.v, mods.v[1].exz.y);
     floatvp(&cm.v, 1.0f); floatvp(&cm.v, 1.0f); floatvp(&cm.v, 1.0f); floatvp(&cm.v, 1.0f); floatvp(&cm.v, 1.0f); 
-
     mativp(&cm.m, (struct mate) { 1, 0 });
 
     create_vao(cm.v.v, cm.v.l, &cm.vbo, &cm.vao);
@@ -868,10 +866,10 @@ uint8_t run_suijin() {
 
     cm.m = 2;
     minfvp(&cobj.mins, cm);
-    objvp(&objs, cobj);
 
-    cm.m = 5;
+    cm.m = 4;
     minfvp(&cobj.mins, cm);
+    objvp(&objs, cobj);
 
     minfvt(&cobj.mins);
     objvt(&objs);
