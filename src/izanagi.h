@@ -120,9 +120,19 @@ struct mate {
 
 VECSTRUCT(mati, struct mate);
 
+struct bm {
+  v3 p;
+  v3 n;
+  v2 t;
+};
+
 struct model {
   struct floatv v;
   struct mativ m;
+
+  v2 exx;
+  v2 exy;
+  v2 exz;
 
   uint32_t vao;
   uint32_t vbo;
@@ -153,6 +163,7 @@ DEF_VECTOR_SUITE(minf, struct minfv *__restrict, struct minf)
 DEF_VECTOR_SUITE(mat, struct matv *__restrict, struct material)
 DEF_VECTOR_SUITE(mod, struct modv *__restrict, struct model)
 DEF_VECTOR_SUITE(obj, struct objv *__restrict, struct object)
+DEF_VECTOR_SUITE(float, struct floatv *__restrict, float)
 
 uint8_t *__restrict read_png(char *__restrict fname, char *__restrict dname, uint32_t *__restrict width, uint32_t *__restrict height);
 
@@ -163,5 +174,9 @@ void init_object(struct object *__restrict o, char *__restrict name);
 void destroy_model(struct model *__restrict mod);
 
 void maff(struct minf *__restrict m);
+
+void init_model(struct model *__restrict m);
+
+void create_vao(float *__restrict v, uint32_t s, uint32_t *__restrict vbo, uint32_t *__restrict vao);
 
 #endif

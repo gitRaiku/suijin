@@ -2,10 +2,6 @@
 
 float pscale = 0.001f;
 
-float __inline__ __attribute((pure)) min(float o1, float o2) {
-  return o1 < o2 ? o1 : o2;
-}
-
 float rf() {
   return (float)rand() / (float)RAND_MAX;
 }

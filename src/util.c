@@ -12,13 +12,21 @@ void read_uint32_t(FILE *__restrict stream, uint32_t *__restrict nr) {
   }
 }
 
+float __attribute((pure)) min(float o1, float o2) { // INLINE
+  return o1 < o2 ? o1 : o2;
+}
+
+float __attribute((pure)) max(float o1, float o2) { // INLINE
+  return o1 > o2 ? o1 : o2;
+}
+
 void swap(uint8_t *__restrict o1, uint8_t *__restrict o2) { // INLINE
   float t = *o1;
   *o1 = *o2;
   *o2 = t;
 }
 
-uint32_t __attribute((pure)) max(uint32_t o1, uint32_t o2) { // INLINE
+uint32_t __attribute((pure)) umax(uint32_t o1, uint32_t o2) { // INLINE
   return o1 > o2 ? o1 : o2;
 }
 

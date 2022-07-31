@@ -778,6 +778,66 @@ uint8_t run_suijin() {
     parse_folder(&mods, &mats, "Resources/Items/Mountain");
     parse_folder(&mods, &mats, "Resources/Items/Dough");
     //parse_folder(&mods, &uim, "Resources/Items/Plane");
+    //
+    /*
+        -10.109322 10.019073 - -1.889740 3.262799 - -10.138491 10.031691
+         -0.849398  2.147456 -  0.000000 1.475801 -   0.000000  3.154107
+     */
+    
+    fprintf(stdout, "%f %f - %f %f - %f %f\n", mods.v[0].exx.x, mods.v[0].exx.y, 
+                                               mods.v[0].exy.x, mods.v[0].exy.y, 
+                                               mods.v[0].exz.x, mods.v[0].exz.y);
+
+    fprintf(stdout, "%f %f - %f %f - %f %f\n", mods.v[1].exx.x, mods.v[1].exx.y, 
+                                               mods.v[1].exy.x, mods.v[1].exy.y, 
+                                               mods.v[1].exz.x, mods.v[1].exz.y);
+
+    struct model cm;
+    init_model(&cm);
+    strncpy(cm.name, "bb1", 64);
+
+    floatvp(&cm.v, mods.v[0].exx.x);
+    floatvp(&cm.v, mods.v[0].exy.x);
+    floatvp(&cm.v, mods.v[0].exz.x);
+    floatvp(&cm.v, 1.0f); floatvp(&cm.v, 1.0f); floatvp(&cm.v, 1.0f); floatvp(&cm.v, 1.0f); floatvp(&cm.v, 1.0f); 
+
+    floatvp(&cm.v, mods.v[0].exx.y);
+    floatvp(&cm.v, mods.v[0].exy.y);
+    floatvp(&cm.v, mods.v[0].exz.y);
+    floatvp(&cm.v, 1.0f); floatvp(&cm.v, 1.0f); floatvp(&cm.v, 1.0f); floatvp(&cm.v, 1.0f); floatvp(&cm.v, 1.0f); 
+
+    floatvp(&cm.v, mods.v[0].exx.x);
+    floatvp(&cm.v, mods.v[0].exy.y);
+    floatvp(&cm.v, mods.v[0].exz.y);
+    floatvp(&cm.v, 1.0f); floatvp(&cm.v, 1.0f); floatvp(&cm.v, 1.0f); floatvp(&cm.v, 1.0f); floatvp(&cm.v, 1.0f); 
+
+    mativp(&cm.m, (struct mate) { 1, 0 });
+
+    create_vao(cm.v.v, cm.v.l, &cm.vbo, &cm.vao);
+    modvp(&mods, cm);
+
+    init_model(&cm);
+    strncpy(cm.name, "bb1", 64);
+
+    floatvp(&cm.v, mods.v[1].exx.x);
+    floatvp(&cm.v, mods.v[1].exy.x);
+    floatvp(&cm.v, mods.v[1].exz.x);
+    floatvp(&cm.v, 1.0f); floatvp(&cm.v, 1.0f); floatvp(&cm.v, 1.0f); floatvp(&cm.v, 1.0f); floatvp(&cm.v, 1.0f); 
+
+    floatvp(&cm.v, mods.v[1].exx.y);
+    floatvp(&cm.v, mods.v[1].exy.y);
+    floatvp(&cm.v, mods.v[1].exz.y);
+    floatvp(&cm.v, 1.0f); floatvp(&cm.v, 1.0f); floatvp(&cm.v, 1.0f); floatvp(&cm.v, 1.0f); floatvp(&cm.v, 1.0f); 
+
+    floatvp(&cm.v, mods.v[1].exx.x);
+    floatvp(&cm.v, mods.v[1].exy.y);
+    floatvp(&cm.v, mods.v[1].exz.y);
+    floatvp(&cm.v, 1.0f); floatvp(&cm.v, 1.0f); floatvp(&cm.v, 1.0f); floatvp(&cm.v, 1.0f); floatvp(&cm.v, 1.0f); 
+
+    mativp(&cm.m, (struct mate) { 1, 0 });
+
+    create_vao(cm.v.v, cm.v.l, &cm.vbo, &cm.vao);
+    modvp(&mods, cm);
     
     matvt(&mats);
     modvt(&mods);
@@ -785,16 +845,17 @@ uint8_t run_suijin() {
 
   {
     struct object cobj;
+    struct minf cm;
 
     objvi(&objs);
     init_object(&cobj, "MIAN");
-
-    struct minf cm;
-    
     cm.scale = 10.0f;
     cm.m = 0;
     cm.pos = (v3) {0.0f, 0.0f, 0.0f};
     maff(&cm);
+    minfvp(&cobj.mins, cm);
+
+    cm.m = 3;
     minfvp(&cobj.mins, cm);
     objvp(&objs, cobj);
 
@@ -808,6 +869,9 @@ uint8_t run_suijin() {
     cm.m = 2;
     minfvp(&cobj.mins, cm);
     objvp(&objs, cobj);
+
+    cm.m = 5;
+    minfvp(&cobj.mins, cm);
 
     minfvt(&cobj.mins);
     objvt(&objs);
@@ -869,6 +933,21 @@ uint8_t run_suijin() {
 
   uint32_t frame = 0;
   reset_ft();
+
+  /*
+  mchvi(&nodes[0].children);
+  add_title(&nodes[0], "Numarul de boli pe care le are steifen.", 0.20f);
+  add_slider(&nodes[0], &nodes[0].sy, 0.0f, 700.0f);
+  nodes[0].px = 50.0f;
+  nodes[0].py = 50.0f;
+  nodes[0].sx = 300.0f;
+  nodes[0].sy = 500.0f;
+  nodes[0].bp = 20;
+  nodes[0].tp = 20;
+  nodes[0].lp = 20;
+  nodes[0].rp = 20;
+  mchvt(&nodes[0].children);
+  */
 
   while (!glfwWindowShouldClose(window)) {
     ++frame;
