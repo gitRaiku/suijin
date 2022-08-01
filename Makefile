@@ -69,4 +69,4 @@ remove: clean
 	rm -f $(BIN_DIR)/$(TARGET)
 
 tar:
-	tar -czvf suijin-$(DATE).tar.gz Makefile $(SRC_DIR)/* $(LIB_DIR)/* AUTHORS
+	tar -czvf suijin-$(DATE).tar.gz Makefile $(SRC_DIR)/* $(LIB_DIR)/* Resources AUTHORS

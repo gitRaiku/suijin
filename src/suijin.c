@@ -750,6 +750,10 @@ void reset_ft() {
   FT_CHECK(FT_Select_Charmap(ftface, FT_ENCODING_UNICODE), "Could not select char map");
 }
 
+void cast_ray(v3 s, v3 e) {
+  
+}
+
 uint8_t run_suijin() {
   init_random();
   setbuf(stdout, NULL);
@@ -778,64 +782,6 @@ uint8_t run_suijin() {
     parse_folder(&mods, &mats, "Resources/Items/Mountain");
     parse_folder(&mods, &mats, "Resources/Items/Dough");
     //parse_folder(&mods, &uim, "Resources/Items/Plane");
-    //
-    /*
-        -10.109322 10.019073 - -1.889740 3.262799 - -10.138491 10.031691
-         -0.849398  2.147456 -  0.000000 1.475801 -   0.000000  3.154107
-     */
-    
-    fprintf(stdout, "%f %f - %f %f - %f %f\n", mods.v[0].exx.x, mods.v[0].exx.y, 
-                                               mods.v[0].exy.x, mods.v[0].exy.y, 
-                                               mods.v[0].exz.x, mods.v[0].exz.y);
-
-    fprintf(stdout, "%f %f - %f %f - %f %f\n", mods.v[1].exx.x, mods.v[1].exx.y, 
-                                               mods.v[1].exy.x, mods.v[1].exy.y, 
-                                               mods.v[1].exz.x, mods.v[1].exz.y);
-
-    struct model cm;
-    init_model(&cm);
-    strncpy(cm.name, "bb1", 64);
-
-    floatvp(&cm.v, mods.v[0].exx.x);
-    floatvp(&cm.v, mods.v[0].exy.x);
-    floatvp(&cm.v, mods.v[0].exz.x);
-    floatvp(&cm.v, 1.0f); floatvp(&cm.v, 1.0f); floatvp(&cm.v, 1.0f); floatvp(&cm.v, 1.0f); floatvp(&cm.v, 1.0f); 
-
-    floatvp(&cm.v, mods.v[0].exx.y);
-    floatvp(&cm.v, mods.v[0].exy.y);
-    floatvp(&cm.v, mods.v[0].exz.y);
-    floatvp(&cm.v, 1.0f); floatvp(&cm.v, 1.0f); floatvp(&cm.v, 1.0f); floatvp(&cm.v, 1.0f); floatvp(&cm.v, 1.0f); 
-
-    floatvp(&cm.v, mods.v[0].exx.x);
-    floatvp(&cm.v, mods.v[0].exy.y);
-    floatvp(&cm.v, mods.v[0].exz.y);
-    floatvp(&cm.v, 1.0f); floatvp(&cm.v, 1.0f); floatvp(&cm.v, 1.0f); floatvp(&cm.v, 1.0f); floatvp(&cm.v, 1.0f); 
-    mativp(&cm.m, (struct mate) { 1, 0 });
-
-    create_vao(cm.v.v, cm.v.l, &cm.vbo, &cm.vao);
-    modvp(&mods, cm);
-
-    init_model(&cm);
-    strncpy(cm.name, "bb2", 64);
-
-    floatvp(&cm.v, mods.v[1].exx.x);
-    floatvp(&cm.v, mods.v[1].exy.x);
-    floatvp(&cm.v, mods.v[1].exz.x);
-    floatvp(&cm.v, 1.0f); floatvp(&cm.v, 1.0f); floatvp(&cm.v, 1.0f); floatvp(&cm.v, 1.0f); floatvp(&cm.v, 1.0f); 
-
-    floatvp(&cm.v, mods.v[1].exx.y);
-    floatvp(&cm.v, mods.v[1].exy.y);
-    floatvp(&cm.v, mods.v[1].exz.y);
-    floatvp(&cm.v, 1.0f); floatvp(&cm.v, 1.0f); floatvp(&cm.v, 1.0f); floatvp(&cm.v, 1.0f); floatvp(&cm.v, 1.0f); 
-
-    floatvp(&cm.v, mods.v[1].exx.x);
-    floatvp(&cm.v, mods.v[1].exy.y);
-    floatvp(&cm.v, mods.v[1].exz.y);
-    floatvp(&cm.v, 1.0f); floatvp(&cm.v, 1.0f); floatvp(&cm.v, 1.0f); floatvp(&cm.v, 1.0f); floatvp(&cm.v, 1.0f); 
-    mativp(&cm.m, (struct mate) { 1, 0 });
-
-    create_vao(cm.v.v, cm.v.l, &cm.vbo, &cm.vao);
-    modvp(&mods, cm);
     
     matvt(&mats);
     modvt(&mods);
@@ -852,9 +798,6 @@ uint8_t run_suijin() {
     cm.pos = (v3) {0.0f, 0.0f, 0.0f};
     maff(&cm);
     minfvp(&cobj.mins, cm);
-
-    cm.m = 3;
-    minfvp(&cobj.mins, cm);
     objvp(&objs, cobj);
 
     init_object(&cobj, "DOUGH");
@@ -865,9 +808,6 @@ uint8_t run_suijin() {
     minfvp(&cobj.mins, cm);
 
     cm.m = 2;
-    minfvp(&cobj.mins, cm);
-
-    cm.m = 4;
     minfvp(&cobj.mins, cm);
     objvp(&objs, cobj);
 
@@ -960,8 +900,10 @@ uint8_t run_suijin() {
 
     if (cameraUpdate) {
       update_camera_matrix();
+      cast_ray(cam.pos, v3a(cam.pos, *qv(&cam.orientation)));
       cameraUpdate = 0;
     }
+
 
     { // NPROG
       glUseProgram(nprog);
@@ -997,6 +939,7 @@ uint8_t run_suijin() {
         }
       }
     }
+
 
     glfwPollEvents();
     glfwSwapBuffers(window);
