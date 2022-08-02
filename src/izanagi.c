@@ -7,6 +7,7 @@ VECTOR_SUITE(float, struct floatv *__restrict, float)
 VECTOR_SUITE(mat, struct matv *__restrict, struct material)
 VECTOR_SUITE(mod, struct modv *__restrict, struct model)
 VECTOR_SUITE(obj, struct objv *__restrict, struct object)
+VECTOR_SUITE(lin, struct linv *__restrict, struct line)
 VECTOR_SUITE(minf, struct minfv *__restrict, struct minf)
 
 char _getc(struct fbuf *__restrict cb) {
@@ -447,12 +448,13 @@ void parse_model_file(struct modv *__restrict mods, struct matv *__restrict mate
         om.v3.y = read_float(&cb);
         om.v3.z = read_float(&cb);
 
-        cmod.exx.x = min(cmod.exx.x, om.v3.x);
-        cmod.exx.y = max(cmod.exx.y, om.v3.x);
-        cmod.exy.x = min(cmod.exy.x, om.v3.y);
-        cmod.exy.y = max(cmod.exy.y, om.v3.y);
-        cmod.exz.x = min(cmod.exz.x, om.v3.z);
-        cmod.exz.y = max(cmod.exz.y, om.v3.z);
+        cmod.b.i.x = min(cmod.b.i.x, om.v3.x);
+        cmod.b.i.y = min(cmod.b.i.y, om.v3.y);
+        cmod.b.i.z = min(cmod.b.i.z, om.v3.z);
+
+        cmod.b.a.x = max(cmod.b.a.x, om.v3.x);
+        cmod.b.a.y = max(cmod.b.a.y, om.v3.y);
+        cmod.b.a.z = max(cmod.b.a.z, om.v3.z);
 
         v3vp(&verts, om.v3);
         break;

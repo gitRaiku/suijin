@@ -31,8 +31,12 @@ vec3 __attribute((pure)) v3a(vec3 v1, vec3 v2);
 
 vec3 __attribute((pure)) v3n(vec3 v);
 
+vec3 __attribute((pure)) v3i(vec3 v);
+
 void matmul44(mat4 res, mat4 m1, mat4 m2);
 
 vec3 __attribute((pure)) vmm3(mat3 m, vec3 v); /* Vec mat mul 3 */
+
+vec3 __attribute((pure)) v3m4(mat4 m, vec3 v);
 
 #endif

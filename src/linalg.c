@@ -109,6 +109,14 @@ vec3 __attribute((pure)) v3n(vec3 v) {
   return res;
 }
 
+vec3 __attribute((pure)) v3i(vec3 v) {
+  vec3 res;
+  res.x = 1 / v.x;
+  res.y = 1 / v.y;
+  res.z = 1 / v.z;
+  return res;
+}
+
 void matmul44(mat4 res, mat4 m1, mat4 m2) {
   int32_t i, j, k;
   for (i = 0; i < 4; ++i) {
@@ -132,3 +140,12 @@ vec3 __attribute((pure)) vmm3(mat3 m, vec3 v) { /* Vec mat mul 3 */
   return res;
 }
 
+vec3 __attribute((pure)) v3m4(mat4 m, vec3 v) {
+  vec3 res;
+
+  res.x = v.x * m[0][0] + v.y * m[0][1] + v.z * m[0][2];
+  res.y = v.x * m[1][0] + v.y * m[1][1] + v.z * m[1][2];
+  res.z = v.x * m[2][0] + v.y * m[2][1] + v.z * m[2][2];
+
+  return res;
+}

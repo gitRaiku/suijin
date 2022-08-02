@@ -21,6 +21,9 @@
 #define PR_CHECK(call) if (call) { return 1; }
 #define KEY_PRESSED(key) (glfwGetKey(window, key) == GLFW_PRESS)
 
+#define FPC(v) ((float *__restrict)(v))
+#define V3C(v) ((v3 *__restrict)(v))
+
 double _ctime, _ltime;
 double deltaTime;
 
@@ -524,7 +527,7 @@ void create_affine_matrix(mat4 m, float xs, float ys, float zs, float x, float y
   m[3][0] =          0; m[3][1] =          0; m[3][2] =  0; m[3][3] = 1; 
 }
 
-uint32_t uvao, uprog; // Draw Square
+uint32_t uvao, uprog, lprog; // Draw Square
 void draw_squaret(float px, float py, float sx, float sy, uint32_t tex) {
   mat4 aff;
   glUseProgram(uprog);
@@ -750,8 +753,98 @@ void reset_ft() {
   FT_CHECK(FT_Select_Charmap(ftface, FT_ENCODING_UNICODE), "Could not select char map");
 }
 
-void cast_ray(v3 s, v3 e) {
-  
+struct sray {
+  v3 o; // Orig
+  v3 d; // Dir
+  v3 i; // 1 / Dir
+  uint8_t s[3]; // Sign of dirs
+};
+
+struct sray csray(v3 s, v3 e) {
+  struct sray cs;
+
+  cs.o = s;
+  cs.d = v3s(e, s);
+  cs.i = v3i(cs.d);
+
+  cs.s[0] = cs.i.x < 0; 
+  cs.s[1] = cs.i.y < 0; 
+  cs.s[2] = cs.i.z < 0; 
+
+  return cs;
+}
+
+uint8_t rbi(struct sray *__restrict r, struct bbox *__restrict cb) {
+    float tmin, tmax, tymin, tymax, tzmin, tzmax;
+
+     tmin = (V3C(cb)[    r->s[0]].x - r->o.x) * r->i.x; 
+     tmax = (V3C(cb)[1 - r->s[0]].x - r->o.x) * r->i.x;
+    tymin = (V3C(cb)[    r->s[1]].y - r->o.y) * r->i.y;
+    tymax = (V3C(cb)[1 - r->s[1]].y - r->o.y) * r->i.y;
+ 
+    if ((tmin > tymax) || (tymin > tmax)) {
+        return 0;
+    }
+ 
+    if (tymin > tmin) {
+        tmin = tymin;
+    }
+
+    if (tymax < tmax) {
+        tmax = tymax;
+    }
+ 
+    tzmin = (V3C(cb)[    r->s[2]].z - r->o.z) * r->i.z; 
+    tzmax = (V3C(cb)[1 - r->s[2]].z - r->o.z) * r->i.z; 
+ 
+    if ((tmin > tzmax) || (tzmin > tmax)) {
+        return 0; 
+    }
+ 
+    /* 
+    if (tzmin > tmin) {
+        tmin = tzmin;
+    }
+
+    if (tzmax < tmax) {
+        tmax = tzmax;
+    }
+    */
+ 
+    return 1; 
+}
+
+struct linv lins;
+
+void showbb(struct bbox *__restrict cb, struct linv *__restrict v) {
+  struct line cl;
+  int32_t i;
+  cl.c = (v3) { 0.2f, 0.5f, 0.5f, 1.0f };
+
+  cl.s = cb->i;
+  for(i = 0; i < 3; ++i) {
+    cl.e = cb->a;
+    FPC(&cl.e)[i] = FPC(&cb->i)[i];
+    linvp(&lins, cl);
+  }
+
+  cl.s = cb->a;
+  for(i = 0; i < 3; ++i) {
+    cl.e = cb->i;
+    FPC(&cl.e)[i] = FPC(&cb->a)[i];
+    linvp(&lins, cl);
+  }
+}
+
+void aobj(uint32_t m, float sc, v3 pos, struct object *__restrict cb) {
+  struct minf cm;
+  cm.m = m;
+  cm.scale = sc;
+  cm.pos = pos;
+  maff(&cm);
+  cm.b.i = v3m4(cm.aff, mods.v[cm.m].b.i);
+  cm.b.a = v3m4(cm.aff, mods.v[cm.m].b.a);
+  minfvp(&cb->mins, cm);
 }
 
 uint8_t run_suijin() {
@@ -778,6 +871,7 @@ uint8_t run_suijin() {
   { /// Asset loading
     modvi(&mods);
     matvi(&mats);
+    linvi(&lins);
 
     parse_folder(&mods, &mats, "Resources/Items/Mountain");
     parse_folder(&mods, &mats, "Resources/Items/Dough");
@@ -788,30 +882,19 @@ uint8_t run_suijin() {
   }
 
   {
-    struct object cobj;
-    struct minf cm;
-
+    struct object cb;
     objvi(&objs);
-    init_object(&cobj, "MIAN");
-    cm.scale = 10.0f;
-    cm.m = 0;
-    cm.pos = (v3) {0.0f, 0.0f, 0.0f};
-    maff(&cm);
-    minfvp(&cobj.mins, cm);
-    objvp(&objs, cobj);
 
-    init_object(&cobj, "DOUGH");
-    cm.m = 1;
-    cm.scale = 10.0f;
-    cm.pos = (v3) {-60.0f, 40.0f, -30.0f};
-    maff(&cm);
-    minfvp(&cobj.mins, cm);
+    init_object(&cb, "MIAN");
+    aobj(0, 10.0f, (v3) {0.0f, 0.0f, 0.0f}, &cb);
+    objvp(&objs, cb);
 
-    cm.m = 2;
-    minfvp(&cobj.mins, cm);
-    objvp(&objs, cobj);
+    init_object(&cb, "DOUGH");
+    aobj(1, 10.0f, (v3) {-60.0f, 40.0f, -30.0f}, &cb);
+    aobj(2, 10.0f, (v3) {-60.0f, 40.0f, -30.0f}, &cb);
+    objvp(&objs, cb);
 
-    minfvt(&cobj.mins);
+    minfvt(&cb.mins);
     objvt(&objs);
   }
 
@@ -819,13 +902,15 @@ uint8_t run_suijin() {
 
   _ctime = _ltime = deltaTime = 0;
 
-#define SHADERC 4
+#define SHADERC 6
   uint32_t shaders[SHADERC];
   {
     char          *paths[SHADERC] = { "shaders/vv.glsl", "shaders/vf.glsl", 
-                                            "shaders/uv.glsl", "shaders/uf.glsl"};
+                                      "shaders/uv.glsl", "shaders/uf.glsl"};
+                                      "shaders/lv.glsl", "shaders/lf.glsl"};
     uint32_t shaderTypes[SHADERC] = { GL_VERTEX_SHADER   , GL_FRAGMENT_SHADER,
-                                            GL_VERTEX_SHADER   , GL_FRAGMENT_SHADER  };
+                                      GL_VERTEX_SHADER   , GL_FRAGMENT_SHADER,
+                                      GL_VERTEX_SHADER   , GL_FRAGMENT_SHADER  };
     uint32_t i;
     for (i = 0; i < SHADERC; ++i) {
       PR_CHECK(shader_get(paths[i], shaderTypes[i], shaders + i));
@@ -833,6 +918,7 @@ uint8_t run_suijin() {
 
     PR_CHECK(program_get(2, shaders    , &nprog));
     PR_CHECK(program_get(2, shaders + 2, &uprog));
+    PR_CHECK(program_get(2, shaders + 4, &lprog));
 
     for (i = 0; i < SHADERC; ++i) { // TODO: REMOVE
       glDeleteShader(shaders[i]);
@@ -887,6 +973,8 @@ uint8_t run_suijin() {
   mchvt(&nodes[0].children);
   */
 
+  struct sray cs;
+
   while (!glfwWindowShouldClose(window)) {
     ++frame;
     _ctime = glfwGetTime();
@@ -900,10 +988,13 @@ uint8_t run_suijin() {
 
     if (cameraUpdate) {
       update_camera_matrix();
-      cast_ray(cam.pos, v3a(cam.pos, *qv(&cam.orientation)));
       cameraUpdate = 0;
     }
 
+    cs = csray(cam.pos, (v3) {0.0f, 0.0f, 0.0f});
+    print_vec3(cs.o, "o");
+    print_vec3(cs.d, "d");
+    print_vec3(cs.i, "i");
 
     { // NPROG
       glUseProgram(nprog);
@@ -915,6 +1006,9 @@ uint8_t run_suijin() {
       for(i = 0; i < objs.l; ++i) {
         for(j = 0; j < objs.v[i].mins.l; ++j) {
           draw_model(nprog, &mats, mods.v + objs.v[i].mins.v[j].m, objs.v[i].mins.v[j].aff);
+          /*if (rbi(&cs, &objs.v[i].mins.v[j].b)) {
+            fprintf(stdout, "Intersected with %s %u!\n", objs.v[i].name, objs.v[i].mins.v[j].m);
+          }*/
         }
       }
     }
@@ -928,6 +1022,8 @@ uint8_t run_suijin() {
         draw_node(i);
       }
     }
+
+
 
     if (frame % 30 == 0) {
       while (1) {
