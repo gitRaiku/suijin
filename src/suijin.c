@@ -23,6 +23,7 @@
 
 #define FPC(v) ((float *__restrict)(v))
 #define V3C(v) ((v3 *__restrict)(v))
+#define V4C(v) ((v4 *__restrict)(v))
 
 double _ctime, _ltime;
 double deltaTime;
@@ -413,7 +414,7 @@ void draw_model(uint32_t program, struct matv *__restrict m, struct model *__res
   uint32_t li = 0;
   struct material *__restrict cmat;
 
-  glBindVertexArray(mod->vao);
+  glBindVertexArray(mod->vao); /// TODO: Combine aff and fn on the cpu
 
   program_set_mat4(program, "affine", aff);
 
@@ -815,25 +816,54 @@ uint8_t rbi(struct sray *__restrict r, struct bbox *__restrict cb) {
 }
 
 struct linv lins;
+float *__restrict linsv;
 
-void showbb(struct bbox *__restrict cb, struct linv *__restrict v) {
+#define CHEA(i) (FPC(&cl.e)[i] = FPC(&cb->a)[i])
+#define CHEI(i) (FPC(&cl.e)[i] = FPC(&cb->i)[i])
+#define CHSA(i) (FPC(&cl.s)[i] = FPC(&cb->a)[i])
+#define CHSI(i) (FPC(&cl.s)[i] = FPC(&cb->i)[i])
+void addbb(struct bbox *__restrict cb, struct linv *__restrict v) {
   struct line cl;
   int32_t i;
-  cl.c = (v3) { 0.2f, 0.5f, 0.5f, 1.0f };
+  cl.c = (v4) { 0.2f, 0.5f, 0.5f, 1.0f };
 
   cl.s = cb->i;
+  for(i = 0; i < 3; ++i) {
+    cl.e = cb->i;
+    FPC(&cl.e)[i] = FPC(&cb->a)[i];
+    linvp(&lins, cl);
+  }
+
+  cl.s = cb->a;
   for(i = 0; i < 3; ++i) {
     cl.e = cb->a;
     FPC(&cl.e)[i] = FPC(&cb->i)[i];
     linvp(&lins, cl);
   }
 
-  cl.s = cb->a;
-  for(i = 0; i < 3; ++i) {
-    cl.e = cb->i;
-    FPC(&cl.e)[i] = FPC(&cb->a)[i];
-    linvp(&lins, cl);
-  }
+  cl.s = cl.e = cb->i;
+  CHSA(0); CHEA(0); CHEA(1);
+  linvp(&lins, cl);
+
+  cl.s = cl.e = cb->i;
+  CHSA(0); CHEA(0); CHEA(2);
+  linvp(&lins, cl);
+
+  cl.s = cl.e = cb->i;
+  CHSA(1); CHEA(1); CHEA(0);
+  linvp(&lins, cl);
+
+  cl.s = cl.e = cb->i;
+  CHSA(1); CHEA(1); CHEA(2);
+  linvp(&lins, cl);
+
+  cl.s = cl.e = cb->i;
+  CHSA(2); CHEA(2); CHEA(0);
+  linvp(&lins, cl);
+
+  cl.s = cl.e = cb->i;
+  CHSA(2); CHEA(2); CHEA(1);
+  linvp(&lins, cl);
 }
 
 void aobj(uint32_t m, float sc, v3 pos, struct object *__restrict cb) {
@@ -845,6 +875,40 @@ void aobj(uint32_t m, float sc, v3 pos, struct object *__restrict cb) {
   cm.b.i = v3m4(cm.aff, mods.v[cm.m].b.i);
   cm.b.a = v3m4(cm.aff, mods.v[cm.m].b.a);
   minfvp(&cb->mins, cm);
+  addbb(&cm.b, &lins);
+}
+
+uint32_t clines() {
+  linsv = malloc(lins.l * sizeof(float) * (3 + 4) * 2);
+  {
+    int32_t i, j;
+    for(i = 0; i < lins.l; ++i) {
+      for(j = 0; j < 3; ++j) {
+        linsv[14 * i + j] = FPC(&lins.v[i].s)[j];
+      }
+      *V4C(linsv + 14 * i + 3) = lins.v[i].c;
+
+      for(j = 0; j < 3; ++j) {
+        linsv[14 * i + 7 + j] = FPC(&lins.v[i].e)[j];
+      }
+      *V4C(linsv + 14 * i + 10) = lins.v[i].c;
+    }
+  }
+
+  uint32_t vao, vbo;
+  glGenVertexArrays(1, &vao);
+  glGenBuffers(1, &vbo);
+
+  glBindVertexArray(vao);
+  glBindBuffer(GL_ARRAY_BUFFER, vbo);
+  glBufferData(GL_ARRAY_BUFFER, lins.l * sizeof(float) * (3 + 4) * 2, linsv, GL_STATIC_DRAW);
+
+  glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 7 * sizeof(float), (void *) (0 * sizeof(float)));
+  glVertexAttribPointer(1, 4, GL_FLOAT, GL_FALSE, 7 * sizeof(float), (void *) (3 * sizeof(float)));
+  glEnableVertexAttribArray(0);
+  glEnableVertexAttribArray(1);
+
+  return vao;
 }
 
 uint8_t run_suijin() {
@@ -881,6 +945,7 @@ uint8_t run_suijin() {
     modvt(&mods);
   }
 
+  uint32_t lvao;
   {
     struct object cb;
     objvi(&objs);
@@ -896,6 +961,8 @@ uint8_t run_suijin() {
 
     minfvt(&cb.mins);
     objvt(&objs);
+
+    lvao = clines();
   }
 
   uint32_t nprog;
@@ -906,7 +973,7 @@ uint8_t run_suijin() {
   uint32_t shaders[SHADERC];
   {
     char          *paths[SHADERC] = { "shaders/vv.glsl", "shaders/vf.glsl", 
-                                      "shaders/uv.glsl", "shaders/uf.glsl"};
+                                      "shaders/uv.glsl", "shaders/uf.glsl",
                                       "shaders/lv.glsl", "shaders/lf.glsl"};
     uint32_t shaderTypes[SHADERC] = { GL_VERTEX_SHADER   , GL_FRAGMENT_SHADER,
                                       GL_VERTEX_SHADER   , GL_FRAGMENT_SHADER,
@@ -955,6 +1022,8 @@ uint8_t run_suijin() {
   oldMouseX = 0.0;
   oldMouseY = 0.0;
 
+  glLineWidth(10.0f);
+
   uint32_t frame = 0;
   reset_ft();
 
@@ -992,9 +1061,9 @@ uint8_t run_suijin() {
     }
 
     cs = csray(cam.pos, (v3) {0.0f, 0.0f, 0.0f});
-    print_vec3(cs.o, "o");
-    print_vec3(cs.d, "d");
-    print_vec3(cs.i, "i");
+    //print_vec3(cs.o, "o");
+    //print_vec3(cs.d, "d");
+    // print_vec3(cs.i, "i");
 
     { // NPROG
       glUseProgram(nprog);
@@ -1002,15 +1071,24 @@ uint8_t run_suijin() {
       program_set_mat4(nprog, "fn_mat", fn);
       program_set_int1(nprog, "shading", cshading);
       program_set_float3v(nprog, "camPos", cam.pos);
+
       int32_t i, j;
       for(i = 0; i < objs.l; ++i) {
         for(j = 0; j < objs.v[i].mins.l; ++j) {
           draw_model(nprog, &mats, mods.v + objs.v[i].mins.v[j].m, objs.v[i].mins.v[j].aff);
-          /*if (rbi(&cs, &objs.v[i].mins.v[j].b)) {
-            fprintf(stdout, "Intersected with %s %u!\n", objs.v[i].name, objs.v[i].mins.v[j].m);
-          }*/
+          //if (rbi(&cs, &objs.v[i].mins.v[j].b)) {
+          //  fprintf(stdout, "Intersected with %s %u!\n", objs.v[i].name, objs.v[i].mins.v[j].m);
+          //}
         }
       }
+    }
+
+    { // LPROG
+      glUseProgram(lprog);
+      program_set_mat4(lprog, "fn_mat", fn);
+
+      glBindVertexArray(lvao);
+      glDrawArrays(GL_LINES, 0, lins.l * 2);
     }
 
     { // UPROG
@@ -1022,6 +1100,7 @@ uint8_t run_suijin() {
         draw_node(i);
       }
     }
+
 
 
 
@@ -1041,6 +1120,8 @@ uint8_t run_suijin() {
     glfwSwapBuffers(window);
     _ltime = _ctime;
   }
+
+  free(linsv);
 
   /*{
     int32_t i;
