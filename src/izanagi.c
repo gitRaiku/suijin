@@ -494,7 +494,7 @@ void parse_model_file(struct modv *__restrict mods, struct matv *__restrict mate
           create_vao(cmod.v.v, cmod.v.l, &cmod.vbo, &cmod.vao);
 
           mativt(&cmod.m);
-          free(cmod.v.v);
+          // free(cmod.v.v);
           modvp(mods, cmod);
         }
         init_model(&cmod);
@@ -522,7 +522,7 @@ void parse_model_file(struct modv *__restrict mods, struct matv *__restrict mate
   
   create_vao(cmod.v.v, cmod.v.l, &cmod.vbo, &cmod.vao);
   mativt(&cmod.m);
-  free(cmod.v.v);
+  //free(cmod.v.v);
   modvp(mods, cmod);
 
   free(verts.v);

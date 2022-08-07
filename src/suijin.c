@@ -32,6 +32,8 @@ uint8_t drawObjs = 1;
 uint8_t drawUi = 1;
 uint8_t drawBb = 1;
 
+mat4 identity;
+
 FT_Library ftlib;
 FT_Face ftface;
 
@@ -239,36 +241,52 @@ void handle_input(GLFWwindow *__restrict window) {
       double yoff = mouseY - oldMouseY;
       oldMouseX = mouseX;
       oldMouseY = mouseY;
-      switch (ms) {
-        case CAMERA:
-          quat qx = gen_quat(cam.up, -xoff * SENS);
-          quat qy = gen_quat(cross(QV(cam.orientation), cam.up), yoff * SENS);
 
-          quat qr = qmul(qy, qx);
-          quat qt = qmul(qmul(qr, cam.orientation), qconj(qr));
-          qt = qnorm(qt);
-          //print_quat(cam.orientation, "qt");
-          cam.orientation = qt;
+#define FIXME 1
 
-          cameraUpdate = 1;
-          break;
-        case ITEMS:
-          if (vals[curi] == NULL) {
+      if (FIXME) {
+        quat qx = gen_quat(cam.up, -xoff * SENS);
+        quat qy = gen_quat(cross(QV(cam.orientation), cam.up), yoff * SENS);
+
+        quat qr = qmul(qy, qx);
+        quat qt = qmul(qmul(qr, cam.orientation), qconj(qr));
+        qt = qnorm(qt);
+        //print_quat(cam.orientation, "qt");
+        cam.orientation = qt;
+
+        cameraUpdate = 1;
+      } else {
+        switch (ms) {
+          case CAMERA:
+            quat qx = gen_quat(cam.up, -xoff * SENS);
+            quat qy = gen_quat(cross(QV(cam.orientation), cam.up), yoff * SENS);
+
+            quat qr = qmul(qy, qx);
+            quat qt = qmul(qmul(qr, cam.orientation), qconj(qr));
+            qt = qnorm(qt);
+            //print_quat(cam.orientation, "qt");
+            cam.orientation = qt;
+
+            cameraUpdate = 1;
             break;
-          }
-          *vals[curi] += -yoff * scal[curi];
-          if (lims[curi].x != lims[curi].y) {
-            *vals[curi] = clamp(*vals[curi], lims[curi].x, lims[curi].y);
-          }
-          fprintf(stdout, "%s -> % 3.3f\r", nms[curi], *vals[curi]);
-          switch (curi) {
-            case 3:
-              reset_ft();
+          case ITEMS:
+            if (vals[curi] == NULL) {
               break;
-         }
-          break;
-        case UI:
-          break;
+            }
+            *vals[curi] += -yoff * scal[curi];
+            if (lims[curi].x != lims[curi].y) {
+              *vals[curi] = clamp(*vals[curi], lims[curi].x, lims[curi].y);
+            }
+            fprintf(stdout, "%s -> % 3.3f\r", nms[curi], *vals[curi]);
+            switch (curi) {
+              case 3:
+                reset_ft();
+                break;
+           }
+            break;
+          case UI:
+            break;
+        }
       }
     }
   }
@@ -532,7 +550,7 @@ void create_affine_matrix(mat4 m, float xs, float ys, float zs, float x, float y
   m[3][0] =          0; m[3][1] =          0; m[3][2] =  0; m[3][3] = 1; 
 }
 
-uint32_t uvao, uprog, lprog; // Draw Square
+uint32_t uvao, crvao, uprog, lprog; // Draw Square
 void draw_squaret(float px, float py, float sx, float sy, uint32_t tex) {
   mat4 aff;
   glUseProgram(uprog);
@@ -720,8 +738,8 @@ void draw_node(uint32_t mi) {
 #undef cm
 }
 
-uint32_t prep_ui(GLFWwindow *__restrict window) {
-  uint32_t uvbo, uvao;
+void prep_ui(GLFWwindow *__restrict window, uint32_t *__restrict vaoui, uint32_t *__restrict vaocr) {
+  uint32_t vboui, vbocr;
   float vdata[] = {
     -1.0f,  1.0f, 0.0f, 0.0f,
     -1.0f, -1.0f, 0.0f, 1.0f,
@@ -729,11 +747,11 @@ uint32_t prep_ui(GLFWwindow *__restrict window) {
      1.0f,  1.0f, 1.0f, 0.0f,
   };
 
-  glGenVertexArrays(1, &uvao);
-  glGenBuffers(1, &uvbo);
+  glGenVertexArrays(1, vaoui);
+  glGenBuffers(1, &vboui);
 
-  glBindVertexArray(uvao);
-  glBindBuffer(GL_ARRAY_BUFFER, uvbo);
+  glBindVertexArray(*vaoui);
+  glBindBuffer(GL_ARRAY_BUFFER, vboui);
   glBufferData(GL_ARRAY_BUFFER, sizeof(vdata), vdata, GL_STATIC_DRAW);
 
   glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(float), (void *) (0 * sizeof(float)));
@@ -741,7 +759,19 @@ uint32_t prep_ui(GLFWwindow *__restrict window) {
   glEnableVertexAttribArray(0);
   glEnableVertexAttribArray(1);
 
-  return uvao;
+  float pdata[] = { 0.0f, 0.0f, 0.0f, 0.0f };
+
+  glGenVertexArrays(1, vaocr);
+  glGenBuffers(1, &vbocr);
+
+  glBindVertexArray(*vaocr);
+  glBindBuffer(GL_ARRAY_BUFFER, vbocr);
+  glBufferData(GL_ARRAY_BUFFER, sizeof(pdata), pdata, GL_STATIC_DRAW);
+
+  glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(float), (void *) (0 * sizeof(float)));
+  glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(float), (void *) (2 * sizeof(float)));
+  glEnableVertexAttribArray(0);
+  glEnableVertexAttribArray(1);
 }
 
 void reset_ft() {
@@ -767,7 +797,21 @@ struct sray csray(v3 s, v3 e) {
   struct sray cs;
 
   cs.o = s;
-  cs.d = v3s(e, s);
+  cs.d = norm(v3s(e, s));
+  cs.i = v3i(cs.d);
+
+  cs.s[0] = cs.i.x < 0; 
+  cs.s[1] = cs.i.y < 0; 
+  cs.s[2] = cs.i.z < 0; 
+
+  return cs;
+}
+
+struct sray csrayd(v3 s, v3 d) {
+  struct sray cs;
+
+  cs.o = s;
+  cs.d = norm(d);
   cs.i = v3i(cs.d);
 
   cs.s[0] = cs.i.x < 0; 
@@ -909,6 +953,91 @@ void clines(uint32_t *__restrict vao, uint32_t *__restrict vbo) {
   glEnableVertexAttribArray(1);
 }
 
+struct vv3p {
+  v3 *__restrict v0;
+  v3 *__restrict v1;
+  v3 *__restrict v2;
+};
+
+uint8_t rmif(struct sray *__restrict r, struct vv3p *__restrict p, float *__restrict t, float *__restrict u, float *__restrict v) { 
+    v3 v0v1 = v3s(*p->v1, *p->v0);
+    v3 v0v2 = v3s(*p->v2, *p->v0);
+    v3 pvec = cross(r->d, v0v2);
+    float det = dot(v0v1, pvec);
+
+#ifdef CULLING 
+    if (det < 0.00000001) {
+      return 0; 
+    }
+#else 
+    if (fabs(det) < 0.00000001) {
+      return 0;
+    }
+#endif 
+    float invDet = 1 / det; 
+ 
+    v3 tvec = v3s(r->o, *p->v0);
+    *u = dot(tvec, pvec) * invDet; 
+    if (*u < 0 || *u > 1) {
+      return 0;
+    }
+ 
+    v3 qvec = cross(tvec, v0v1); 
+    *v = dot(r->d, qvec) * invDet; 
+    if (*v < 0 || *u + *v > 1) {
+      return 0;
+    }
+ 
+    *t = dot(v0v2, qvec) * invDet; 
+ 
+    return 1; 
+} 
+
+#define cmm mods.v[cm->m]
+uint32_t rmi(struct sray *__restrict r, struct minf *__restrict cm) {
+  //struct sray ur;
+  //ur.o = v3m(cm->scale, v3s(r->o, cm->pos));
+  //ur.d = r->d;
+  
+  struct vv3p vv;
+  float t, u, v;
+
+  float mf = 99999999999.0f;
+  uint32_t mi = 0;
+  uint32_t hc = 0;
+
+  v3 px;
+  v3 py;
+  v3 pz;
+  {
+    int32_t i;
+    for(i = 0; i < cmm.v.l / 24; ++i) {
+      px = v3a(cm->pos, v3m(cm->scale, *V3C(cmm.v.v + i * 24 +  0)));
+      py = v3a(cm->pos, v3m(cm->scale, *V3C(cmm.v.v + i * 24 +  8)));
+      pz = v3a(cm->pos, v3m(cm->scale, *V3C(cmm.v.v + i * 24 + 16)));
+      vv.v0 = &px;
+      vv.v1 = &py;
+      vv.v2 = &pz;
+      if (rmif(r, &vv, &t, &u, &v)) {
+        ++hc;
+        if (t < mf) {
+          mf = t;
+          mi = i;
+        }
+      }
+    }
+  }
+
+  if (hc) {
+    fprintf(stdout, "Closest hit: %f - %u from %u\n", mf, mi, hc);
+  } else {
+    fprintf(stdout, "No hits\n");
+  }
+
+  return mi != 999999;
+}
+#undef cmm
+
 uint8_t run_suijin() {
   init_random();
   setbuf(stdout, NULL);
@@ -921,8 +1050,10 @@ uint8_t run_suijin() {
 
   glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
 
+  identity_matrix(identity);
+
   glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
-  glPointSize(10.0);
+  glPointSize(6.0);
   glLineWidth(3.0);
   glEnable(GL_DEPTH_TEST);
   glEnable(GL_BLEND);
@@ -991,7 +1122,7 @@ uint8_t run_suijin() {
     }
   }
 
-  uvao = prep_ui(window);
+  prep_ui(window, &uvao, &crvao);
 
 
   { // STAT
@@ -1057,7 +1188,7 @@ uint8_t run_suijin() {
       cameraUpdate = 0;
     }
 
-    cs = csray(cam.pos, v3a(cam.pos, v3m(-5, QV(cam.orientation))));
+    cs = csrayd(cam.pos, QV(cam.orientation));
     //print_vec3(cs.o, "o");
     //print_vec3(cs.d, "d");
     // print_vec3(cs.i, "i");
@@ -1073,9 +1204,12 @@ uint8_t run_suijin() {
       for(i = 0; i < objs.l; ++i) {
         for(j = 0; j < objs.v[i].mins.l; ++j) {
           draw_model(nprog, &mats, mods.v + objs.v[i].mins.v[j].m, objs.v[i].mins.v[j].aff);
-          if (rbi(&cs, &objs.v[i].mins.v[j].b)) {
-            fprintf(stdout, "Intersected with %s %u!\n", objs.v[i].name, objs.v[i].mins.v[j].m);
-            
+          if (glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS) {
+            if (rbi(&cs, &objs.v[i].mins.v[j].b)) {
+          //if (1) { if (1) {
+              fprintf(stdout, "Intersected with %s %u!\n", objs.v[i].name, objs.v[i].mins.v[j].m);
+              fprintf(stdout, "%u\n", rmi(&cs, &objs.v[i].mins.v[j]));
+            }
           }
         }
       }
@@ -1097,6 +1231,12 @@ uint8_t run_suijin() {
       for(i = 0; i < MC; ++i) {
         draw_node(i);
       }
+
+      program_set_mat4(uprog, "affine", identity);
+      program_set_float4(uprog, "col", 1.0f, 1.0f, 1.0f, 1.0f);
+      program_set_int1(uprog, "hasTexture", 0);
+      glBindVertexArray(crvao);
+      glDrawArrays(GL_POINTS, 0, 1);
     }
 
     if (frame % 30 == 0) {
