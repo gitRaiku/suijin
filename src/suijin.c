@@ -28,6 +28,10 @@
 double _ctime, _ltime;
 double deltaTime;
 
+uint8_t drawObjs = 1;
+uint8_t drawUi = 1;
+uint8_t drawBb = 1;
+
 FT_Library ftlib;
 FT_Face ftface;
 
@@ -150,7 +154,7 @@ void create_projection_matrix(mat4 m, float angle, float ratio, float near, floa
 }
 
 void create_lookat_matrix(mat4 m) {
-  vec3 f = norm(*qv(&cam.orientation));
+  vec3 f = norm(QV(cam.orientation));
   vec3 s = norm(cross(cam.up, f));
   vec3 u = cross(f, s);
   //print_vec3(f, "f");
@@ -238,7 +242,7 @@ void handle_input(GLFWwindow *__restrict window) {
       switch (ms) {
         case CAMERA:
           quat qx = gen_quat(cam.up, -xoff * SENS);
-          quat qy = gen_quat(cross(*qv(&cam.orientation), cam.up), yoff * SENS);
+          quat qy = gen_quat(cross(QV(cam.orientation), cam.up), yoff * SENS);
 
           quat qr = qmul(qy, qx);
           quat qt = qmul(qmul(qr, cam.orientation), qconj(qr));
@@ -332,7 +336,7 @@ void handle_input(GLFWwindow *__restrict window) {
   }
 
   { // KEY_PRESSED
-    float cpanSpeed = (PAN_SPEED + KEY_PRESSED(GLFW_KEY_LEFT_SHIFT) * PAN_SPEED) * deltaTime;
+    float cpanSpeed = (PAN_SPEED + KEY_PRESSED(GLFW_KEY_LEFT_SHIFT) * PAN_SPEED * 3) * deltaTime;
     if (KEY_PRESSED(GLFW_KEY_EQUAL) && KEY_PRESSED(GLFW_KEY_LEFT_SHIFT)) {
       cam.fov += cam.fov * ZOOM_SPEED;
       cameraUpdate = 1;
@@ -345,11 +349,11 @@ void handle_input(GLFWwindow *__restrict window) {
       cameraUpdate = 1;
     }
     if (KEY_PRESSED(GLFW_KEY_A)) {
-      cam.pos = v3a(v3m(cpanSpeed, norm(cross(*qv(&cam.orientation), cam.up))), cam.pos);
+      cam.pos = v3a(v3m(cpanSpeed, norm(cross(QV(cam.orientation), cam.up))), cam.pos);
       cameraUpdate = 1;
     }
     if (KEY_PRESSED(GLFW_KEY_D)) {
-      cam.pos = v3a(v3m(cpanSpeed, v3n(norm(cross(*qv(&cam.orientation), cam.up)))), cam.pos);
+      cam.pos = v3a(v3m(cpanSpeed, v3n(norm(cross(QV(cam.orientation), cam.up)))), cam.pos);
       cameraUpdate = 1;
     }
     if (KEY_PRESSED(GLFW_KEY_SPACE)) {
@@ -361,11 +365,11 @@ void handle_input(GLFWwindow *__restrict window) {
       cameraUpdate = 1;
     }
     if (KEY_PRESSED(GLFW_KEY_W)) {
-      cam.pos = v3a(v3m(cpanSpeed, v3n(*qv(&cam.orientation))), cam.pos);
+      cam.pos = v3a(v3m(cpanSpeed, v3n(QV(cam.orientation))), cam.pos);
       cameraUpdate = 1;
     }
     if (KEY_PRESSED(GLFW_KEY_S)) {
-      cam.pos = v3a(v3m(cpanSpeed, *qv(&cam.orientation)), cam.pos);
+      cam.pos = v3a(v3m(cpanSpeed, QV(cam.orientation)), cam.pos);
       cameraUpdate = 1;
     }
     if (KEY_PRESSED(GLFW_KEY_U)) {
@@ -568,7 +572,6 @@ void draw_squarec(float px, float py, float sx, float sy, uint32_t col) {
   glDrawArrays(GL_TRIANGLE_FAN, 0, 4);
 }
 
-
 struct TG {
   uint32_t index;
   FT_Vector pos;
@@ -658,7 +661,6 @@ uint32_t draw_textbox(float x, uint32_t y, struct tbox *__restrict t) {
 }
 
 uint32_t sS = 21;
-
 uint32_t draw_slider(float x, uint32_t y, struct node *__restrict cm, struct fslider *__restrict t) {
   int32_t tlen = cm->sx - cm->lp - cm->rp - sS;
   float   rlen = t->lims.y - t->lims.x;
@@ -818,10 +820,9 @@ uint8_t rbi(struct sray *__restrict r, struct bbox *__restrict cb) {
 struct linv lins;
 float *__restrict linsv;
 
+/// ADD BB
 #define CHEA(i) (FPC(&cl.e)[i] = FPC(&cb->a)[i])
-#define CHEI(i) (FPC(&cl.e)[i] = FPC(&cb->i)[i])
 #define CHSA(i) (FPC(&cl.s)[i] = FPC(&cb->a)[i])
-#define CHSI(i) (FPC(&cl.s)[i] = FPC(&cb->i)[i])
 void addbb(struct bbox *__restrict cb, struct linv *__restrict v) {
   struct line cl;
   int32_t i;
@@ -878,7 +879,7 @@ void aobj(uint32_t m, float sc, v3 pos, struct object *__restrict cb) {
   addbb(&cm.b, &lins);
 }
 
-uint32_t clines() {
+void clines(uint32_t *__restrict vao, uint32_t *__restrict vbo) {
   linsv = malloc(lins.l * sizeof(float) * (3 + 4) * 2);
   {
     int32_t i, j;
@@ -895,20 +896,17 @@ uint32_t clines() {
     }
   }
 
-  uint32_t vao, vbo;
-  glGenVertexArrays(1, &vao);
-  glGenBuffers(1, &vbo);
+  glGenVertexArrays(1, vao);
+  glGenBuffers(1, vbo);
 
-  glBindVertexArray(vao);
-  glBindBuffer(GL_ARRAY_BUFFER, vbo);
+  glBindVertexArray(*vao);
+  glBindBuffer(GL_ARRAY_BUFFER, *vbo);
   glBufferData(GL_ARRAY_BUFFER, lins.l * sizeof(float) * (3 + 4) * 2, linsv, GL_STATIC_DRAW);
 
   glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 7 * sizeof(float), (void *) (0 * sizeof(float)));
   glVertexAttribPointer(1, 4, GL_FLOAT, GL_FALSE, 7 * sizeof(float), (void *) (3 * sizeof(float)));
   glEnableVertexAttribArray(0);
   glEnableVertexAttribArray(1);
-
-  return vao;
 }
 
 uint8_t run_suijin() {
@@ -938,14 +936,14 @@ uint8_t run_suijin() {
     linvi(&lins);
 
     parse_folder(&mods, &mats, "Resources/Items/Mountain");
-    parse_folder(&mods, &mats, "Resources/Items/Dough");
+    //parse_folder(&mods, &mats, "Resources/Items/Dough");
     //parse_folder(&mods, &uim, "Resources/Items/Plane");
     
     matvt(&mats);
     modvt(&mods);
   }
 
-  uint32_t lvao;
+  uint32_t lvao, lvbo;
   {
     struct object cb;
     objvi(&objs);
@@ -954,16 +952,17 @@ uint8_t run_suijin() {
     aobj(0, 10.0f, (v3) {0.0f, 0.0f, 0.0f}, &cb);
     objvp(&objs, cb);
 
-    init_object(&cb, "DOUGH");
+    /*init_object(&cb, "DOUGH");
     aobj(1, 10.0f, (v3) {-60.0f, 40.0f, -30.0f}, &cb);
     aobj(2, 10.0f, (v3) {-60.0f, 40.0f, -30.0f}, &cb);
-    objvp(&objs, cb);
+    objvp(&objs, cb);*/
 
     minfvt(&cb.mins);
     objvt(&objs);
 
-    lvao = clines();
+    clines(&lvao, &lvbo);
   }
+
 
   uint32_t nprog;
 
@@ -1011,8 +1010,6 @@ uint8_t run_suijin() {
 
   initCam.up.y = 1.0f;
   initCam.fov = toRadians(90.0f);
-  /*initCam.pos = (vec3) { 0.0f, 0.0f, 0.0f };
-  initCam.orientation = (quat) { 1.0f, 0.0f, 0.0f, 0.0f};*/
   initCam.pos = (vec3) { 0.0f, 60.0f, 0.0f };
   initCam.orientation = (quat) { 1.0f, 0.0f, 0.0f, 0.0f};
 
@@ -1060,12 +1057,12 @@ uint8_t run_suijin() {
       cameraUpdate = 0;
     }
 
-    cs = csray(cam.pos, (v3) {0.0f, 0.0f, 0.0f});
+    cs = csray(cam.pos, v3a(cam.pos, v3m(-5, QV(cam.orientation))));
     //print_vec3(cs.o, "o");
     //print_vec3(cs.d, "d");
     // print_vec3(cs.i, "i");
 
-    { // NPROG
+    if (drawObjs) { // NPROG
       glUseProgram(nprog);
 
       program_set_mat4(nprog, "fn_mat", fn);
@@ -1076,14 +1073,14 @@ uint8_t run_suijin() {
       for(i = 0; i < objs.l; ++i) {
         for(j = 0; j < objs.v[i].mins.l; ++j) {
           draw_model(nprog, &mats, mods.v + objs.v[i].mins.v[j].m, objs.v[i].mins.v[j].aff);
-          //if (rbi(&cs, &objs.v[i].mins.v[j].b)) {
-          //  fprintf(stdout, "Intersected with %s %u!\n", objs.v[i].name, objs.v[i].mins.v[j].m);
-          //}
+          if (rbi(&cs, &objs.v[i].mins.v[j].b)) {
+            fprintf(stdout, "Intersected with %s %u!\n", objs.v[i].name, objs.v[i].mins.v[j].m);
+          }
         }
       }
     }
 
-    { // LPROG
+    if (drawBb) { // LPROG
       glUseProgram(lprog);
       program_set_mat4(lprog, "fn_mat", fn);
 
@@ -1091,7 +1088,7 @@ uint8_t run_suijin() {
       glDrawArrays(GL_LINES, 0, lins.l * 2);
     }
 
-    { // UPROG
+    if (drawUi) { // UPROG
       glUseProgram(uprog);
       glDisable(GL_DEPTH_TEST);
 
@@ -1100,9 +1097,6 @@ uint8_t run_suijin() {
         draw_node(i);
       }
     }
-
-
-
 
     if (frame % 30 == 0) {
       while (1) {
@@ -1114,7 +1108,6 @@ uint8_t run_suijin() {
         }
       }
     }
-
 
     glfwPollEvents();
     glfwSwapBuffers(window);

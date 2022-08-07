@@ -79,6 +79,8 @@ struct ckq {
   uint32_t e;
 };
 
+#define QV(v) (*((v3 *__restrict)(&v)))
+
 void read_uint32_t(FILE *__restrict stream, uint32_t *__restrict nr);
 
 float __attribute((pure)) min(float o1, float o2); // INLINE
