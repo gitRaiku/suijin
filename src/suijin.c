@@ -37,6 +37,10 @@ mat4 identity;
 FT_Library ftlib;
 FT_Face ftface;
 
+/// TODO
+v3 HITP;
+uint8_t HITS = 0;
+
 int32_t cshading = 0;
 
 struct camera {
@@ -550,7 +554,7 @@ void create_affine_matrix(mat4 m, float xs, float ys, float zs, float x, float y
   m[3][0] =          0; m[3][1] =          0; m[3][2] =  0; m[3][3] = 1; 
 }
 
-uint32_t uvao, crvao, uprog, lprog; // Draw Square
+uint32_t uvao, uprog, lprog, pprog; // Draw Square
 void draw_squaret(float px, float py, float sx, float sy, uint32_t tex) {
   mat4 aff;
   glUseProgram(uprog);
@@ -738,8 +742,8 @@ void draw_node(uint32_t mi) {
 #undef cm
 }
 
-void prep_ui(GLFWwindow *__restrict window, uint32_t *__restrict vaoui, uint32_t *__restrict vaocr) {
-  uint32_t vboui, vbocr;
+void prep_ui(GLFWwindow *__restrict window, uint32_t *__restrict vao) {
+  uint32_t vbo;
   float vdata[] = {
     -1.0f,  1.0f, 0.0f, 0.0f,
     -1.0f, -1.0f, 0.0f, 1.0f,
@@ -747,26 +751,12 @@ void prep_ui(GLFWwindow *__restrict window, uint32_t *__restrict vaoui, uint32_t
      1.0f,  1.0f, 1.0f, 0.0f,
   };
 
-  glGenVertexArrays(1, vaoui);
-  glGenBuffers(1, &vboui);
+  glGenVertexArrays(1, vao);
+  glGenBuffers(1, &vbo);
 
-  glBindVertexArray(*vaoui);
-  glBindBuffer(GL_ARRAY_BUFFER, vboui);
+  glBindVertexArray(*vao);
+  glBindBuffer(GL_ARRAY_BUFFER, vbo);
   glBufferData(GL_ARRAY_BUFFER, sizeof(vdata), vdata, GL_STATIC_DRAW);
-
-  glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(float), (void *) (0 * sizeof(float)));
-  glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(float), (void *) (2 * sizeof(float)));
-  glEnableVertexAttribArray(0);
-  glEnableVertexAttribArray(1);
-
-  float pdata[] = { 0.0f, 0.0f, 0.0f, 0.0f };
-
-  glGenVertexArrays(1, vaocr);
-  glGenBuffers(1, &vbocr);
-
-  glBindVertexArray(*vaocr);
-  glBindBuffer(GL_ARRAY_BUFFER, vbocr);
-  glBufferData(GL_ARRAY_BUFFER, sizeof(pdata), pdata, GL_STATIC_DRAW);
 
   glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(float), (void *) (0 * sizeof(float)));
   glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(float), (void *) (2 * sizeof(float)));
@@ -1030,6 +1020,8 @@ uint32_t rmi(struct sray *__restrict r, struct minf *__restrict cm) {
 
   if (hc) {
     fprintf(stdout, "Closest hit: %f - %u from %u\n", mf, mi, hc);
+    HITS = 1;
+    HITP = v3a(cam.pos, v3m(mf, QV(cam.orientation)));
   } else {
     fprintf(stdout, "No hits\n");
   }
@@ -1037,6 +1029,18 @@ uint32_t rmi(struct sray *__restrict r, struct minf *__restrict cm) {
   return mi != 999999;
 }
 #undef cmm
+
+void cpoints(uint32_t *__restrict vao, uint32_t *__restrict vbo) {
+  glGenVertexArrays(1, vao);
+  glGenBuffers(1, vbo);
+
+  glBindVertexArray(*vao);
+  glBindBuffer(GL_ARRAY_BUFFER, *vbo);
+  glBufferData(GL_ARRAY_BUFFER, 2 * 3 * sizeof(float), NULL, GL_STATIC_DRAW);
+
+  glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void *) (0 * sizeof(float)));
+  glEnableVertexAttribArray(0);
+}
 
 uint8_t run_suijin() {
   init_random();
@@ -1057,6 +1061,7 @@ uint8_t run_suijin() {
   glLineWidth(3.0);
   glEnable(GL_DEPTH_TEST);
   glEnable(GL_BLEND);
+  glEnable(GL_PROGRAM_POINT_SIZE);
   glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
   struct objv objs;
@@ -1099,13 +1104,15 @@ uint8_t run_suijin() {
 
   _ctime = _ltime = deltaTime = 0;
 
-#define SHADERC 6
+#define SHADERC 8
   uint32_t shaders[SHADERC];
   {
     char          *paths[SHADERC] = { "shaders/vv.glsl", "shaders/vf.glsl", 
                                       "shaders/uv.glsl", "shaders/uf.glsl",
-                                      "shaders/lv.glsl", "shaders/lf.glsl"};
+                                      "shaders/lv.glsl", "shaders/lf.glsl",
+                                      "shaders/pv.glsl", "shaders/pf.glsl"};
     uint32_t shaderTypes[SHADERC] = { GL_VERTEX_SHADER   , GL_FRAGMENT_SHADER,
+                                      GL_VERTEX_SHADER   , GL_FRAGMENT_SHADER,
                                       GL_VERTEX_SHADER   , GL_FRAGMENT_SHADER,
                                       GL_VERTEX_SHADER   , GL_FRAGMENT_SHADER  };
     uint32_t i;
@@ -1116,13 +1123,25 @@ uint8_t run_suijin() {
     PR_CHECK(program_get(2, shaders    , &nprog));
     PR_CHECK(program_get(2, shaders + 2, &uprog));
     PR_CHECK(program_get(2, shaders + 4, &lprog));
+    PR_CHECK(program_get(2, shaders + 6, &pprog));
 
     for (i = 0; i < SHADERC; ++i) { // TODO: REMOVE
       glDeleteShader(shaders[i]);
     }
   }
 
-  prep_ui(window, &uvao, &crvao);
+  uint32_t pvao, pvbo;
+  {
+    cpoints(&pvao, &pvbo);
+
+    v3 ce = {0.0f, 0.0f, 0.0f};
+
+    glBindBuffer(GL_ARRAY_BUFFER, pvbo);
+    glBufferSubData(GL_ARRAY_BUFFER, 3 * sizeof(float), 3 * sizeof(float), &ce);
+    glBindBuffer(GL_ARRAY_BUFFER, 0);
+  }
+
+  prep_ui(window, &uvao);
 
 
   { // STAT
@@ -1206,9 +1225,12 @@ uint8_t run_suijin() {
           draw_model(nprog, &mats, mods.v + objs.v[i].mins.v[j].m, objs.v[i].mins.v[j].aff);
           if (glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS) {
             if (rbi(&cs, &objs.v[i].mins.v[j].b)) {
-          //if (1) { if (1) {
-              fprintf(stdout, "Intersected with %s %u!\n", objs.v[i].name, objs.v[i].mins.v[j].m);
-              fprintf(stdout, "%u\n", rmi(&cs, &objs.v[i].mins.v[j]));
+              if (rmi(&cs, &objs.v[i].mins.v[j])) {
+                glBindBuffer(GL_ARRAY_BUFFER, pvbo);
+                glBufferSubData(GL_ARRAY_BUFFER, 0, 3 * sizeof(float), &HITP);
+                print_vec3(HITP, "hp");
+                fprintf(stdout, "%u\n", HITS);
+              }
             }
           }
         }
@@ -1232,11 +1254,20 @@ uint8_t run_suijin() {
         draw_node(i);
       }
 
-      program_set_mat4(uprog, "affine", identity);
-      program_set_float4(uprog, "col", 1.0f, 1.0f, 1.0f, 1.0f);
-      program_set_int1(uprog, "hasTexture", 0);
-      glBindVertexArray(crvao);
-      glDrawArrays(GL_POINTS, 0, 1);
+    }
+
+    { // PPROG
+      glUseProgram(pprog);
+      glBindVertexArray(pvao);
+      program_set_float4(pprog, "col", 1.0f, 1.0f, 1.0f, 1.0f);
+      program_set_float1(pprog, "ps", 7.0f);
+      glDrawArrays(GL_POINTS, 1, 1);
+
+      if (HITS) {
+        program_set_mat4(pprog, "fn_mat", fn);
+        program_set_float1(pprog, "ps", 0.0f);
+        glDrawArrays(GL_POINTS, 0, 1);
+      }
     }
 
     if (frame % 30 == 0) {
