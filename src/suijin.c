@@ -1075,6 +1075,7 @@ uint8_t run_suijin() {
           draw_model(nprog, &mats, mods.v + objs.v[i].mins.v[j].m, objs.v[i].mins.v[j].aff);
           if (rbi(&cs, &objs.v[i].mins.v[j].b)) {
             fprintf(stdout, "Intersected with %s %u!\n", objs.v[i].name, objs.v[i].mins.v[j].m);
+            
           }
         }
       }
