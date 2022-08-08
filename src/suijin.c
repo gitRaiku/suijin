@@ -956,11 +956,11 @@ uint8_t rmif(struct sray *__restrict r, struct vv3p *__restrict p, float *__rest
     float det = dot(v0v1, pvec);
 
 #ifdef CULLING 
-    if (det < 0.00000001) {
+    if (det < 0.00000000001) {
       return 0; 
     }
 #else 
-    if (fabs(det) < 0.00000001) {
+    if (fabs(det) < 0.00000000001) {
       return 0;
     }
 #endif 
@@ -984,17 +984,14 @@ uint8_t rmif(struct sray *__restrict r, struct vv3p *__restrict p, float *__rest
 } 
 
 #define cmm mods.v[cm->m]
-uint32_t rmi(struct sray *__restrict r, struct minf *__restrict cm) {
-  //struct sray ur;
-  //ur.o = v3m(cm->scale, v3s(r->o, cm->pos));
-  //ur.d = r->d;
-  
+void rmi(struct sray *__restrict r, struct minf *__restrict cm, float *__restrict f) {
   struct vv3p vv;
-  float t, u, v;
+  float t = 0;
+  float u = 0;
+  float v = 0;
 
-  float mf = 99999999999.0f;
-  uint32_t mi = 0;
-  uint32_t hc = 0;
+  float mf = -99999999999.0f;
+  uint32_t ht = 0;
 
   v3 px;
   v3 py;
@@ -1009,24 +1006,15 @@ uint32_t rmi(struct sray *__restrict r, struct minf *__restrict cm) {
       vv.v1 = &py;
       vv.v2 = &pz;
       if (rmif(r, &vv, &t, &u, &v)) {
-        ++hc;
-        if (t < mf) {
+        ++ht;
+        if (t > mf && t <= 0) {
           mf = t;
-          mi = i;
         }
       }
     }
   }
 
-  if (hc) {
-    fprintf(stdout, "Closest hit: %f - %u from %u\n", mf, mi, hc);
-    HITS = 1;
-    HITP = v3a(cam.pos, v3m(mf, QV(cam.orientation)));
-  } else {
-    fprintf(stdout, "No hits\n");
-  }
-
-  return mi != 999999;
+  *f = mf;
 }
 #undef cmm
 
@@ -1061,8 +1049,9 @@ uint8_t run_suijin() {
   glLineWidth(3.0);
   glEnable(GL_DEPTH_TEST);
   glEnable(GL_BLEND);
-  glEnable(GL_PROGRAM_POINT_SIZE);
   glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+  glEnable(GL_PROGRAM_POINT_SIZE);
+  //glEnable(GL_CULL_FACE);
 
   struct objv objs;
 
@@ -1072,7 +1061,8 @@ uint8_t run_suijin() {
     linvi(&lins);
 
     parse_folder(&mods, &mats, "Resources/Items/Mountain");
-    //parse_folder(&mods, &mats, "Resources/Items/Dough");
+    parse_folder(&mods, &mats, "Resources/Items/Dough");
+    parse_folder(&mods, &mats, "Resources/Items/Plant");
     //parse_folder(&mods, &uim, "Resources/Items/Plane");
     
     matvt(&mats);
@@ -1088,10 +1078,16 @@ uint8_t run_suijin() {
     aobj(0, 10.0f, (v3) {0.0f, 0.0f, 0.0f}, &cb);
     objvp(&objs, cb);
 
-    /*init_object(&cb, "DOUGH");
+    init_object(&cb, "DOUGH");
     aobj(1, 10.0f, (v3) {-60.0f, 40.0f, -30.0f}, &cb);
     aobj(2, 10.0f, (v3) {-60.0f, 40.0f, -30.0f}, &cb);
-    objvp(&objs, cb);*/
+    objvp(&objs, cb);
+
+    init_object(&cb, "PLANT");
+    aobj(3, 10.0f, (v3) {30.0f, 10.0f, -30.0f}, &cb);
+    aobj(4, 10.0f, (v3) {30.0f, 10.0f, -30.0f}, &cb);
+    aobj(5, 10.0f, (v3) {30.0f, 10.0f, -30.0f}, &cb);
+    objvp(&objs, cb);
 
     minfvt(&cb.mins);
     objvt(&objs);
@@ -1114,7 +1110,7 @@ uint8_t run_suijin() {
     uint32_t shaderTypes[SHADERC] = { GL_VERTEX_SHADER   , GL_FRAGMENT_SHADER,
                                       GL_VERTEX_SHADER   , GL_FRAGMENT_SHADER,
                                       GL_VERTEX_SHADER   , GL_FRAGMENT_SHADER,
-                                      GL_VERTEX_SHADER   , GL_FRAGMENT_SHADER  };
+                                      GL_VERTEX_SHADER   , GL_FRAGMENT_SHADER };
     uint32_t i;
     for (i = 0; i < SHADERC; ++i) {
       PR_CHECK(shader_get(paths[i], shaderTypes[i], shaders + i));
@@ -1220,16 +1216,19 @@ uint8_t run_suijin() {
       program_set_float3v(nprog, "camPos", cam.pos);
 
       int32_t i, j;
+      float rd, mrd = -99999999.0f;
       for(i = 0; i < objs.l; ++i) {
         for(j = 0; j < objs.v[i].mins.l; ++j) {
           draw_model(nprog, &mats, mods.v + objs.v[i].mins.v[j].m, objs.v[i].mins.v[j].aff);
           if (glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS) {
             if (rbi(&cs, &objs.v[i].mins.v[j].b)) {
-              if (rmi(&cs, &objs.v[i].mins.v[j])) {
+              rmi(&cs, &objs.v[i].mins.v[j], &rd);
+              if (rd > mrd && rd < 999999999.0f) {
+                mrd = rd;
+                HITS = 1;
+                HITP = v3a(cam.pos, v3m(rd, QV(cam.orientation)));
                 glBindBuffer(GL_ARRAY_BUFFER, pvbo);
                 glBufferSubData(GL_ARRAY_BUFFER, 0, 3 * sizeof(float), &HITP);
-                print_vec3(HITP, "hp");
-                fprintf(stdout, "%u\n", HITS);
               }
             }
           }
@@ -1245,6 +1244,23 @@ uint8_t run_suijin() {
       glDrawArrays(GL_LINES, 0, lins.l * 2);
     }
 
+    { // PPROG
+      glDisable(GL_DEPTH_TEST);
+      glUseProgram(pprog);
+      glBindVertexArray(pvao);
+      program_set_float4(pprog, "col", 1.0f, 1.0f, 1.0f, 0.1f);
+      program_set_float1(pprog, "ps", 7.0f);
+      glDrawArrays(GL_POINTS, 1, 1);
+
+      if (HITS) {
+        program_set_mat4(pprog, "fn_mat", fn);
+        program_set_float4(pprog, "col", 1.0f, 1.0f, 1.0f, 1.0f);
+        program_set_float1(pprog, "ps", 0.0f);
+        glDrawArrays(GL_POINTS, 0, 1);
+      }
+    }
+
+
     if (drawUi) { // UPROG
       glUseProgram(uprog);
       glDisable(GL_DEPTH_TEST);
@@ -1254,20 +1270,6 @@ uint8_t run_suijin() {
         draw_node(i);
       }
 
-    }
-
-    { // PPROG
-      glUseProgram(pprog);
-      glBindVertexArray(pvao);
-      program_set_float4(pprog, "col", 1.0f, 1.0f, 1.0f, 1.0f);
-      program_set_float1(pprog, "ps", 7.0f);
-      glDrawArrays(GL_POINTS, 1, 1);
-
-      if (HITS) {
-        program_set_mat4(pprog, "fn_mat", fn);
-        program_set_float1(pprog, "ps", 0.0f);
-        glDrawArrays(GL_POINTS, 0, 1);
-      }
     }
 
     if (frame % 30 == 0) {
