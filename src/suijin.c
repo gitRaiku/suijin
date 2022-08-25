@@ -1049,7 +1049,6 @@ void init_skybox(struct skybox *__restrict sb) {
   sb->sunSize = 1.0f;
   sb->sunCol = h2c3(0xFFCC33);
   sb->m.scale = 400.0f;
-  sb->m.scale = 100.0f;
   maff(&sb->m);
 
   glGenVertexArrays(1, &skyvao);
@@ -1317,7 +1316,10 @@ uint8_t run_suijin() {
     {
       glUseProgram(skyprog);
       program_set_mat4(skyprog, "fn", fn);
+      sb.m.pos = cam.pos;
+      maff(&sb.m);
       program_set_mat4(skyprog, "affine", sb.m.aff);
+      program_set_float2(skyprog, "sunPos", 0.0f, sb.sunPos * M_PI);
 
       glBindVertexArray(skyvao);
       glDrawArrays(GL_TRIANGLES, 0, sbvl);
