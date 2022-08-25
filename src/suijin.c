@@ -29,8 +29,8 @@ double _ctime, _ltime;
 double deltaTime;
 
 uint8_t drawObjs = 1;
-uint8_t drawUi = 1;
-uint8_t drawBb = 1;
+uint8_t drawUi = 0;
+uint8_t drawBb = 0;
 
 mat4 identity;
 
@@ -56,6 +56,8 @@ double oldMouseX, oldMouseY;
 
 struct camera initCam;
 struct camera cam;
+
+#define FRAG_PATH "shaders/skybox_frag.glsl"
 
 struct matv mats;
 struct modv mods;
@@ -194,7 +196,7 @@ void update_camera_matrix() {
   if (cam.up.x == cam.orientation.x && cam.up.y == cam.orientation.y && cam.up.z == cam.orientation.z) {
     cam.orientation.x = 0.0000000000000001;
   }
-  create_projection_matrix(proj, cam.fov, cam.ratio, 0.01f, 1000.0f);
+  create_projection_matrix(proj, cam.fov, cam.ratio, 0.01f, 3000.0f);
   create_lookat_matrix(view);
 
   matmul44(fn, proj, view);
@@ -235,6 +237,7 @@ v2 lims[10];
 double startY = 0;
 uint8_t nwr = 0;
 uint8_t dumpTex = 0;
+uint8_t canMoveCam = 1;
 float mxoff, myoff;
 void handle_input(GLFWwindow *__restrict window) {
   { // CURSOR
@@ -246,51 +249,38 @@ void handle_input(GLFWwindow *__restrict window) {
       oldMouseX = mouseX;
       oldMouseY = mouseY;
 
-#define FIXME 1
-
-      if (FIXME) {
+      if (canMoveCam) {
         quat qx = gen_quat(cam.up, -xoff * SENS);
         quat qy = gen_quat(cross(QV(cam.orientation), cam.up), yoff * SENS);
 
         quat qr = qmul(qy, qx);
         quat qt = qmul(qmul(qr, cam.orientation), qconj(qr));
         qt = qnorm(qt);
-        //print_quat(cam.orientation, "qt");
         cam.orientation = qt;
 
         cameraUpdate = 1;
-      } else {
-        switch (ms) {
-          case CAMERA:
-            quat qx = gen_quat(cam.up, -xoff * SENS);
-            quat qy = gen_quat(cross(QV(cam.orientation), cam.up), yoff * SENS);
+      }
 
-            quat qr = qmul(qy, qx);
-            quat qt = qmul(qmul(qr, cam.orientation), qconj(qr));
-            qt = qnorm(qt);
-            //print_quat(cam.orientation, "qt");
-            cam.orientation = qt;
-
-            cameraUpdate = 1;
+      switch (ms) {
+        case ITEMS:
+          if (vals[curi] == NULL) {
             break;
-          case ITEMS:
-            if (vals[curi] == NULL) {
+          }
+          *vals[curi] += -yoff * scal[curi];
+          if (lims[curi].x != lims[curi].y) {
+            *vals[curi] = clamp(*vals[curi], lims[curi].x, lims[curi].y);
+          }
+          fprintf(stdout, "%s -> % 3.3f\r", nms[curi], *vals[curi]);
+          switch (curi) {
+            case 3:
+              reset_ft();
               break;
-            }
-            *vals[curi] += -yoff * scal[curi];
-            if (lims[curi].x != lims[curi].y) {
-              *vals[curi] = clamp(*vals[curi], lims[curi].x, lims[curi].y);
-            }
-            fprintf(stdout, "%s -> % 3.3f\r", nms[curi], *vals[curi]);
-            switch (curi) {
-              case 3:
-                reset_ft();
-                break;
-           }
-            break;
-          case UI:
-            break;
-        }
+         }
+          break;
+        case UI:
+          break;
+        default:
+          break;
       }
     }
   }
@@ -315,10 +305,14 @@ void handle_input(GLFWwindow *__restrict window) {
         case GLFW_KEY_TAB:
           if (kp.action == 1) {
             ms = UI;
+            canMoveCam = 0;
+            drawUi = 1;
             glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
             glfwSetCursorPos(window, windowW / 2.0, windowH / 2.0);
           } else if (kp.action == 0) {
             ms = CAMERA;
+            canMoveCam = 1;
+            drawUi = 0;
             selui.t = UIT_CANNOT;
             glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
           }
@@ -409,11 +403,11 @@ void handle_input(GLFWwindow *__restrict window) {
 time_t la; // check_frag_update
 uint8_t check_frag_update(uint32_t *__restrict program, uint32_t vert) {
   struct stat s;
-  stat("shaders/vf.glsl", &s);
+  stat(FRAG_PATH, &s);
   if (s.st_ctim.tv_sec != la) {
     uint32_t shaders[2];
     shaders[0] = vert;
-    if (shader_get("shaders/vf.glsl", GL_FRAGMENT_SHADER, shaders + 1)) {
+    if (shader_get(FRAG_PATH, GL_FRAGMENT_SHADER, shaders + 1)) {
       return 2;
     } else {
       program_get(2, shaders, program);
@@ -576,6 +570,19 @@ void draw_squaret(float px, float py, float sx, float sy, uint32_t tex) {
   glDrawArrays(GL_TRIANGLE_FAN, 0, 4);
 }
 
+v4 __attribute((pure)) h2c4(uint64_t c) { // INLINE
+  return (v4) { ((c & 0xFF000000) >> 24) / 255.0f,
+                ((c & 0x00FF0000) >> 16) / 255.0f, 
+                ((c & 0x0000FF00) >>  8) / 255.0f, 
+                ((c & 0x000000FF) >>  0) / 255.0f };
+}
+
+v3 __attribute((pure)) h2c3(uint64_t c) { // INLINE
+  return (v3) { ((c & 0x00FF0000) >> 16) / 255.0f,
+                ((c & 0x0000FF00) >>  8) / 255.0f, 
+                ((c & 0x000000FF) >>  0) / 255.0f };
+}
+
 void draw_squarec(float px, float py, float sx, float sy, uint32_t col) {
   mat4 aff;
   glUseProgram(uprog);
@@ -586,10 +593,8 @@ void draw_squarec(float px, float py, float sx, float sy, uint32_t col) {
   program_set_mat4(uprog, "affine", aff);
 
   program_set_int1(uprog, "hasTexture", 0);
-  program_set_float4(uprog, "col", ((col & 0xFF000000) >> 24) / 255.0f, 
-                                   ((col & 0x00FF0000) >> 16) / 255.0f,
-                                   ((col & 0x0000FF00) >>  8) / 255.0f, 
-                                   ((col & 0x000000FF) >>  0) / 255.0f);
+  v4 c = h2c4(col);
+  program_set_float4(uprog, "col", c.x, c.y, c.z, c.w);
 
   glDrawArrays(GL_TRIANGLE_FAN, 0, 4);
 }
@@ -1030,6 +1035,107 @@ void cpoints(uint32_t *__restrict vao, uint32_t *__restrict vbo) {
   glEnableVertexAttribArray(0);
 }
 
+struct skybox {
+  float sunPos;
+  float sunSize;
+  struct minf m;
+  v3 sunCol;
+};
+uint32_t skyprog, skyvao, skyvbo, sbvl;
+
+void init_skybox(struct skybox *__restrict sb) {
+  memset(sb, 0, sizeof(*sb));
+  sb->sunPos = 0.25f;
+  sb->sunSize = 1.0f;
+  sb->sunCol = h2c3(0xFFCC33);
+  sb->m.scale = 400.0f;
+  sb->m.scale = 100.0f;
+  maff(&sb->m);
+
+  glGenVertexArrays(1, &skyvao);
+  glGenBuffers(1, &skyvbo);
+
+  /* TODO: Use GL_TRIANGLE_STRIP
+    float sbv[] = { 
+      -1.0f,  1.0f,  1.0f, 0.50f, 0.33f,
+       1.0f,  1.0f,  1.0f, 0.50f, 0.00f,
+      -1.0f, -1.0f,  1.0f, 0.25f, 0.33f,
+       1.0f, -1.0f,  1.0f, 0.25f, 0.00f,
+       1.0f, -1.0f, -1.0f, 0.25f, 1.00f,
+       1.0f,  1.0f,  1.0f, 0.75f, 0.33f,
+       1.0f,  1.0f, -1.0f, 0.75f, 0.66f,
+      -1.0f,  1.0f,  1.0f, 0.50f, 0.33f,
+      -1.0f,  1.0f, -1.0f, 0.50f, 0.66f,
+      -1.0f, -1.0f,  1.0f, 0.25f, 0.33f,
+      -1.0f, -1.0f, -1.0f, 0.25f, 0.66f,
+       1.0f, -1.0f, -1.0f, 0.00f, 0.66f,
+      -1.0f,  1.0f, -1.0f, 0.00f, 0.33f,
+       1.0f,  1.0f, -1.0f, 0.50f, 1.00f
+    };
+  */
+
+  float sbv[] = {
+    -1.0f, -1.0f, -1.0f, 0.25f, 0.66f,
+    -1.0f, -1.0f,  1.0f, 0.25f, 0.33f,
+    -1.0f,  1.0f,  1.0f, 0.50f, 0.33f,
+
+    -1.0f, -1.0f, -1.0f, 0.25f, 0.66f,
+    -1.0f,  1.0f,  1.0f, 0.50f, 0.33f,
+    -1.0f,  1.0f, -1.0f, 0.50f, 0.66f,
+
+    -1.0f, -1.0f,  1.0f, 0.25f, 0.33f,
+    -1.0f,  1.0f,  1.0f, 0.50f, 0.33f,
+     1.0f, -1.0f,  1.0f, 0.25f, 0.00f,
+
+    -1.0f,  1.0f,  1.0f, 0.50f, 0.33f,
+     1.0f, -1.0f,  1.0f, 0.25f, 0.00f,
+     1.0f,  1.0f,  1.0f, 0.50f, 0.00f,
+
+    -1.0f, -1.0f, -1.0f, 0.25f, 0.66f,
+    -1.0f, -1.0f,  1.0f, 0.25f, 0.33f,
+     1.0f, -1.0f,  1.0f, 0.00f, 0.33f,
+
+    -1.0f, -1.0f, -1.0f, 0.25f, 0.66f,
+     1.0f, -1.0f,  1.0f, 0.00f, 0.33f,
+     1.0f, -1.0f, -1.0f, 0.00f, 0.66f,
+
+    -1.0f, -1.0f, -1.0f, 0.25f, 0.66f,
+    -1.0f,  1.0f, -1.0f, 0.50f, 0.66f,
+     1.0f, -1.0f, -1.0f, 0.25f, 1.00f,
+
+    -1.0f,  1.0f, -1.0f, 0.50f, 0.66f,
+     1.0f, -1.0f, -1.0f, 0.25f, 1.00f,
+     1.0f,  1.0f, -1.0f, 0.50f, 1.00f,
+
+    -1.0f,  1.0f,  1.0f, 0.50f, 0.33f,
+    -1.0f,  1.0f, -1.0f, 0.50f, 0.66f,
+     1.0f,  1.0f,  1.0f, 0.75f, 0.33f,
+
+    -1.0f,  1.0f, -1.0f, 0.50f, 0.66f,
+     1.0f,  1.0f,  1.0f, 0.75f, 0.33f,
+     1.0f,  1.0f, -1.0f, 0.75f, 0.66f,
+
+     1.0f,  1.0f, -1.0f, 0.75f, 0.66f,
+     1.0f,  1.0f,  1.0f, 0.75f, 0.33f,
+     1.0f, -1.0f,  1.0f, 1.00f, 0.33f,
+
+     1.0f,  1.0f, -1.0f, 0.75f, 0.66f,
+     1.0f, -1.0f,  1.0f, 1.00f, 0.33f,
+     1.0f, -1.0f, -1.0f, 1.00f, 0.66f
+  };
+
+  sbvl = sizeof(sbv) / sizeof(float) / 5;
+
+  glBindVertexArray(skyvao);
+  glBindBuffer(GL_ARRAY_BUFFER, skyvbo);
+  glBufferData(GL_ARRAY_BUFFER, sizeof(sbv), sbv, GL_STATIC_DRAW);
+
+  glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 5 * sizeof(float), (void *) (0 * sizeof(float)));
+  glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 5 * sizeof(float), (void *) (3 * sizeof(float)));
+  glEnableVertexAttribArray(0);
+  glEnableVertexAttribArray(1);
+}
+
 uint8_t run_suijin() {
   init_random();
   setbuf(stdout, NULL);
@@ -1061,8 +1167,8 @@ uint8_t run_suijin() {
     linvi(&lins);
 
     parse_folder(&mods, &mats, "Resources/Items/Mountain");
-    parse_folder(&mods, &mats, "Resources/Items/Dough");
-    parse_folder(&mods, &mats, "Resources/Items/Plant");
+    //parse_folder(&mods, &mats, "Resources/Items/Dough");
+    //parse_folder(&mods, &mats, "Resources/Items/Plant");
     //parse_folder(&mods, &uim, "Resources/Items/Plane");
     
     matvt(&mats);
@@ -1078,6 +1184,7 @@ uint8_t run_suijin() {
     aobj(0, 10.0f, (v3) {0.0f, 0.0f, 0.0f}, &cb);
     objvp(&objs, cb);
 
+    /*
     init_object(&cb, "DOUGH");
     aobj(1, 10.0f, (v3) {-60.0f, 40.0f, -30.0f}, &cb);
     aobj(2, 10.0f, (v3) {-60.0f, 40.0f, -30.0f}, &cb);
@@ -1088,6 +1195,7 @@ uint8_t run_suijin() {
     aobj(4, 10.0f, (v3) {30.0f, 10.0f, -30.0f}, &cb);
     aobj(5, 10.0f, (v3) {30.0f, 10.0f, -30.0f}, &cb);
     objvp(&objs, cb);
+    */
 
     minfvt(&cb.mins);
     objvt(&objs);
@@ -1100,30 +1208,30 @@ uint8_t run_suijin() {
 
   _ctime = _ltime = deltaTime = 0;
 
-#define SHADERC 8
-  uint32_t shaders[SHADERC];
+#define PROGC 5
+  uint32_t shaders[PROGC * 2];
   {
-    char          *paths[SHADERC] = { "shaders/vv.glsl", "shaders/vf.glsl", 
-                                      "shaders/uv.glsl", "shaders/uf.glsl",
-                                      "shaders/lv.glsl", "shaders/lf.glsl",
-                                      "shaders/pv.glsl", "shaders/pf.glsl"};
-    uint32_t shaderTypes[SHADERC] = { GL_VERTEX_SHADER   , GL_FRAGMENT_SHADER,
-                                      GL_VERTEX_SHADER   , GL_FRAGMENT_SHADER,
-                                      GL_VERTEX_SHADER   , GL_FRAGMENT_SHADER,
-                                      GL_VERTEX_SHADER   , GL_FRAGMENT_SHADER };
+    char *snames[PROGC] = { "obj", "ui", "line", "point", "skybox" };
+    char tmpn[128];
+
     uint32_t i;
-    for (i = 0; i < SHADERC; ++i) {
-      PR_CHECK(shader_get(paths[i], shaderTypes[i], shaders + i));
+    for (i = 0; i < PROGC; ++i) {
+      snprintf(tmpn, sizeof(tmpn), "shaders/%s_vert.glsl", snames[i]);
+      PR_CHECK(shader_get(tmpn, GL_VERTEX_SHADER  , shaders + 2 * i + 0));
+      snprintf(tmpn, sizeof(tmpn), "shaders/%s_frag.glsl", snames[i]);
+      PR_CHECK(shader_get(tmpn, GL_FRAGMENT_SHADER, shaders + 2 * i + 1));
     }
 
     PR_CHECK(program_get(2, shaders    , &nprog));
     PR_CHECK(program_get(2, shaders + 2, &uprog));
     PR_CHECK(program_get(2, shaders + 4, &lprog));
     PR_CHECK(program_get(2, shaders + 6, &pprog));
+    PR_CHECK(program_get(2, shaders + 8, &skyprog));
 
-    for (i = 0; i < SHADERC; ++i) { // TODO: REMOVE
-      glDeleteShader(shaders[i]);
-    }
+    /*for (i = 0; i < PROGC; ++i) { // TODO: REMOVE
+      glDeleteShader(shaders[i * 2]);
+      glDeleteShader(shaders[i * 2 + 1]);
+    }*/
   }
 
   uint32_t pvao, pvbo;
@@ -1142,7 +1250,7 @@ uint8_t run_suijin() {
 
   { // STAT
     struct stat s;
-    stat("shaders/vf.glsl", &s);
+    stat(FRAG_PATH, &s);
     la = s.st_ctim.tv_sec;
   }
 
@@ -1170,7 +1278,6 @@ uint8_t run_suijin() {
   uint32_t frame = 0;
   reset_ft();
 
-  /*
   mchvi(&nodes[0].children);
   add_title(&nodes[0], "Numarul de boli pe care le are steifen.", 0.20f);
   add_slider(&nodes[0], &nodes[0].sy, 0.0f, 700.0f);
@@ -1183,9 +1290,13 @@ uint8_t run_suijin() {
   nodes[0].lp = 20;
   nodes[0].rp = 20;
   mchvt(&nodes[0].children);
-  */
 
   struct sray cs;
+
+
+  struct skybox sb;
+
+  init_skybox(&sb);
 
   while (!glfwWindowShouldClose(window)) {
     ++frame;
@@ -1203,10 +1314,57 @@ uint8_t run_suijin() {
       cameraUpdate = 0;
     }
 
-    cs = csrayd(cam.pos, QV(cam.orientation));
-    //print_vec3(cs.o, "o");
-    //print_vec3(cs.d, "d");
-    // print_vec3(cs.i, "i");
+    {
+      glUseProgram(skyprog);
+      program_set_mat4(skyprog, "fn", fn);
+      program_set_mat4(skyprog, "affine", sb.m.aff);
+
+      glBindVertexArray(skyvao);
+      glDrawArrays(GL_TRIANGLES, 0, sbvl);
+    }
+
+    goto end;
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
     if (drawObjs) { // NPROG
       glUseProgram(nprog);
@@ -1217,13 +1375,18 @@ uint8_t run_suijin() {
 
       int32_t i, j;
       float rd, mrd = -99999999.0f;
+
+      if (canMoveCam && glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS) {
+        cs = csrayd(cam.pos, QV(cam.orientation));
+      }
+
       for(i = 0; i < objs.l; ++i) {
         for(j = 0; j < objs.v[i].mins.l; ++j) {
           draw_model(nprog, &mats, mods.v + objs.v[i].mins.v[j].m, objs.v[i].mins.v[j].aff);
-          if (glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS) {
+          if (canMoveCam && glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS) {
             if (rbi(&cs, &objs.v[i].mins.v[j].b)) {
               rmi(&cs, &objs.v[i].mins.v[j], &rd);
-              if (rd > mrd && rd < 999999999.0f) {
+              if (rd > mrd && rd > -9999999999.0f) {
                 mrd = rd;
                 HITS = 1;
                 HITP = v3a(cam.pos, v3m(rd, QV(cam.orientation)));
@@ -1272,9 +1435,10 @@ uint8_t run_suijin() {
 
     }
 
+end:;
     if (frame % 30 == 0) {
-      while (1) {
-        uint8_t r = check_frag_update(&nprog, shaders[0]);
+      while (!glfwWindowShouldClose(window)) {
+        uint8_t r = check_frag_update(&skyprog, 9);
         if (r < 2) {
           break;
         } else {
