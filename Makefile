@@ -18,8 +18,8 @@ CCFLAGS  = -ggdb3 -Og \
 					 -pipe -I$(LIB_DIR)/glad \
 					 -fkeep-inline-functions \
 					 -I/usr/include/freetype2 \
-					 -D_FORTIFY_SOURCE=2 
-					 # -DSUIJIN_DEBUG 
+					 -D_FORTIFY_SOURCE=2 \
+					 -DSUIJIN_DEBUG 
 
 LINKER   = $(CC)
 

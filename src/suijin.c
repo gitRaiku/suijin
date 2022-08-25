@@ -143,8 +143,8 @@ GLFWwindow *window_init() {
         glfwGetVersion(&glfw_major, &glfw_minor, &glfw_revision);
         fprintf(stdout, "With the runtime GLFW version of %i %i %i\n",
                 glfw_major,
-       1        glfw_minor,
-       1        glfw_revision);
+                glfw_minor,
+                glfw_revision);
     }
 #endif
 
