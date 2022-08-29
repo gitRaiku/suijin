@@ -1036,7 +1036,7 @@ void cpoints(uint32_t *__restrict vao, uint32_t *__restrict vbo) {
 }
 
 struct skybox {
-  float sunPos;
+  v2 sunPos;
   float sunSize;
   struct minf m;
   v3 sunCol;
@@ -1045,7 +1045,6 @@ uint32_t skyprog, skyvao, skyvbo, sbvl;
 
 void init_skybox(struct skybox *__restrict sb) {
   memset(sb, 0, sizeof(*sb));
-  sb->sunPos = 0.25f;
   sb->sunSize = 1.0f;
   sb->sunCol = h2c3(0xFFCC33);
   sb->m.scale = 400.0f;
@@ -1313,60 +1312,27 @@ uint8_t run_suijin() {
       cameraUpdate = 0;
     }
 
-    {
+    { /// TODO: What the fuck
       glUseProgram(skyprog);
       program_set_mat4(skyprog, "fn", fn);
       sb.m.pos = cam.pos;
+      float tscale = 1 / 3.0f;
+      sb.sunPos.x = (sin(_ctime * tscale) + 1) * M_PI / 2;
+      if (cos(_ctime) < 0.0f) {
+        sb.sunPos.y = M_PI + cos(_ctime * tscale) * M_PI;
+      } else {
+        sb.sunPos.y = cos(_ctime * tscale) * M_PI;
+      }
       maff(&sb.m);
       program_set_mat4(skyprog, "affine", sb.m.aff);
-      program_set_float2(skyprog, "sunPos", 0.0f, sb.sunPos * M_PI);
+      program_set_float2(skyprog, "sunPos", 0.8, (cos(_ctime) + 1) / 2 * M_PI);
+      program_set_float2(skyprog, "sunPos", sb.sunPos.x, sb.sunPos.y);
+      fprintf(stdout, "%f %f\n", sb.sunPos.x, sb.sunPos.y);
+      program_set_float3(skyprog, "sunCol", 0.7f, 0.2f, 0.1f);
 
       glBindVertexArray(skyvao);
       glDrawArrays(GL_TRIANGLES, 0, sbvl);
     }
-
-    goto end;
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
     if (drawObjs) { // NPROG
       glUseProgram(nprog);
@@ -1437,7 +1403,6 @@ uint8_t run_suijin() {
 
     }
 
-end:;
     if (frame % 30 == 0) {
       while (!glfwWindowShouldClose(window)) {
         uint8_t r = check_frag_update(&skyprog, 9);

@@ -10,15 +10,14 @@ in vec2 tc;
 in vec3 pp;
 
 uniform vec2 sunPos;
+uniform vec3 sunCol;
 
 vec3 h2c3(int c, int x) {
   return vec3(((c & 0xFF00) >> 8) / 255.0f, ((c & 0x00FF) >>  0) / 255.0f, ((x & 0x00FF) >>  0) / 255.0f);
 }
 
 float gd(float x, float y) {
-  return y;
-  return PI + y - x;
-  return min(x - y, PI + y - x);
+  return min(abs(x - y), abs(PI + y - x));
 }
 
 float fm(float m) {
@@ -109,14 +108,13 @@ void main() {
     fcol = mix(sky, horizon, 1 - f);
   }
 
-  //fcol = vec3(sqrt(P2(fm(sunPos.x - pos.x)) + P2(fm(sunPos.y - pos.y))) / 1000);
-  fcol = gd(PI / 2, pos.y) * h2c3(0x2646, 0x53);
-  if (pos.y > PI) {
-    fcol = vec3(1.0f);
+  float ld = sin(gd(sunPos.y, pos.y));
+  float hd = abs(sunPos.x - pos.x);
+  float d = sqrt(ld * ld + hd * hd);
+  if (d < 0.1f) {
+    d = 0.0f;
   }
-  //fcol = pos.x * h2c3(0x2646, 0x53) / PI;
-
-
+  fcol = mix(fcol, sunCol, d);
 
   FragColor = vec4(fcol, 1.0f);
 }
