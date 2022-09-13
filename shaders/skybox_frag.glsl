@@ -9,15 +9,17 @@ out vec4 FragColor;
 in vec2 tc;
 in vec3 pp;
 
-uniform vec2 sunPos;
-uniform vec3 sunCol;
+uniform vec2  sunPos;
+uniform vec3  sunCol;
+uniform float sunSiz;
+uniform sampler2D tex;
 
 vec3 h2c3(int c, int x) {
   return vec3(((c & 0xFF00) >> 8) / 255.0f, ((c & 0x00FF) >>  0) / 255.0f, ((x & 0x00FF) >>  0) / 255.0f);
 }
 
 float gd(float x, float y) {
-  return min(abs(x - y), abs(PI + y - x));
+  return min(y - x, PI - y + x);
 }
 
 float fm(float m) {
@@ -88,14 +90,14 @@ void main() {
   FragColor = vec4(c, 1.0f);
   */
 
-  vec3 np = normalize(pp);
+  /*vec3 np = normalize(pp);
   vec3 vl = vec3(1.0f, 0.0f, 0.0f);
   vec2 pos = vec2(0.0f, 0.0f);
   float t = np.y;
   np.y = np.z;
   np.z = t;
-  pos.x = acos(np.z / sqrt(P2(np.x) + P2(np.y) + P2(np.z)));
-  pos.y = (at2(np.y, np.x) + PI) / 2;
+  pos.x = sin(np.z);
+  pos.y = asin(np.y / sqrt(1 - pos.x * pos.x));
 
   vec3 fcol = vec3(0.0f);
   vec3 horizon = h2c3(0xa5c1, 0xd7);
@@ -108,13 +110,50 @@ void main() {
     fcol = mix(sky, horizon, 1 - f);
   }
 
-  float ld = sin(gd(sunPos.y, pos.y));
-  float hd = abs(sunPos.x - pos.x);
+  FragColor = vec4(vec3(pos.y), 1.0f);
+  return;
+
+
+
+
+  float l1 = pos.y;
+  float l2 = 0.7;
+  float f1 = pos.x;
+  float f2 = 0.6;
+  float dl = abs(l2 - l1);
+  float ds = acos(sin(f1) * sin(f2) + cos(f1) * cos(f2) * cos(dl));
+
+
+  FragColor = vec4(vec3(ds), 1.0f);
+  return;
+
+  float hd = abs(0.2 - pos.x);
+  float ld = sin(gd(0.2, pos.y)) * (cos(pos.x) * cos(hd) / 3);
   float d = sqrt(ld * ld + hd * hd);
-  if (d < 0.1f) {
+  if (d > 0.1) {
     d = 0.0f;
   }
-  fcol = mix(fcol, sunCol, d);
+
+
+  FragColor = vec4(vec3(d), 1.0f);
+  return;
+
+
+
+
+
+
+
+
+
+
+
+
+
+  //fcol = mix(fcol, sunCol, d);
 
   FragColor = vec4(fcol, 1.0f);
+   */
+
+  FragColor = texture(tex, tc);
 }

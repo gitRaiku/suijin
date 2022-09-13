@@ -311,10 +311,25 @@ void facevt(struct facev *__restrict v) {
 }
 
 void maff(struct minf *__restrict m) {
-  m->aff[0][0] = m->scale; m->aff[0][1] =        0; m->aff[0][2] =        0; m->aff[0][3] = m->pos.x; 
-  m->aff[1][0] =        0; m->aff[1][1] = m->scale; m->aff[1][2] =        0; m->aff[1][3] = m->pos.y; 
-  m->aff[2][0] =        0; m->aff[2][1] =        0; m->aff[2][2] = m->scale; m->aff[2][3] = m->pos.z; 
-  m->aff[3][0] =        0; m->aff[3][1] =        0; m->aff[3][2] =        0; m->aff[3][3] =        1; 
+  mat4 ps;
+  ps[0][0] = m->scale.x; ps[0][1] =          0; ps[0][2] =          0; ps[0][3] = m->pos.x; 
+  ps[1][0] =          0; ps[1][1] = m->scale.y; ps[1][2] =          0; ps[1][3] = m->pos.y; 
+  ps[2][0] =          0; ps[2][1] =          0; ps[2][2] = m->scale.z; ps[2][3] = m->pos.z; 
+  ps[3][0] =          0; ps[3][1] =          0; ps[3][2] =          0; ps[3][3] =        1; 
+  
+  mat3 qm;
+  mat4 t = {0};
+  quat_to_mat(qm, m->rot);
+  {
+    int32_t i, j;
+    for (i = 0; i < 3; ++i) {
+      for (j = 0; j < 3; ++j) {
+        t[i][j] = qm[i][j];
+      }
+    }
+  }
+  t[3][3] = 1.0f;
+  matmul43(m->aff, ps, qm);
 }
 
 void init_model(struct model *__restrict m) {

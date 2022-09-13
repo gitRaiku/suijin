@@ -25,6 +25,8 @@
 #define V3C(v) ((v3 *__restrict)(v))
 #define V4C(v) ((v4 *__restrict)(v))
 
+#define EPS 0.0000000001
+
 double _ctime, _ltime;
 double deltaTime;
 
@@ -188,7 +190,6 @@ void create_lookat_matrix(mat4 m) {
   m[1][3] = -dot(u, cam.pos);
   m[2][3] = -dot(f, cam.pos);
   m[3][3] = 1.0f;
-  //print_mat(m, "lookat");
 }
 
 void update_camera_matrix() {
@@ -615,6 +616,16 @@ void update_bw_tex(uint32_t *__restrict tex, uint32_t h, uint32_t w, void *__res
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
 }
 
+void update_rgb_tex(uint32_t *__restrict tex, uint32_t h, uint32_t w, void *__restrict buf) {
+  glBindTexture(GL_TEXTURE_2D, *tex);
+  glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, w, h, 0, GL_RGB, GL_UNSIGNED_BYTE, buf);
+  glGenerateMipmap(GL_TEXTURE_2D);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST_MIPMAP_NEAREST);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+}
+
 uint8_t runel(char *__restrict str) {
   char *__restrict os = str;
   for (++str; (*str & 0xc0) == 0x80; ++str);
@@ -906,11 +917,12 @@ void addbb(struct bbox *__restrict cb, struct linv *__restrict v) {
   linvp(&lins, cl);
 }
 
-void aobj(uint32_t m, float sc, v3 pos, struct object *__restrict cb) {
+void aobj(uint32_t m, v3 sc, v3 pos, struct object *__restrict cb) {
   struct minf cm;
   cm.m = m;
   cm.scale = sc;
   cm.pos = pos;
+  cm.rot = (vec4) {0.0f, 1.0f, 0.0f, 0.0f};
   maff(&cm);
   cm.b.i = v3m4(cm.aff, mods.v[cm.m].b.i);
   cm.b.a = v3m4(cm.aff, mods.v[cm.m].b.a);
@@ -954,7 +966,7 @@ struct vv3p {
   v3 *__restrict v2;
 };
 
-uint8_t rmif(struct sray *__restrict r, struct vv3p *__restrict p, float *__restrict t, float *__restrict u, float *__restrict v) { 
+uint8_t rmif(struct sray *__restrict r, struct vv3p *__restrict p, float *__restrict t, float *__restrict u, float *__restrict v) {
     v3 v0v1 = v3s(*p->v1, *p->v0);
     v3 v0v2 = v3s(*p->v2, *p->v0);
     v3 pvec = cross(r->d, v0v2);
@@ -1004,9 +1016,9 @@ void rmi(struct sray *__restrict r, struct minf *__restrict cm, float *__restric
   {
     int32_t i;
     for(i = 0; i < cmm.v.l / 24; ++i) {
-      px = v3a(cm->pos, v3m(cm->scale, *V3C(cmm.v.v + i * 24 +  0)));
-      py = v3a(cm->pos, v3m(cm->scale, *V3C(cmm.v.v + i * 24 +  8)));
-      pz = v3a(cm->pos, v3m(cm->scale, *V3C(cmm.v.v + i * 24 + 16)));
+      px = v3a(cm->pos, v3m(cm->scale.x, *V3C(cmm.v.v + i * 24 +  0)));
+      py = v3a(cm->pos, v3m(cm->scale.y, *V3C(cmm.v.v + i * 24 +  8)));
+      pz = v3a(cm->pos, v3m(cm->scale.z, *V3C(cmm.v.v + i * 24 + 16)));
       vv.v0 = &px;
       vv.v1 = &py;
       vv.v2 = &pz;
@@ -1047,7 +1059,9 @@ void init_skybox(struct skybox *__restrict sb) {
   memset(sb, 0, sizeof(*sb));
   sb->sunSize = 1.0f;
   sb->sunCol = h2c3(0xFFCC33);
-  sb->m.scale = 400.0f;
+  sb->m.scale.x = sb->m.scale.y = sb->m.scale.z = 400.0f;
+  quat qr = gen_quat((vec3) { 1.0f, 0.0f, 0.0f }, M_PI / 4);
+  sb->m.rot = qnorm(qmul(qmul(qr, (quat) {0.0f, 1.0f, 0.0f, 0.0f} ), qconj(qr)));
   maff(&sb->m);
 
   glGenVertexArrays(1, &skyvao);
@@ -1072,54 +1086,57 @@ void init_skybox(struct skybox *__restrict sb) {
     };
   */
 
+#define UP333 (1.0/3.0)
+#define UP666 (2.0/3.0)
+
   float sbv[] = {
-    -1.0f, -1.0f, -1.0f, 0.25f, 0.66f,
-    -1.0f, -1.0f,  1.0f, 0.25f, 0.33f,
-    -1.0f,  1.0f,  1.0f, 0.50f, 0.33f,
+    -1.0f, -1.0f, -1.0f, 0.25f, UP666,
+    -1.0f, -1.0f,  1.0f, 0.25f, UP333,
+    -1.0f,  1.0f,  1.0f, 0.50f, UP333,
 
-    -1.0f, -1.0f, -1.0f, 0.25f, 0.66f,
-    -1.0f,  1.0f,  1.0f, 0.50f, 0.33f,
-    -1.0f,  1.0f, -1.0f, 0.50f, 0.66f,
+    -1.0f, -1.0f, -1.0f, 0.25f, UP666,
+    -1.0f,  1.0f,  1.0f, 0.50f, UP333,
+    -1.0f,  1.0f, -1.0f, 0.50f, UP666,
 
-    -1.0f, -1.0f,  1.0f, 0.25f, 0.33f,
-    -1.0f,  1.0f,  1.0f, 0.50f, 0.33f,
+    -1.0f, -1.0f,  1.0f, 0.25f, UP333,
+    -1.0f,  1.0f,  1.0f, 0.50f, UP333,
      1.0f, -1.0f,  1.0f, 0.25f, 0.00f,
 
-    -1.0f,  1.0f,  1.0f, 0.50f, 0.33f,
+    -1.0f,  1.0f,  1.0f, 0.50f, UP333,
      1.0f, -1.0f,  1.0f, 0.25f, 0.00f,
      1.0f,  1.0f,  1.0f, 0.50f, 0.00f,
 
-    -1.0f, -1.0f, -1.0f, 0.25f, 0.66f,
-    -1.0f, -1.0f,  1.0f, 0.25f, 0.33f,
-     1.0f, -1.0f,  1.0f, 0.00f, 0.33f,
+    -1.0f, -1.0f, -1.0f, 0.25f, UP666,
+    -1.0f, -1.0f,  1.0f, 0.25f, UP333,
+     1.0f, -1.0f,  1.0f, 0.00f, UP333,
 
-    -1.0f, -1.0f, -1.0f, 0.25f, 0.66f,
-     1.0f, -1.0f,  1.0f, 0.00f, 0.33f,
-     1.0f, -1.0f, -1.0f, 0.00f, 0.66f,
+    -1.0f, -1.0f, -1.0f, 0.25f, UP666,
+     1.0f, -1.0f,  1.0f, 0.00f, UP333,
+     1.0f, -1.0f, -1.0f, 0.00f, UP666,
 
-    -1.0f, -1.0f, -1.0f, 0.25f, 0.66f,
-    -1.0f,  1.0f, -1.0f, 0.50f, 0.66f,
+    -1.0f, -1.0f, -1.0f, 0.25f, UP666,
+    -1.0f,  1.0f, -1.0f, 0.50f, UP666,
      1.0f, -1.0f, -1.0f, 0.25f, 1.00f,
 
-    -1.0f,  1.0f, -1.0f, 0.50f, 0.66f,
+    -1.0f,  1.0f, -1.0f, 0.50f, UP666,
      1.0f, -1.0f, -1.0f, 0.25f, 1.00f,
      1.0f,  1.0f, -1.0f, 0.50f, 1.00f,
 
-    -1.0f,  1.0f,  1.0f, 0.50f, 0.33f,
-    -1.0f,  1.0f, -1.0f, 0.50f, 0.66f,
-     1.0f,  1.0f,  1.0f, 0.75f, 0.33f,
+    -1.0f,  1.0f,  1.0f, 0.50f, UP333,
+    -1.0f,  1.0f, -1.0f, 0.50f, UP666,
+     1.0f,  1.0f,  1.0f, 0.75f, UP333,
 
-    -1.0f,  1.0f, -1.0f, 0.50f, 0.66f,
-     1.0f,  1.0f,  1.0f, 0.75f, 0.33f,
-     1.0f,  1.0f, -1.0f, 0.75f, 0.66f,
+    -1.0f,  1.0f, -1.0f, 0.50f, UP666,
+     1.0f,  1.0f,  1.0f, 0.75f, UP333,
+     1.0f,  1.0f, -1.0f, 0.75f, UP666,
 
-     1.0f,  1.0f, -1.0f, 0.75f, 0.66f,
-     1.0f,  1.0f,  1.0f, 0.75f, 0.33f,
-     1.0f, -1.0f,  1.0f, 1.00f, 0.33f,
+     1.0f,  1.0f, -1.0f, 0.75f, UP666,
+     1.0f,  1.0f,  1.0f, 0.75f, UP333,
+     1.0f, -1.0f,  1.0f, 1.00f, UP333,
 
-     1.0f,  1.0f, -1.0f, 0.75f, 0.66f,
-     1.0f, -1.0f,  1.0f, 1.00f, 0.33f,
-     1.0f, -1.0f, -1.0f, 1.00f, 0.66f
+     1.0f,  1.0f, -1.0f, 0.75f, UP666,
+     1.0f, -1.0f,  1.0f, 1.00f, UP333,
+     1.0f, -1.0f, -1.0f, 1.00f, UP666
   };
 
   sbvl = sizeof(sbv) / sizeof(float) / 5;
@@ -1179,7 +1196,7 @@ uint8_t run_suijin() {
     objvi(&objs);
 
     init_object(&cb, "MIAN");
-    aobj(0, 10.0f, (v3) {0.0f, 0.0f, 0.0f}, &cb);
+    aobj(0, (v3) {10.0f, 10.0f, 10.0f} , (v3) {0.0f, 0.0f, 0.0f}, &cb);
     objvp(&objs, cb);
 
     /*
@@ -1295,6 +1312,15 @@ uint8_t run_suijin() {
   struct skybox sb;
 
   init_skybox(&sb);
+  uint32_t sbt;
+  {
+    glGenTextures(1, &sbt);
+    uint32_t sbw, sbh;
+    uint8_t *buf = read_png("skybox.png", "Resources/Textures", &sbw, &sbh);
+    update_rgb_tex(&sbt, sbh, sbw, buf);
+    free(buf);
+  }
+
 
   while (!glfwWindowShouldClose(window)) {
     ++frame;
@@ -1316,19 +1342,23 @@ uint8_t run_suijin() {
       glUseProgram(skyprog);
       program_set_mat4(skyprog, "fn", fn);
       sb.m.pos = cam.pos;
-      float tscale = 1 / 3.0f;
+      maff(&sb.m);
+      program_set_mat4(skyprog, "affine", sb.m.aff);
+
+      /*float tscale = 1 / 3.0f;
       sb.sunPos.x = (sin(_ctime * tscale) + 1) * M_PI / 2;
       if (cos(_ctime) < 0.0f) {
         sb.sunPos.y = M_PI + cos(_ctime * tscale) * M_PI;
       } else {
         sb.sunPos.y = cos(_ctime * tscale) * M_PI;
       }
-      maff(&sb.m);
-      program_set_mat4(skyprog, "affine", sb.m.aff);
-      program_set_float2(skyprog, "sunPos", 0.8, (cos(_ctime) + 1) / 2 * M_PI);
       program_set_float2(skyprog, "sunPos", sb.sunPos.x, sb.sunPos.y);
-      fprintf(stdout, "%f %f\n", sb.sunPos.x, sb.sunPos.y);
-      program_set_float3(skyprog, "sunCol", 0.7f, 0.2f, 0.1f);
+      program_set_float1(skyprog, "sunSiz", sb.sunSize);
+      program_set_float3(skyprog, "sunCol", 0.7f, 0.2f, 0.1f);*/
+
+      glActiveTexture(GL_TEXTURE0);
+      glBindTexture(GL_TEXTURE_2D, sbt);
+      program_set_int1(skyprog, "tex", 0);
 
       glBindVertexArray(skyvao);
       glDrawArrays(GL_TRIANGLES, 0, sbvl);

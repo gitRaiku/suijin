@@ -146,8 +146,9 @@ struct model {
 
 struct minf {
   uint32_t m;
-  float scale;
+  v3 scale;
   v3 pos;
+  quat rot;
 
   struct bbox b;
 

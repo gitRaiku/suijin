@@ -1,6 +1,5 @@
 #include "linalg.h"
 
-
 quat __attribute((pure)) gen_quat(vec3 axis, float rot) {
   float rs = sinf(rot / 2.0f);
   float rc = cosf(rot / 2.0f);
@@ -117,12 +116,35 @@ vec3 __attribute((pure)) v3i(vec3 v) {
   return res;
 }
 
+void crotm(mat4 res, v3 r) {
+  res[0][0] = cos(r.x) * cos(r.y); res[0][1] = sin(r.x) * sin(r.y) * cos(r.z) - cos(r.x) * cos(r.z); res[0][2] = cos(r.x) * sin(r.y) * cos(r.z) + sin(r.x) * sin(r.z);
+  res[0][0] = cos(r.x) * sin(r.y); res[0][1] = sin(r.x) * sin(r.y) * cos(r.z) - cos(r.x) * cos(r.z); res[0][2] = cos(r.x) * sin(r.y) * cos(r.z) + sin(r.x) * sin(r.z);
+}
+
 void matmul44(mat4 res, mat4 m1, mat4 m2) {
   int32_t i, j, k;
   for (i = 0; i < 4; ++i) {
     for (j = 0; j < 4; ++j) {
       res[i][j] = 0.0f;
       for(k = 0; k < 4; ++k) {
+        res[i][j] += m1[i][k] * m2[k][j];
+      }
+    }
+  }
+}
+
+void matmul43(mat4 res, mat4 m1, mat3 m2) {
+  int32_t i, j, k;
+  for (i = 0; i < 4; ++i) {
+    for (j = 0; j < 4; ++j) {
+      res[i][j] = 0.0f;
+      for(k = 0; k < 4; ++k) {
+        if (j == 3 || k == 3) {
+          if (j == k) {
+            res[i][j] += m1[i][k];
+          }
+          continue;
+        }
         res[i][j] += m1[i][k] * m2[k][j];
       }
     }
@@ -149,3 +171,5 @@ vec3 __attribute((pure)) v3m4(mat4 m, vec3 v) {
 
   return res;
 }
+
+
