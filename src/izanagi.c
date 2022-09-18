@@ -318,17 +318,7 @@ void maff(struct minf *__restrict m) {
   ps[3][0] =          0; ps[3][1] =          0; ps[3][2] =          0; ps[3][3] =        1; 
   
   mat3 qm;
-  mat4 t = {0};
   quat_to_mat(qm, m->rot);
-  {
-    int32_t i, j;
-    for (i = 0; i < 3; ++i) {
-      for (j = 0; j < 3; ++j) {
-        t[i][j] = qm[i][j];
-      }
-    }
-  }
-  t[3][3] = 1.0f;
   matmul43(m->aff, ps, qm);
 }
 

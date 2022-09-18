@@ -28,18 +28,22 @@ struct fcolu {
   uint8_t b;
 };
 
+struct i2df {
+  float *__restrict v;
+  uint32_t h;
+  uint32_t w;
+};
+
 struct i2d {
   struct fcol *__restrict v;
   uint32_t h;
   uint32_t w;
-  uint64_t padding;
 };
 
 struct i2du {
   struct fcolu *__restrict v;
   uint32_t h;
   uint32_t w;
-  uint64_t padding;
 };
 
 struct i3d {
@@ -59,6 +63,6 @@ void noise_w2d(uint32_t h, uint32_t w, float scale, struct i2d *__restrict im, u
 
 void new_perlin_perms();
 
-void noise_p2d(uint32_t h, uint32_t w, uint32_t octaves, float persistence, float scale, struct i2d *__restrict im);
+void noise_p2d(uint32_t h, uint32_t w, uint32_t octaves, float persistence, float scale, struct i2df *__restrict im);
 
 #endif

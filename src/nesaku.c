@@ -345,13 +345,13 @@ float octave_perlin(float x, float y, float z, int octaves, float persistence) {
     return total / maxValue;
 }
 
-void noise_p2d(uint32_t h, uint32_t w, uint32_t octaves, float persistence, float scale, struct i2d *__restrict im) {
+void noise_p2d(uint32_t h, uint32_t w, uint32_t octaves, float persistence, float scale, struct i2df *__restrict im) {
   static uint32_t lo = 0   ;
   static float    lp = 0.0f;
   static float    lh = 0.0f;
   static float    lw = 0.0f;
   static float    ls = 0.0f;
-  static struct i2d *__restrict li = NULL;
+  static struct i2df *__restrict li = NULL;
 
   if (lh == h && lw == w && lo == octaves && lp == persistence && ls == scale && li == im && updp == 0) {
     return;
@@ -365,7 +365,7 @@ void noise_p2d(uint32_t h, uint32_t w, uint32_t octaves, float persistence, floa
   ls = scale;
 
   if (im == NULL) {
-    im = malloc(sizeof(struct i2d));
+    im = malloc(sizeof(struct i2df));
   }
 
   im->h = h;
@@ -378,7 +378,7 @@ void noise_p2d(uint32_t h, uint32_t w, uint32_t octaves, float persistence, floa
     int32_t i, j;
     for (i = 0; i < w; ++i) {
       for (j = 0; j < h; ++j) {
-        G(im->v, i, j, w) = f2c(octave_perlin(i / scale, j / scale, 0.0f, octaves, persistence));
+        G(im->v, i, j, w) = octave_perlin(i / scale, j / scale, 0.0f, octaves, persistence);
       }
     }
   }

@@ -76,10 +76,24 @@ union KMS {
 struct uiSelection {
   enum UIT t;
   union KMS id;
-  int32_t dx, dy;
+  float dx, dy;
 };
-
 struct uiSelection selui;
+
+struct perlin {
+  struct i2df o1;
+  struct i2df o2;
+  struct i2df *__restrict m;
+  struct i2df *__restrict s;
+  uint32_t oct;
+  float h;
+  float w;
+  float foct;
+  float per;
+  float sc;
+};
+struct perlin per;
+uint8_t perlinR = 0;
 
 uint8_t cameraUpdate = 1;
 #define ZOOM_SPEED 0.01f
@@ -292,11 +306,15 @@ void handle_input(GLFWwindow *__restrict window) {
     //print_keypress("Processing keypress: ", kp);
     if (kp.iskb) {
       switch(kp.key) {
-        case GLFW_KEY_R:
+        case GLFW_KEY_I:
           if (kp.action == 1) {
             new_perlin_perms();
             nwr = 1;
           }
+          break;
+        case GLFW_KEY_R:
+          perlinR = 1;
+          fprintf(stdout, "RESTART");
           break;
         case GLFW_KEY_F:
           if (kp.action == 1) {
@@ -484,6 +502,7 @@ struct fslider {
   float *__restrict val;
   v2 lims;
   uint32_t bp;
+  void (*callback)(void);
 };
 
 enum MCHID {
@@ -522,7 +541,7 @@ void add_title(struct node *__restrict m, char *__restrict t, float sc) {
   mchvp(&m->children, mc);
 }
 
-void add_slider(struct node *__restrict m, float *__restrict v, float lb, float ub) {
+void add_slider(struct node *__restrict m, float *__restrict v, float lb, float ub, void (*callback)(void)) {
   struct mchild mc;
   mc.id = MFSLIDER;
   mc.c = malloc(sizeof(struct fslider));
@@ -530,6 +549,7 @@ void add_slider(struct node *__restrict m, float *__restrict v, float lb, float 
   tmc->val = v;
   tmc->lims = (v2) {lb, ub};
   tmc->bp = 36;
+  tmc->callback = callback;
 #undef tmc
 
   mchvp(&m->children, mc);
@@ -718,6 +738,9 @@ uint32_t draw_slider(float x, uint32_t y, struct node *__restrict cm, struct fsl
 
   if (selui.t == UIT_SLIDERK && selui.id.fp == t->val) {
     *t->val = clamp(selui.dy + (mouseX - selui.dx) / tlen * rlen, t->lims.x, t->lims.y);
+    if (t->callback != NULL && mouseX != selui.dx) {
+      t->callback();
+    }
   }
 
   return t->bp;
@@ -1150,6 +1173,73 @@ void init_skybox(struct skybox *__restrict sb) {
   glEnableVertexAttribArray(0);
   glEnableVertexAttribArray(1);
 }
+  
+uint32_t ttex = 0;
+void init_therm() {
+  if (ttex == 0) {
+    glGenTextures(1, &ttex);
+  }
+  if ((uint32_t)per.h != per.o1.h || (uint32_t)per.w != per.o1.w) { /// TODO: Free and realloc doesn't work with glTexImage2D
+    //if ((uint32_t)per.h * (uint32_t)per.w < per.o1.h * per.o1.w) {
+      per.o1.v = realloc(per.o1.v, sizeof(per.o1.v[0]) * (uint32_t)per.h * (uint32_t)per.w);
+      per.o2.v = realloc(per.o2.v, sizeof(per.o2.v[0]) * (uint32_t)per.h * (uint32_t)per.w);
+    /*} else {
+      free(per.o1.v);
+      free(per.o2.v);
+    }*/
+  }
+  per.m = &per.o1;
+  per.s = &per.o2;
+  per.oct = (uint32_t)per.foct;
+
+  noise_p2d((uint32_t)per.h, (uint32_t)per.w, per.oct, per.per, per.sc, per.m);
+  if (per.o2.v == NULL) {
+    per.o2.v = calloc(sizeof(per.o2.v[0]), (uint32_t)per.h * (uint32_t)per.w);
+  }
+  per.s->h = per.m->h;
+  per.s->w = per.m->w;
+
+  glBindTexture(GL_TEXTURE_2D, ttex);
+  glTexImage2D(GL_TEXTURE_2D, 0, GL_RED, (uint32_t)per.w, (uint32_t)per.h, 0, GL_RED, GL_FLOAT, per.m->v);
+  glGenerateMipmap(GL_TEXTURE_2D);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST_MIPMAP_NEAREST);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+  glBindTexture(GL_TEXTURE_2D, 0);
+}
+
+#define OUTSIDE_TEMP 0.1f
+
+void upd_therm() {
+  if (perlinR == 1) {
+    perlinR = 0;
+    init_therm();
+    return;
+  }
+  int32_t i, j;
+  memset(per.s->v, 0, sizeof(float) * per.m->h * per.m->w);
+  for (i = 1; i < per.m->h - 1; ++i) {
+    for (j = 1; j < per.m->w - 1; ++j) {
+      G(per.s->v, i, j, per.m->w) = (G(per.m->v, i - 1, j, per.m->w) + G(per.m->v, i + 1, j, per.m->w) +
+                                     G(per.m->v, i, j - 1, per.m->w) + G(per.m->v, i, j + 1, per.m->w)) / 4 - G(per.m->v, i, j, per.m->w);
+    }
+  }
+
+  for (i = 0; i < per.m->w; ++i) {
+      G(per.s->v, i,        0, per.m->w) = OUTSIDE_TEMP;
+      G(per.s->v, i, per.m->h, per.m->w) = OUTSIDE_TEMP;
+  }
+  for (i = 0; i < per.m->h; ++i) {
+      G(per.s->v,        0, i, per.m->w) = OUTSIDE_TEMP;
+      G(per.s->v, per.m->w, i, per.m->w) = OUTSIDE_TEMP;
+  }
+
+  pswap((void **)&per.s, (void **)&per.m);
+  glBindTexture(GL_TEXTURE_2D, ttex);
+  glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, (uint32_t)per.w, (uint32_t)per.h, GL_RED, GL_FLOAT,  per.m->v);
+  glBindTexture(GL_TEXTURE_2D, 0);
+}
 
 uint8_t run_suijin() {
   init_random();
@@ -1294,8 +1384,16 @@ uint8_t run_suijin() {
   reset_ft();
 
   mchvi(&nodes[0].children);
-  add_title(&nodes[0], "Numarul de boli pe care le are steifen.", 0.20f);
-  add_slider(&nodes[0], &nodes[0].sy, 0.0f, 700.0f);
+  add_title(&nodes[0], "H", 0.20f);
+  add_slider(&nodes[0], &per.h, 0.0f, 1000.0f, init_therm);
+  add_title(&nodes[0], "W", 0.20f);
+  add_slider(&nodes[0], &per.w, 0.0f, 1000.0f, init_therm);
+  add_title(&nodes[0], "Oct", 0.20f);
+  add_slider(&nodes[0], &per.foct, 0.0f, 5.0f, init_therm);
+  add_title(&nodes[0], "Scale", 0.20f);
+  add_slider(&nodes[0], &per.sc, 0.0f, 40.0f, init_therm);
+  add_title(&nodes[0], "Persistance", 0.20f);
+  add_slider(&nodes[0], &per.per, 0.0f, 4.0f, init_therm);
   nodes[0].px = 50.0f;
   nodes[0].py = 50.0f;
   nodes[0].sx = 300.0f;
@@ -1321,6 +1419,16 @@ uint8_t run_suijin() {
     free(buf);
   }
 
+  {
+    per.w    = per.h    = 500;
+    per.o1.h = per.o1.w = 500;
+    per.sc = 28.5;
+    per.per = 1.0f;
+    per.foct = 3.5f;
+    init_therm();
+  }
+  //per.w = 501;
+  //init_therm();
 
   while (!glfwWindowShouldClose(window)) {
     ++frame;
@@ -1363,6 +1471,10 @@ uint8_t run_suijin() {
       glBindVertexArray(skyvao);
       glDrawArrays(GL_TRIANGLES, 0, sbvl);
     }
+
+    draw_squaret((windowW - 500) / 2, (windowH - 500) / 2, 500, 500, ttex);
+    upd_therm();
+    //fprintf(stdout, "Oct: %f\nPer: %f\nScale: %f\nSize: %f-%f\n", per.foct, per.per, per.sc, per.w, per.h);
 
     if (drawObjs) { // NPROG
       glUseProgram(nprog);
