@@ -314,7 +314,6 @@ void handle_input(GLFWwindow *__restrict window) {
           break;
         case GLFW_KEY_R:
           perlinR = 1;
-          fprintf(stdout, "RESTART");
           break;
         case GLFW_KEY_F:
           if (kp.action == 1) {
@@ -1210,6 +1209,7 @@ void init_therm() {
 }
 
 #define OUTSIDE_TEMP 0.1f
+float DIFF_COEF = 0.05f;
 
 void upd_therm() {
   if (perlinR == 1) {
@@ -1217,23 +1217,72 @@ void upd_therm() {
     init_therm();
     return;
   }
+  uint32_t h, w;
+  h = per.m->h;
+  w = per.m->w;
+
   int32_t i, j;
-  memset(per.s->v, 0, sizeof(float) * per.m->h * per.m->w);
-  for (i = 1; i < per.m->h - 1; ++i) {
-    for (j = 1; j < per.m->w - 1; ++j) {
-      G(per.s->v, i, j, per.m->w) = (G(per.m->v, i - 1, j, per.m->w) + G(per.m->v, i + 1, j, per.m->w) +
-                                     G(per.m->v, i, j - 1, per.m->w) + G(per.m->v, i, j + 1, per.m->w)) / 4 - G(per.m->v, i, j, per.m->w);
+  memset(per.s->v, 0, sizeof(float) * h * w);
+  float x;
+  for (i = 1; i < h - 1; ++i) {
+    for (j = 1; j < w - 1; ++j) {
+      x = G(per.m->v, i, j, w) * DIFF_COEF;
+      G(per.s->v, i, j, w) += G(per.m->v, i, j, w) - x * 4;
+      G(per.s->v, i + 1, j    , w) += x;
+      G(per.s->v, i - 1, j    , w) += x;
+      G(per.s->v, i    , j + 1, w) += x;
+      G(per.s->v, i    , j - 1, w) += x;
+
     }
   }
 
-  for (i = 0; i < per.m->w; ++i) {
-      G(per.s->v, i,        0, per.m->w) = OUTSIDE_TEMP;
-      G(per.s->v, i, per.m->h, per.m->w) = OUTSIDE_TEMP;
+  for (i = 1; i < w - 1; ++i) {
+    x = G(per.m->v, i, 0, w) * DIFF_COEF;
+    G(per.s->v, i    , 0, w) += G(per.m->v, i, 0, w) - x * 3;
+    G(per.s->v, i    , 1, w) += x;
+    G(per.s->v, i + 1, 0, w) += x;
+    G(per.s->v, i - 1, 0, w) += x;
   }
-  for (i = 0; i < per.m->h; ++i) {
-      G(per.s->v,        0, i, per.m->w) = OUTSIDE_TEMP;
-      G(per.s->v, per.m->w, i, per.m->w) = OUTSIDE_TEMP;
+  for (i = 1; i < w - 1; ++i) {
+    x = G(per.m->v, i, h - 1, w) * DIFF_COEF;
+    G(per.s->v, i    , h - 1, w) += G(per.m->v, i, h - 1, w) - x * 3;
+    G(per.s->v, i    , h - 2, w) += x;
+    G(per.s->v, i + 1, h - 1, w) += x;
+    G(per.s->v, i - 1, h - 1, w) += x;
   }
+  for (i = 1; i < h - 1; ++i) {
+    x = G(per.m->v, i, 0, w) * DIFF_COEF;
+    G(per.s->v, 0, i    , w) += G(per.m->v, i, 0, w) - x * 3;
+    G(per.s->v, 1, i    , w) += x;
+    G(per.s->v, 0, i + 1, w) += x;
+    G(per.s->v, 0, i - 1, w) += x;
+  }
+  for (i = 1; i < h - 1; ++i) {
+    x = G(per.m->v, i, w - 1, w) * DIFF_COEF;
+    G(per.s->v, w - 1, i    , w) += G(per.m->v, i, w - 1, w) - x * 3;
+    G(per.s->v, w - 2, i    , w) += x;
+    G(per.s->v, w - 1, i + 1, w) += x;
+    G(per.s->v, w - 1, i - 1, w) += x;
+  }
+  x = G(per.m->v, 0, 0, w) * DIFF_COEF;
+  G(per.s->v, 0, 0, w) += G(per.m->v, 0, 0, w) - x * 2;
+  G(per.s->v, 0, 1, w) += x;
+  G(per.s->v, 1, 0, w) += x;
+
+  x = G(per.m->v, w - 1, 0, w) * DIFF_COEF;
+  G(per.s->v, w - 1, 0, w) += G(per.m->v, w - 1, 0, w) - x * 2;
+  G(per.s->v, w - 1, 1, w) += x;
+  G(per.s->v, w - 2, 0, w) += x;
+
+  x = G(per.m->v, w - 1, h - 1, w) * DIFF_COEF;
+  G(per.s->v, w - 1, h - 1, w) += G(per.m->v, w - 1, h - 1, w) - x * 2;
+  G(per.s->v, w - 1, h - 2, w) += x;
+  G(per.s->v, w - 2, h - 1, w) += x;
+
+  x = G(per.m->v, 0, h - 1, w) * DIFF_COEF;
+  G(per.s->v, 0, h - 1, w) += G(per.m->v, 0, h - 1, w) - x * 2;
+  G(per.s->v, 0, h - 2, w) += x;
+  G(per.s->v, 1, h - 1, w) += x;
 
   pswap((void **)&per.s, (void **)&per.m);
   glBindTexture(GL_TEXTURE_2D, ttex);
@@ -1391,9 +1440,11 @@ uint8_t run_suijin() {
   add_title(&nodes[0], "Oct", 0.20f);
   add_slider(&nodes[0], &per.foct, 0.0f, 5.0f, init_therm);
   add_title(&nodes[0], "Scale", 0.20f);
-  add_slider(&nodes[0], &per.sc, 0.0f, 40.0f, init_therm);
+  add_slider(&nodes[0], &per.sc, 0.0f, 200.0f, init_therm);
   add_title(&nodes[0], "Persistance", 0.20f);
   add_slider(&nodes[0], &per.per, 0.0f, 4.0f, init_therm);
+  add_title(&nodes[0], "Diffusion", 0.20f);
+  add_slider(&nodes[0], &DIFF_COEF, 0.0f, 0.2f, init_therm);
   nodes[0].px = 50.0f;
   nodes[0].py = 50.0f;
   nodes[0].sx = 300.0f;
@@ -1572,7 +1623,7 @@ uint8_t run_suijin() {
     free(mats.v);
   }*/
 
-  glfwTerminate();
+  glfwTerminate(); /// This for some reason crashes but exiting without it makes the drivers crash?????????
 
   return 0;
 }
