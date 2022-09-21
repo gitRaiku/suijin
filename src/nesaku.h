@@ -59,7 +59,7 @@ void update_texture(struct i2d *__restrict im, struct texture *__restrict tex);
 
 void update_texture_ub(struct i2du *__restrict im, struct texture *__restrict tex);
 
-void noise_w2d(uint32_t h, uint32_t w, float scale, struct i2d *__restrict im, uint8_t reset);
+void noise_w2d(uint32_t h, uint32_t w, float scale, struct i2df *__restrict im);
 
 void new_perlin_perms();
 

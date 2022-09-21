@@ -90,6 +90,7 @@ struct perlin {
   float w;
   float foct;
   float per;
+  float style;
   float sc;
 };
 struct perlin per;
@@ -250,8 +251,6 @@ float scal[10];
 char *nms[10] = { "A", "P2", "P3", "P4", "PERSISTANCE", "HEIGHT", "WIDTH" };
 v2 lims[10];
 double startY = 0;
-uint8_t nwr = 0;
-uint8_t dumpTex = 0;
 uint8_t canMoveCam = 1;
 float mxoff, myoff;
 void handle_input(GLFWwindow *__restrict window) {
@@ -309,16 +308,11 @@ void handle_input(GLFWwindow *__restrict window) {
         case GLFW_KEY_I:
           if (kp.action == 1) {
             new_perlin_perms();
-            nwr = 1;
+            perlinR = 1;
           }
           break;
         case GLFW_KEY_R:
           perlinR = 1;
-          break;
-        case GLFW_KEY_F:
-          if (kp.action == 1) {
-            dumpTex = 1;
-          }
           break;
         case GLFW_KEY_TAB:
           if (kp.action == 1) {
@@ -333,6 +327,13 @@ void handle_input(GLFWwindow *__restrict window) {
             drawUi = 0;
             selui.t = UIT_CANNOT;
             glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+          }
+          break;
+        case GLFW_KEY_O:
+          if (kp.action == 1) {
+            ++cshading;
+            cshading %= 3;
+            lp[0] = 0;
           }
           break;
         default:
@@ -409,11 +410,6 @@ void handle_input(GLFWwindow *__restrict window) {
     if (KEY_PRESSED(GLFW_KEY_U)) {
       memcpy(&cam, &initCam, sizeof(cam));
       cameraUpdate = 1;
-    }
-    if (lp[0]) {
-      ++cshading;
-      cshading %= 3;
-      lp[0] = 0;
     }
   }
 }
@@ -569,7 +565,7 @@ void create_affine_matrix(mat4 m, float xs, float ys, float zs, float x, float y
 }
 
 uint32_t uvao, uprog, lprog, pprog; // Draw Square
-void draw_squaret(float px, float py, float sx, float sy, uint32_t tex) {
+void draw_squaret(float px, float py, float sx, float sy, uint32_t tex, int32_t type) {
   mat4 aff;
   glUseProgram(uprog);
   glBindVertexArray(uvao);
@@ -582,9 +578,9 @@ void draw_squaret(float px, float py, float sx, float sy, uint32_t tex) {
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, tex);
     program_set_int1(uprog, "tex", 0);
-    program_set_int1(uprog, "hasTexture", 1);
+    program_set_int1(uprog, "type", type);
   } else {
-    program_set_int1(uprog, "hasTexture", 0);
+    program_set_int1(uprog, "type", 0);
   }
 
   glDrawArrays(GL_TRIANGLE_FAN, 0, 4);
@@ -612,7 +608,7 @@ void draw_squarec(float px, float py, float sx, float sy, uint32_t col) {
   create_affine_matrix(aff, sx, sy, 1.0f, cpx, -cpy, 0.0f);
   program_set_mat4(uprog, "affine", aff);
 
-  program_set_int1(uprog, "hasTexture", 0);
+  program_set_int1(uprog, "type", 0);
   v4 c = h2c4(col);
   program_set_float4(uprog, "col", c.x, c.y, c.z, c.w);
 
@@ -706,7 +702,7 @@ uint32_t draw_textbox(float x, uint32_t y, struct tbox *__restrict t) {
       int32_t xoff = ftface->glyph->metrics.horiBearingX >> 6;
       int32_t yoff = (ftface->bbox.yMax - ftface->glyph->metrics.horiBearingY) >> 6;
 
-      draw_squaret(x + (px + xoff) * t->scale, y + yoff * t->scale, fw * t->scale, fh * t->scale, ctex);
+      draw_squaret(x + (px + xoff) * t->scale, y + yoff * t->scale, fw * t->scale, fh * t->scale, ctex, 1);
 
       px += advance;
 
@@ -1191,7 +1187,12 @@ void init_therm() {
   per.s = &per.o2;
   per.oct = (uint32_t)per.foct;
 
-  noise_p2d((uint32_t)per.h, (uint32_t)per.w, per.oct, per.per, per.sc, per.m);
+  if ((uint32_t)per.style == 0) {
+    noise_p2d((uint32_t)per.h, (uint32_t)per.w, per.oct, per.per, per.sc, per.m);
+  } else {
+    noise_w2d((uint32_t)per.h, (uint32_t)per.w, per.sc, per.m);
+  }
+
   if (per.o2.v == NULL) {
     per.o2.v = calloc(sizeof(per.o2.v[0]), (uint32_t)per.h * (uint32_t)per.w);
   }
@@ -1232,7 +1233,6 @@ void upd_therm() {
       G(per.s->v, i - 1, j    , w) += x;
       G(per.s->v, i    , j + 1, w) += x;
       G(per.s->v, i    , j - 1, w) += x;
-
     }
   }
 
@@ -1284,6 +1284,23 @@ void upd_therm() {
   G(per.s->v, 0, h - 2, w) += x;
   G(per.s->v, 1, h - 1, w) += x;
 
+  double mean = 0;
+  double rms = 0;
+  double ma = -9999999;
+  double mi = 9999999;
+  for (i = 0; i < w; ++i) {
+    for (j = 0; j < h; ++j) {
+      mean += G(per.s->v, i, j, w);
+      rms += G(per.s->v, i, j, w);
+      ma = max(ma, G(per.s->v, i, j, w));
+      mi = min(ma, G(per.s->v, i, j, w));
+    }
+  }
+  mean /= (double)(w * h);
+  rms = sqrtf(rms / (double)(w * h));
+
+  fprintf(stdout, "%f %f %f %f\r", mean, rms, ma, mi);
+  
   pswap((void **)&per.s, (void **)&per.m);
   glBindTexture(GL_TEXTURE_2D, ttex);
   glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, (uint32_t)per.w, (uint32_t)per.h, GL_RED, GL_FLOAT,  per.m->v);
@@ -1445,6 +1462,8 @@ uint8_t run_suijin() {
   add_slider(&nodes[0], &per.per, 0.0f, 4.0f, init_therm);
   add_title(&nodes[0], "Diffusion", 0.20f);
   add_slider(&nodes[0], &DIFF_COEF, 0.0f, 0.2f, init_therm);
+  add_title(&nodes[0], "Style", 0.20f);
+  add_slider(&nodes[0], &per.style, 0.0f, 1.9f, init_therm);
   nodes[0].px = 50.0f;
   nodes[0].py = 50.0f;
   nodes[0].sx = 300.0f;
@@ -1523,7 +1542,7 @@ uint8_t run_suijin() {
       glDrawArrays(GL_TRIANGLES, 0, sbvl);
     }
 
-    draw_squaret((windowW - 500) / 2, (windowH - 500) / 2, 500, 500, ttex);
+    draw_squaret((windowW - 500) / 2, (windowH - 500) / 2, 500, 500, ttex, 2);
     upd_therm();
     //fprintf(stdout, "Oct: %f\nPer: %f\nScale: %f\nSize: %f-%f\n", per.foct, per.per, per.sc, per.w, per.h);
 

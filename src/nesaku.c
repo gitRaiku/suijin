@@ -134,7 +134,7 @@ float dist2(float x, float y, v2 v) {
   return P2(v.x - x) + P2(v.y - y);
 }
 
-struct fcol gnear(uint32_t x, uint32_t y, float scale, v2 *__restrict pts, uint32_t udx, uint32_t udy) {
+float gnear(uint32_t x, uint32_t y, float scale, v2 *__restrict pts, uint32_t udx, uint32_t udy) {
   uint32_t ux = (uint32_t) x / scale;
   uint32_t uy = (uint32_t) y / scale;
   float md = INFINITY;
@@ -173,12 +173,11 @@ struct fcol gnear(uint32_t x, uint32_t y, float scale, v2 *__restrict pts, uint3
     }
   }
 
-  /// NSCALE 43
-  return inv(f2c(clamp(scale * pscale * sqrtf(md), 0.0f, 1.0f)));
+  return 1 - clamp(scale * pscale * sqrtf(md), 0.0f, 1.0f);
 }
 
-void noise_w2d(uint32_t h, uint32_t w, float scale, struct i2d *__restrict im, uint8_t reset) {
-  static uint32_t lh = 0;
+void noise_w2d(uint32_t h, uint32_t w, float scale, struct i2df *__restrict im) {
+  /*static uint32_t lh = 0;
   static uint32_t lw = 0; 
   static float lsc = 0.0f;
   static float lps = 0.0f;
@@ -190,7 +189,7 @@ void noise_w2d(uint32_t h, uint32_t w, float scale, struct i2d *__restrict im, u
   lw = w;
   lsc = scale;
   loim = im;
-  lps = pscale;
+  lps = pscale;*/
 
   if (im == NULL) {
     im = malloc(sizeof(struct i2d));

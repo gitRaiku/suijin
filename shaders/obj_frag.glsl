@@ -32,8 +32,6 @@ const vec3 lpos = vec3(10.0f);
 
 void main() {
   if (shading == 0) {
-    // FragColor = texture(tex, passTex);
-    // return;
 
     float dist = length(lpos - passPos);
 
