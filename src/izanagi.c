@@ -326,6 +326,8 @@ void init_model(struct model *__restrict m) {
   memset(m, 0, sizeof(struct model));
   floatvi(&m->v);
   mativi(&m->m);
+  m->b.i = (vec3) { 9999999999.0,  9999999999.0,  9999999999.0};
+  m->b.a = (vec3) {-9999999999.0, -9999999999.0, -9999999999.0};
 }
 
 void init_object(struct object *__restrict o, char *__restrict name) {

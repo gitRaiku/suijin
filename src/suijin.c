@@ -32,7 +32,9 @@ double deltaTime;
 
 uint8_t drawObjs = 1;
 uint8_t drawUi = 0;
-uint8_t drawBb = 0;
+uint8_t drawBb = 1;
+
+struct objv objs;
 
 mat4 identity;
 
@@ -846,7 +848,7 @@ struct sray csrayd(v3 s, v3 d) {
 }
 
 uint8_t rbi(struct sray *__restrict r, struct bbox *__restrict cb) {
-    float tmin, tmax, tymin, tymax, tzmin, tzmax;
+  float tmin, tmax, tymin, tymax, tzmin, tzmax;
 
      tmin = (V3C(cb)[    r->s[0]].x - r->o.x) * r->i.x; 
      tmax = (V3C(cb)[1 - r->s[0]].x - r->o.x) * r->i.x;
@@ -940,7 +942,7 @@ void aobj(uint32_t m, v3 sc, v3 pos, struct object *__restrict cb) {
   cm.m = m;
   cm.scale = sc;
   cm.pos = pos;
-  cm.rot = (vec4) {0.0f, 1.0f, 0.0f, 0.0f};
+  cm.rot = (vec4) {0.0f, 0.0f, 0.0f, 0.5f};
   maff(&cm);
   cm.b.i = v3m4(cm.aff, mods.v[cm.m].b.i);
   cm.b.a = v3m4(cm.aff, mods.v[cm.m].b.a);
@@ -1019,13 +1021,14 @@ uint8_t rmif(struct sray *__restrict r, struct vv3p *__restrict p, float *__rest
 } 
 
 #define cmm mods.v[cm->m]
+#define NEG_INF -99999999999.0f
 void rmi(struct sray *__restrict r, struct minf *__restrict cm, float *__restrict f) {
   struct vv3p vv;
   float t = 0;
   float u = 0;
   float v = 0;
 
-  float mf = -99999999999.0f;
+  float mf = NEG_INF;
   uint32_t ht = 0;
 
   v3 px;
@@ -1211,7 +1214,6 @@ void init_therm() {
 
 #define OUTSIDE_TEMP 0.1f
 float DIFF_COEF = 0.05f;
-
 void upd_therm() {
   if (perlinR == 1) {
     perlinR = 0;
@@ -1284,6 +1286,7 @@ void upd_therm() {
   G(per.s->v, 0, h - 2, w) += x;
   G(per.s->v, 1, h - 1, w) += x;
 
+  /*
   double mean = 0;
   double rms = 0;
   double ma = -9999999;
@@ -1300,11 +1303,35 @@ void upd_therm() {
   rms = sqrtf(rms / (double)(w * h));
 
   fprintf(stdout, "%f %f %f %f\r", mean, rms, ma, mi);
+  */
   
   pswap((void **)&per.s, (void **)&per.m);
   glBindTexture(GL_TEXTURE_2D, ttex);
   glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, (uint32_t)per.w, (uint32_t)per.h, GL_RED, GL_FLOAT,  per.m->v);
   glBindTexture(GL_TEXTURE_2D, 0);
+}
+
+uint8_t rayHit(v3 s, v3 d, float dist) {
+  struct sray r = csrayd(s, d);
+
+  uint32_t i, j;
+  float rd = 0;
+  uint8_t a;
+  for(i = 0; i < objs.l; ++i) {
+    //fprintf(stdout, "%u\n", i);
+    for(j = 0; j < objs.v[i].mins.l; ++j) {
+      //fprintf(stdout, "\\-%u\n", j);
+      a = rbi(&r, &objs.v[i].mins.v[j].b);
+      //fprintf(stdout, "  \\-%u\n", a);
+      if (a) {
+        rmi(&r, &objs.v[i].mins.v[j], &rd);
+        if (rd >= -dist) {
+          return 1;
+        }
+      }
+    }
+  }
+  return 0;
 }
 
 uint8_t run_suijin() {
@@ -1329,8 +1356,6 @@ uint8_t run_suijin() {
   glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
   glEnable(GL_PROGRAM_POINT_SIZE);
   //glEnable(GL_CULL_FACE);
-
-  struct objv objs;
 
   { /// Asset loading
     modvi(&mods);
@@ -1476,7 +1501,6 @@ uint8_t run_suijin() {
 
   struct sray cs;
 
-
   struct skybox sb;
 
   init_skybox(&sb);
@@ -1489,16 +1513,14 @@ uint8_t run_suijin() {
     free(buf);
   }
 
-  {
+  /*{
     per.w    = per.h    = 500;
     per.o1.h = per.o1.w = 500;
     per.sc = 28.5;
     per.per = 1.0f;
     per.foct = 3.5f;
     init_therm();
-  }
-  //per.w = 501;
-  //init_therm();
+  }*/
 
   while (!glfwWindowShouldClose(window)) {
     ++frame;
@@ -1542,8 +1564,10 @@ uint8_t run_suijin() {
       glDrawArrays(GL_TRIANGLES, 0, sbvl);
     }
 
-    draw_squaret((windowW - 500) / 2, (windowH - 500) / 2, 500, 500, ttex, 2);
-    upd_therm();
+    /*
+     draw_squaret((windowW - 500) / 2, (windowH - 500) / 2, 500, 500, ttex, 2);
+     upd_therm();
+     */
     //fprintf(stdout, "Oct: %f\nPer: %f\nScale: %f\nSize: %f-%f\n", per.foct, per.per, per.sc, per.w, per.h);
 
     if (drawObjs) { // NPROG
@@ -1554,10 +1578,16 @@ uint8_t run_suijin() {
       program_set_float3v(nprog, "camPos", cam.pos);
 
       int32_t i, j;
-      float rd, mrd = -99999999.0f;
+      float rd, mrd = NEG_INF;
 
       if (canMoveCam && glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS) {
-        cs = csrayd(cam.pos, QV(cam.orientation));
+        //cs = csrayd(cam.pos, QV(cam.orientation));
+        cs = csrayd(cam.pos, cam.up);
+      }
+
+      //rayHit(cam.pos, v3n(cam.up), 100.0f);
+      if (rayHit(cam.pos, norm((vec3) {0.1f, 1.0f, 0.1f}), 3.0f)) {
+        fprintf(stdout, "AAA");
       }
 
       for(i = 0; i < objs.l; ++i) {
@@ -1566,10 +1596,11 @@ uint8_t run_suijin() {
           if (canMoveCam && glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS) {
             if (rbi(&cs, &objs.v[i].mins.v[j].b)) {
               rmi(&cs, &objs.v[i].mins.v[j], &rd);
-              if (rd > mrd && rd > -9999999999.0f) {
+              if (rd > mrd && rd > NEG_INF) {
                 mrd = rd;
                 HITS = 1;
-                HITP = v3a(cam.pos, v3m(rd, QV(cam.orientation)));
+                //HITP = v3a(cam.pos, v3m(rd, QV(cam.orientation)));
+                HITP = v3a(cam.pos, v3m(rd, cam.up));
                 glBindBuffer(GL_ARRAY_BUFFER, pvbo);
                 glBufferSubData(GL_ARRAY_BUFFER, 0, 3 * sizeof(float), &HITP);
               }
