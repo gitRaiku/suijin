@@ -143,12 +143,15 @@ struct model {
   char name[64];
 };
 
-
+#define MGEOMETRY 0b001
+#define MPROP     0b010
+#define MSKYBOX   0b100
 struct minf {
   uint32_t m;
   v3 scale;
   v3 pos;
   quat rot;
+  uint32_t mask;
 
   struct bbox b;
 

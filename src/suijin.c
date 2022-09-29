@@ -817,6 +817,7 @@ struct sray {
   v3 d; // Dir
   v3 i; // 1 / Dir
   uint8_t s[3]; // Sign of dirs
+  uint32_t mask;
 };
 
 struct sray csray(v3 s, v3 e) {
@@ -833,7 +834,7 @@ struct sray csray(v3 s, v3 e) {
   return cs;
 }
 
-struct sray csrayd(v3 s, v3 d) {
+struct sray csrayd(v3 s, v3 d, uint32_t mask) {
   struct sray cs;
 
   cs.o = s;
@@ -843,6 +844,8 @@ struct sray csrayd(v3 s, v3 d) {
   cs.s[0] = cs.i.x < 0; 
   cs.s[1] = cs.i.y < 0; 
   cs.s[2] = cs.i.z < 0; 
+
+  cs.mask = mask;
 
   return cs;
 }
@@ -937,7 +940,7 @@ void addbb(struct bbox *__restrict cb, struct linv *__restrict v) {
   linvp(&lins, cl);
 }
 
-void aobj(uint32_t m, v3 sc, v3 pos, struct object *__restrict cb) {
+void aobj(uint32_t m, v3 sc, v3 pos, struct object *__restrict cb, uint32_t mask) {
   struct minf cm;
   cm.m = m;
   cm.scale = sc;
@@ -946,6 +949,7 @@ void aobj(uint32_t m, v3 sc, v3 pos, struct object *__restrict cb) {
   maff(&cm);
   cm.b.i = v3m4(cm.aff, mods.v[cm.m].b.i);
   cm.b.a = v3m4(cm.aff, mods.v[cm.m].b.a);
+  cm.mask = mask;
   minfvp(&cb->mins, cm);
   addbb(&cm.b, &lins);
 }
@@ -1083,6 +1087,7 @@ void init_skybox(struct skybox *__restrict sb) {
   sb->m.scale.x = sb->m.scale.y = sb->m.scale.z = 400.0f;
   quat qr = gen_quat((vec3) { 1.0f, 0.0f, 0.0f }, M_PI / 4);
   sb->m.rot = qnorm(qmul(qmul(qr, (quat) {0.0f, 1.0f, 0.0f, 0.0f} ), qconj(qr)));
+  sb->m.mask = MSKYBOX;
   maff(&sb->m);
 
   glGenVertexArrays(1, &skyvao);
@@ -1112,20 +1117,20 @@ void init_skybox(struct skybox *__restrict sb) {
 
   float sbv[] = {
     -1.0f, -1.0f, -1.0f, 0.25f, UP666,
-    -1.0f, -1.0f,  1.0f, 0.25f, UP333,
     -1.0f,  1.0f,  1.0f, 0.50f, UP333,
+    -1.0f, -1.0f,  1.0f, 0.25f, UP333,
 
     -1.0f, -1.0f, -1.0f, 0.25f, UP666,
-    -1.0f,  1.0f,  1.0f, 0.50f, UP333,
     -1.0f,  1.0f, -1.0f, 0.50f, UP666,
+    -1.0f,  1.0f,  1.0f, 0.50f, UP333,
 
     -1.0f, -1.0f,  1.0f, 0.25f, UP333,
     -1.0f,  1.0f,  1.0f, 0.50f, UP333,
      1.0f, -1.0f,  1.0f, 0.25f, 0.00f,
 
     -1.0f,  1.0f,  1.0f, 0.50f, UP333,
-     1.0f, -1.0f,  1.0f, 0.25f, 0.00f,
      1.0f,  1.0f,  1.0f, 0.50f, 0.00f,
+     1.0f, -1.0f,  1.0f, 0.25f, 0.00f,
 
     -1.0f, -1.0f, -1.0f, 0.25f, UP666,
     -1.0f, -1.0f,  1.0f, 0.25f, UP333,
@@ -1136,8 +1141,8 @@ void init_skybox(struct skybox *__restrict sb) {
      1.0f, -1.0f, -1.0f, 0.00f, UP666,
 
     -1.0f, -1.0f, -1.0f, 0.25f, UP666,
-    -1.0f,  1.0f, -1.0f, 0.50f, UP666,
      1.0f, -1.0f, -1.0f, 0.25f, 1.00f,
+    -1.0f,  1.0f, -1.0f, 0.50f, UP666,
 
     -1.0f,  1.0f, -1.0f, 0.50f, UP666,
      1.0f, -1.0f, -1.0f, 0.25f, 1.00f,
@@ -1148,16 +1153,16 @@ void init_skybox(struct skybox *__restrict sb) {
      1.0f,  1.0f,  1.0f, 0.75f, UP333,
 
     -1.0f,  1.0f, -1.0f, 0.50f, UP666,
-     1.0f,  1.0f,  1.0f, 0.75f, UP333,
-     1.0f,  1.0f, -1.0f, 0.75f, UP666,
-
      1.0f,  1.0f, -1.0f, 0.75f, UP666,
      1.0f,  1.0f,  1.0f, 0.75f, UP333,
-     1.0f, -1.0f,  1.0f, 1.00f, UP333,
 
      1.0f,  1.0f, -1.0f, 0.75f, UP666,
      1.0f, -1.0f,  1.0f, 1.00f, UP333,
-     1.0f, -1.0f, -1.0f, 1.00f, UP666
+     1.0f,  1.0f,  1.0f, 0.75f, UP333,
+
+     1.0f,  1.0f, -1.0f, 0.75f, UP666,
+     1.0f, -1.0f, -1.0f, 1.00f, UP666,
+     1.0f, -1.0f,  1.0f, 1.00f, UP333
   };
 
   sbvl = sizeof(sbv) / sizeof(float) / 5;
@@ -1311,8 +1316,8 @@ void upd_therm() {
   glBindTexture(GL_TEXTURE_2D, 0);
 }
 
-uint8_t rayHit(v3 s, v3 d, float dist) {
-  struct sray r = csrayd(s, d);
+uint8_t rayHit(v3 s, v3 d, float dist, uint32_t mask) {
+  struct sray r = csrayd(s, d, mask);
 
   uint32_t i, j;
   float rd = 0;
@@ -1355,7 +1360,7 @@ uint8_t run_suijin() {
   glEnable(GL_BLEND);
   glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
   glEnable(GL_PROGRAM_POINT_SIZE);
-  //glEnable(GL_CULL_FACE);
+  glEnable(GL_CULL_FACE);
 
   { /// Asset loading
     modvi(&mods);
@@ -1363,7 +1368,7 @@ uint8_t run_suijin() {
     linvi(&lins);
 
     parse_folder(&mods, &mats, "Resources/Items/Mountain");
-    //parse_folder(&mods, &mats, "Resources/Items/Dough");
+    parse_folder(&mods, &mats, "Resources/Items/Dough");
     //parse_folder(&mods, &mats, "Resources/Items/Plant");
     //parse_folder(&mods, &uim, "Resources/Items/Plane");
     
@@ -1377,14 +1382,15 @@ uint8_t run_suijin() {
     objvi(&objs);
 
     init_object(&cb, "MIAN");
-    aobj(0, (v3) {10.0f, 10.0f, 10.0f} , (v3) {0.0f, 0.0f, 0.0f}, &cb);
+    aobj(0, (v3) {10.0f, 10.0f, 10.0f} , (v3) {0.0f, 0.0f, 0.0f}, &cb, MGEOMETRY);
     objvp(&objs, cb);
 
-    /*
+    
     init_object(&cb, "DOUGH");
-    aobj(1, 10.0f, (v3) {-60.0f, 40.0f, -30.0f}, &cb);
-    aobj(2, 10.0f, (v3) {-60.0f, 40.0f, -30.0f}, &cb);
+    aobj(1, (v3) {10.0f, 10.0f, 10.0f}, (v3) {-60.0f, 40.0f, -30.0f}, &cb, MPROP);
+    aobj(2, (v3) {10.0f, 10.0f, 10.0f}, (v3) {-60.0f, 40.0f, -30.0f}, &cb, MPROP);
     objvp(&objs, cb);
+    /*
 
     init_object(&cb, "PLANT");
     aobj(3, 10.0f, (v3) {30.0f, 10.0f, -30.0f}, &cb);
@@ -1581,13 +1587,7 @@ uint8_t run_suijin() {
       float rd, mrd = NEG_INF;
 
       if (canMoveCam && glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS) {
-        //cs = csrayd(cam.pos, QV(cam.orientation));
-        cs = csrayd(cam.pos, cam.up);
-      }
-
-      //rayHit(cam.pos, v3n(cam.up), 100.0f);
-      if (rayHit(cam.pos, norm((vec3) {0.1f, 1.0f, 0.1f}), 3.0f)) {
-        fprintf(stdout, "AAA");
+        cs = csrayd(cam.pos, QV(cam.orientation), MPROP);
       }
 
       for(i = 0; i < objs.l; ++i) {
@@ -1599,8 +1599,7 @@ uint8_t run_suijin() {
               if (rd > mrd && rd > NEG_INF) {
                 mrd = rd;
                 HITS = 1;
-                //HITP = v3a(cam.pos, v3m(rd, QV(cam.orientation)));
-                HITP = v3a(cam.pos, v3m(rd, cam.up));
+                HITP = v3a(cam.pos, v3m(rd, QV(cam.orientation)));
                 glBindBuffer(GL_ARRAY_BUFFER, pvbo);
                 glBufferSubData(GL_ARRAY_BUFFER, 0, 3 * sizeof(float), &HITP);
               }
