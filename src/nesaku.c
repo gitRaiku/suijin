@@ -129,16 +129,27 @@ void update_texture_ub(struct i2du *__restrict im, struct texture *__restrict te
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
 }
 
+float dist3(float x, float y, float z, v3 v) {
 #define P2(x) ((x)*(x))
-float dist2(float x, float y, v2 v) {
-  return P2(v.x - x) + P2(v.y - y);
+  return P2(v.x - x) + P2(v.y - y) + P2(v.z - z);
 }
 
-float gnear(uint32_t x, uint32_t y, float scale, v2 *__restrict pts, uint32_t udx, uint32_t udy) {
+float gnear3(uint32_t x, uint32_t y, uint32_t z, float scale, v3 *__restrict pts, uint32_t udx, uint32_t udy, uint32_t udz) {
   uint32_t ux = (uint32_t) x / scale;
   uint32_t uy = (uint32_t) y / scale;
+  uint32_t uz = (uint32_t) z / scale;
   float md = INFINITY;
 
+  {
+    int32_t i, j, k;
+    for (i = 0; i <= 1; ++i) {
+      for (j = 0; j <= 1; ++j) {
+        for (k = 0; k <= 1; ++k) {
+          md = min(md, dist2(x, y, G(pts, ux - 1, uy - 1, udx)));
+        }
+      }
+    }
+  }
   if (ux != 0) {
     if (uy != 0) {
       md = min(md, dist2(x, y, G(pts, ux - 1, uy - 1, udx)));
@@ -176,23 +187,99 @@ float gnear(uint32_t x, uint32_t y, float scale, v2 *__restrict pts, uint32_t ud
   return 1 - clamp(scale * pscale * sqrtf(md), 0.0f, 1.0f);
 }
 
-void noise_w2d(uint32_t h, uint32_t w, float scale, struct i2df *__restrict im) {
-  /*static uint32_t lh = 0;
-  static uint32_t lw = 0; 
-  static float lsc = 0.0f;
-  static float lps = 0.0f;
-  static struct i2d *__restrict loim = NULL;
-  if (lh == h && lw == w && lsc == scale && loim == im && lps == pscale && reset == 0) {
-    return;
-  }
-  lh = h;
-  lw = w;
-  lsc = scale;
-  loim = im;
-  lps = pscale;*/
-
+void noise_w3d(uint32_t h, uint32_t w, uint32_t d, float scale, struct i3da *__restrict im) {
   if (im == NULL) {
-    im = malloc(sizeof(struct i2d));
+    im = malloc(sizeof(*im));
+  }
+
+  im->h = h;
+  im->w = w;
+  im->d = d;
+  if (im->v == NULL) {
+    im->v = calloc(sizeof(im->v[0]), h * w * d);
+  }
+
+  float dx = w / scale;
+  float dy = h / scale;
+  float dz = d / scale;
+  uint32_t udx = (uint32_t)dx + 1;
+  uint32_t udy = (uint32_t)dy + 1;
+  uint32_t udz = (uint32_t)dz + 1;
+
+  v3 *__restrict pts = calloc(sizeof(v3), udx * udy * udz);
+
+  {
+    int32_t i, j;
+    for (i = 0; i < udx; ++i) {
+      for (j = 0; j < udy; ++j) {
+        for (k = 0; k < udz; ++k) {
+          D(pts, i, j, k, udx, udy).x = (i + rf()) * scale;
+          D(pts, i, j, k, udx, udy).y = (j + rf()) * scale;
+          D(pts, i, j, k, udx, udy).z = (k + rf()) * scale;
+        }
+      }
+    }
+    for (i = 0; i < w; ++i) {
+      for (j = 0; j < h; ++j) {
+        for (k = 0; k < d; ++k) {
+          D(im->v, i, j, k, h, w) = gnear3(i, j, k, scale, pts, udx, udy, udz);
+        }
+      }
+    }
+  }
+
+}
+
+float dist2(float x, float y, v2 v) {
+  return P2(v.x - x) + P2(v.y - y);
+}
+
+float gnear2(uint32_t x, uint32_t y, float scale, v2 *__restrict pts, uint32_t udx, uint32_t udy, uint32_t udz) {
+  uint32_t ux = (uint32_t) x / scale;
+  uint32_t uy = (uint32_t) y / scale;
+  uint32_t uz = (uint32_t) y / scale;
+  float md = INFINITY;
+
+  if (ux != 0) {
+    if (uy != 0) {
+      md = min(md, dist3(x, y, z, D(pts, ux - 1, uy - 1, uz - 1, udx, udy)));
+    }
+
+      md = min(md, dist2(x, y, G(pts, ux - 1, uy    , udx)));
+
+    if (uy != udy - 1) {
+      md = min(md, dist2(x, y, G(pts, ux - 1, uy + 1, udx)));
+    }
+  }
+
+  if (uy != 0) {
+      md = min(md, dist2(x, y, G(pts, ux    , uy - 1, udx)));
+  }
+
+      md = min(md, dist2(x, y, G(pts, ux    , uy    , udx)));
+
+  if (uy != udy - 1) {
+      md = min(md, dist2(x, y, G(pts, ux    , uy + 1, udx)));
+  }
+  
+  if (ux != udx - 1) {
+    if (uy != 0) {
+      md = min(md, dist2(x, y, G(pts, ux + 1, uy - 1, udx)));
+    }
+
+      md = min(md, dist2(x, y, G(pts, ux + 1, uy    , udx)));
+
+    if (uy != udy - 1) {
+      md = min(md, dist2(x, y, G(pts, ux + 1, uy + 1, udx)));
+    }
+  }
+
+  return 1 - clamp(scale * pscale * sqrtf(md), 0.0f, 1.0f);
+}
+
+void noise_w2d(uint32_t h, uint32_t w, float scale, struct i2df *__restrict im) {
+  if (im == NULL) {
+    im = malloc(sizeof(*im));
   }
 
   im->h = h;
@@ -219,7 +306,7 @@ void noise_w2d(uint32_t h, uint32_t w, float scale, struct i2df *__restrict im) 
 
     for (i = 0; i < h; ++i) {
       for (j = 0; j < w; ++j) {
-        G(im->v, i, j, w) = gnear(i, j, scale, pts, udx, udy);
+        G(im->v, i, j, w) = gnear2(i, j, scale, pts, udx, udy);
       }
     }
   }
@@ -345,26 +432,8 @@ float octave_perlin(float x, float y, float z, int octaves, float persistence) {
 }
 
 void noise_p2d(uint32_t h, uint32_t w, uint32_t octaves, float persistence, float scale, struct i2df *__restrict im) {
-  /*static uint32_t lo = 0   ;
-  static float    lp = 0.0f;
-  static float    lh = 0.0f;
-  static float    lw = 0.0f;
-  static float    ls = 0.0f;
-  static struct i2df *__restrict li = NULL;*/
-
-  /*if (lh == h && lw == w && lo == octaves && lp == persistence && ls == scale && li == im && updp == 0) {
-    return;
-  }
-  updp = 0;
-  lo = octaves;
-  lp = persistence;
-  lh = h;
-  lw = w;
-  li = im;
-  ls = scale;*/
-
   if (im == NULL) {
-    im = malloc(sizeof(struct i2df));
+    im = malloc(sizeof(*im));
   }
 
   im->h = h;
@@ -381,5 +450,28 @@ void noise_p2d(uint32_t h, uint32_t w, uint32_t octaves, float persistence, floa
       }
     }
   }
+}
 
+void noise_p3d(uint32_t h, uint32_t w, uint32_t d, uint32_t octaves, float persistence, float scale, struct i3da *__restrict im) {
+  if (im == NULL) {
+    im = malloc(sizeof(*im));
+  }
+
+  im->h = h;
+  im->w = w;
+  im->d = d;
+  if (im->v == NULL) {
+    im->v = calloc(sizeof(im->v[0]), h * w * d);
+  }
+
+  {
+    int32_t i, j, k;
+    for (i = 0; i < w; ++i) {
+      for (j = 0; j < h; ++j) {
+        for (k = 0; k < d; ++k) {
+          D(im->v, i, j, d, w, h) = octave_perlin(i / scale, j / scale, k / scale, octaves, persistence);
+        }
+      }
+    }
+  }
 }

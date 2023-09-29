@@ -12,6 +12,7 @@
 #include "izanagi.h"
 
 #define G(v, x, y, w) ((v)[(x) + (y) * (w)])
+#define D(v, x, y, z, w, h) ((v)[(x) + (y) * (w) + (z) * (w * h)])
 
 extern float pscale;
 extern uint8_t updp;
@@ -20,6 +21,13 @@ struct fcol {
   float r;
   float g;
   float b;
+};
+
+struct rgba {
+  float r;
+  float g;
+  float b;
+  float a;
 };
 
 struct fcolu {
@@ -51,6 +59,13 @@ struct i3d {
   uint32_t w;
   uint32_t d;
   struct fcol *__restrict v;
+};
+
+struct i3da {
+  uint32_t h;
+  uint32_t w;
+  uint32_t d;
+  struct frgba *__restrict v;
 };
 
 void dump_image_to_file(char *__restrict fname, struct i2d *__restrict im);

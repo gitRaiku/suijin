@@ -1173,8 +1173,8 @@ void init_skybox(struct skybox *__restrict sb) {
   glEnableVertexAttribArray(0);
   glEnableVertexAttribArray(1);
 }
-  
 uint32_t ttex = 0;
+  
 void init_therm() {
   if (ttex == 0) {
     glGenTextures(1, &ttex);
@@ -1312,9 +1312,35 @@ struct cloud {
   uint32_t prog;
   uint32_t vao;
   uint32_t vbo;
+  uint32_t t31; // 128^3 Perlin-worley + Worley (inc freq) * 3
+  uint32_t t32; //  32^2 Worley (inc freq) * 3
+  uint32_t t2;  // 128^2 Curl noise * 3
 };
 
-void init_clouds() {
+struct cloud init_clouds() {
+  struct cloud c = {0};
+  { // Perlin-worley
+    glGenTextures(1, &t31);
+
+    glBindTexture(GL_TEXTURE_3D, ttex);
+
+
+
+    glTexImage3D(GL_TEXTURE_3D, 0, GL_RGBA, 128, 128, 128, 0, GL_RGBA, GL_FLOAT, per.m->v);
+
+
+
+    glGenerateMipmap(GL_TEXTURE_2D);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST_MIPMAP_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    glBindTexture(GL_TEXTURE_2D, 0);
+  }
+
+  glGenTextures(1, &t32);
+  glGenTextures(1, &t2 );
+
   glGenVertexArrays(1, &cloudvao);
   glGenBuffers(1, &cloudvbo);
 
