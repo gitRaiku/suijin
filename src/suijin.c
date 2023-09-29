@@ -27,10 +27,14 @@
 
 #define EPS 0.0000000001
 
+#define OUTSIDE_TEMP 0.1f
+float DIFF_COEF = 0.05f;
+
 double _ctime, _ltime;
 double deltaTime;
 
 uint8_t drawObjs = 1;
+uint8_t drawTerm = 0;
 uint8_t drawUi = 0;
 uint8_t drawBb = 0;
 
@@ -240,7 +244,8 @@ void mbp_callback(GLFWwindow *window, int button, int action, int mod) {
   //print_keypress("Got keypress: ", kp);
 }
 
-uint32_t CDR, CDRO; /// HANDLE INPUT
+/// HANDLE INPUT
+uint32_t CDR, CDRO;
 uint32_t lp[3];
 enum MOVEMEMENTS { CAMERA, ITEMS, UI };
 enum MOVEMEMENTS ms = CAMERA;
@@ -512,7 +517,6 @@ struct mchild {
 VECSTRUCT(mch, struct mchild);
 VECTOR_SUITE(mch, struct mchv *__restrict, struct mchild)
 
-#define MC 2
 struct node {
   float px, py;    // Pos
   float sx, sy;    // Size
@@ -521,6 +525,7 @@ struct node {
   mat4 aff;
   struct mchv children;
 };
+#define MC 2
 struct node nodes[MC];
 
 void add_title(struct node *__restrict m, char *__restrict t, float sc) {
@@ -563,8 +568,8 @@ void create_affine_matrix(mat4 m, float xs, float ys, float zs, float x, float y
   m[2][0] =          0; m[2][1] =          0; m[2][2] = zs; m[2][3] = z; 
   m[3][0] =          0; m[3][1] =          0; m[3][2] =  0; m[3][3] = 1; 
 }
-
 uint32_t uvao, uprog, lprog, pprog; // Draw Square
+
 void draw_squaret(float px, float py, float sx, float sy, uint32_t tex, int32_t type) {
   mat4 aff;
   glUseProgram(uprog);
@@ -712,8 +717,8 @@ uint32_t draw_textbox(float x, uint32_t y, struct tbox *__restrict t) {
 
   return t->bp;
 }
-
 uint32_t sS = 21;
+
 uint32_t draw_slider(float x, uint32_t y, struct node *__restrict cm, struct fslider *__restrict t) {
   int32_t tlen = cm->sx - cm->lp - cm->rp - sS;
   float   rlen = t->lims.y - t->lims.x;
@@ -887,11 +892,9 @@ uint8_t rbi(struct sray *__restrict r, struct bbox *__restrict cb) {
 
 struct linv lins;
 float *__restrict linsv;
-
-/// ADD BB
+void addbb(struct bbox *__restrict cb, struct linv *__restrict v) {
 #define CHEA(i) (FPC(&cl.e)[i] = FPC(&cb->a)[i])
 #define CHSA(i) (FPC(&cl.s)[i] = FPC(&cb->a)[i])
-void addbb(struct bbox *__restrict cb, struct linv *__restrict v) {
   struct line cl;
   int32_t i;
   cl.c = (v4) { 0.2f, 0.5f, 0.5f, 1.0f };
@@ -933,6 +936,8 @@ void addbb(struct bbox *__restrict cb, struct linv *__restrict v) {
   cl.s = cl.e = cb->i;
   CHSA(2); CHEA(2); CHEA(1);
   linvp(&lins, cl);
+#undef CHEA
+#undef CHSA
 }
 
 void aobj(uint32_t m, v3 sc, v3 pos, struct object *__restrict cb) {
@@ -1018,8 +1023,8 @@ uint8_t rmif(struct sray *__restrict r, struct vv3p *__restrict p, float *__rest
     return 1; 
 } 
 
-#define cmm mods.v[cm->m]
 void rmi(struct sray *__restrict r, struct minf *__restrict cm, float *__restrict f) {
+#define cmm mods.v[cm->m]
   struct vv3p vv;
   float t = 0;
   float u = 0;
@@ -1050,8 +1055,8 @@ void rmi(struct sray *__restrict r, struct minf *__restrict cm, float *__restric
   }
 
   *f = mf;
-}
 #undef cmm
+}
 
 void cpoints(uint32_t *__restrict vao, uint32_t *__restrict vbo) {
   glGenVertexArrays(1, vao);
@@ -1071,8 +1076,8 @@ struct skybox {
   struct minf m;
   v3 sunCol;
 };
-uint32_t skyprog, skyvao, skyvbo, sbvl;
 
+uint32_t skyprog, skyvao, skyvbo, sbvl;
 void init_skybox(struct skybox *__restrict sb) {
   memset(sb, 0, sizeof(*sb));
   sb->sunSize = 1.0f;
@@ -1208,10 +1213,6 @@ void init_therm() {
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
   glBindTexture(GL_TEXTURE_2D, 0);
 }
-
-#define OUTSIDE_TEMP 0.1f
-float DIFF_COEF = 0.05f;
-
 void upd_therm() {
   if (perlinR == 1) {
     perlinR = 0;
@@ -1307,6 +1308,31 @@ void upd_therm() {
   glBindTexture(GL_TEXTURE_2D, 0);
 }
 
+struct cloud {
+  uint32_t prog;
+  uint32_t vao;
+  uint32_t vbo;
+};
+
+void init_clouds() {
+  glGenVertexArrays(1, &cloudvao);
+  glGenBuffers(1, &cloudvbo);
+
+  float cbv[] = {
+  };
+
+  cbvl = sizeof(cbv) / sizeof(float) / 5;
+
+  glBindVertexArray(cloudvao);
+  glBindBuffer(GL_ARRAY_BUFFER, cloudvbo);
+  glBufferData(GL_ARRAY_BUFFER, sizeof(cbv), sbv, GL_STATIC_DRAW);
+
+  glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 5 * sizeof(float), (void *) (0 * sizeof(float)));
+  glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 5 * sizeof(float), (void *) (3 * sizeof(float)));
+  glEnableVertexAttribArray(0);
+  glEnableVertexAttribArray(1);
+}
+
 uint8_t run_suijin() {
   init_random();
   setbuf(stdout, NULL);
@@ -1338,7 +1364,7 @@ uint8_t run_suijin() {
     linvi(&lins);
 
     parse_folder(&mods, &mats, "Resources/Items/Mountain");
-    //parse_folder(&mods, &mats, "Resources/Items/Dough");
+    parse_folder(&mods, &mats, "Resources/Items/Dough");
     //parse_folder(&mods, &mats, "Resources/Items/Plant");
     //parse_folder(&mods, &uim, "Resources/Items/Plane");
     
@@ -1353,13 +1379,15 @@ uint8_t run_suijin() {
 
     init_object(&cb, "MIAN");
     aobj(0, (v3) {10.0f, 10.0f, 10.0f} , (v3) {0.0f, 0.0f, 0.0f}, &cb);
+    minfvt(&cb.mins);
     objvp(&objs, cb);
 
-    /*
     init_object(&cb, "DOUGH");
-    aobj(1, 10.0f, (v3) {-60.0f, 40.0f, -30.0f}, &cb);
-    aobj(2, 10.0f, (v3) {-60.0f, 40.0f, -30.0f}, &cb);
+    aobj(1, (v3) {10.0f, 10.0f, 10.0f}, (v3) {-60.0f, 40.0f, -30.0f}, &cb);
+    aobj(2, (v3) {10.0f, 10.0f, 10.0f}, (v3) {-60.0f, 40.0f, -30.0f}, &cb);
+    minfvt(&cb.mins);
     objvp(&objs, cb);
+    /*
 
     init_object(&cb, "PLANT");
     aobj(3, 10.0f, (v3) {30.0f, 10.0f, -30.0f}, &cb);
@@ -1368,21 +1396,19 @@ uint8_t run_suijin() {
     objvp(&objs, cb);
     */
 
-    minfvt(&cb.mins);
     objvt(&objs);
 
     clines(&lvao, &lvbo);
   }
 
-
   uint32_t nprog;
 
   _ctime = _ltime = deltaTime = 0;
 
-#define PROGC 5
+#define PROGC 6
   uint32_t shaders[PROGC * 2];
   {
-    char *snames[PROGC] = { "obj", "ui", "line", "point", "skybox" };
+    char *snames[PROGC] = { "obj", "ui", "line", "point", "skybox", "cloud" };
     char tmpn[128];
 
     uint32_t i;
@@ -1393,11 +1419,12 @@ uint8_t run_suijin() {
       PR_CHECK(shader_get(tmpn, GL_FRAGMENT_SHADER, shaders + 2 * i + 1));
     }
 
-    PR_CHECK(program_get(2, shaders    , &nprog));
-    PR_CHECK(program_get(2, shaders + 2, &uprog));
-    PR_CHECK(program_get(2, shaders + 4, &lprog));
-    PR_CHECK(program_get(2, shaders + 6, &pprog));
-    PR_CHECK(program_get(2, shaders + 8, &skyprog));
+    PR_CHECK(program_get(2, shaders     , &nprog));
+    PR_CHECK(program_get(2, shaders +  2, &uprog));
+    PR_CHECK(program_get(2, shaders +  4, &lprog));
+    PR_CHECK(program_get(2, shaders +  6, &pprog));
+    PR_CHECK(program_get(2, shaders +  8, &skyprog));
+    PR_CHECK(program_get(2, shaders + 10, &cloudprog));
 
     /*for (i = 0; i < PROGC; ++i) { // TODO: REMOVE
       glDeleteShader(shaders[i * 2]);
@@ -1406,7 +1433,7 @@ uint8_t run_suijin() {
   }
 
   uint32_t pvao, pvbo;
-  {
+  { /// Points
     cpoints(&pvao, &pvbo);
 
     v3 ce = {0.0f, 0.0f, 0.0f};
@@ -1417,7 +1444,6 @@ uint8_t run_suijin() {
   }
 
   prep_ui(window, &uvao);
-
 
   { // STAT
     struct stat s;
@@ -1450,6 +1476,7 @@ uint8_t run_suijin() {
   reset_ft();
 
   mchvi(&nodes[0].children);
+  add_title(&nodes[0], "スプーク・プーク", 0.47f);
   add_title(&nodes[0], "H", 0.20f);
   add_slider(&nodes[0], &per.h, 0.0f, 1000.0f, init_therm);
   add_title(&nodes[0], "W", 0.20f);
@@ -1516,7 +1543,7 @@ uint8_t run_suijin() {
       cameraUpdate = 0;
     }
 
-    { /// TODO: What the fuck
+    {
       glUseProgram(skyprog);
       program_set_mat4(skyprog, "fn", fn);
       sb.m.pos = cam.pos;
@@ -1542,8 +1569,12 @@ uint8_t run_suijin() {
       glDrawArrays(GL_TRIANGLES, 0, sbvl);
     }
 
-    draw_squaret((windowW - 500) / 2, (windowH - 500) / 2, 500, 500, ttex, 2);
-    upd_therm();
+    
+    if (drawTerm) {
+      draw_squaret((windowW - 500) / 2, (windowH - 500) / 2, 500, 500, ttex, 2);
+      upd_therm();
+    }
+
     //fprintf(stdout, "Oct: %f\nPer: %f\nScale: %f\nSize: %f-%f\n", per.foct, per.per, per.sc, per.w, per.h);
 
     if (drawObjs) { // NPROG
@@ -1643,6 +1674,7 @@ uint8_t run_suijin() {
   }*/
 
   glfwTerminate(); /// This for some reason crashes but exiting without it makes the drivers crash?????????
+                   /// Update: This no longer happens??????
 
   return 0;
 }

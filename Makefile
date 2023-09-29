@@ -40,6 +40,10 @@ build: $(BIN_DIR) $(BIN_DIR)/$(TARGET)
 $(BIN_DIR):
 	mkdir -p $@
 
+tt:
+	@echo $(C_SRC)
+	@echo $(C_OBJ)
+
 $(C_OBJ): $(OBJ_DIR)/%.o : $(SRC_DIR)/%.c
 	@mkdir -p $(@D)
 	$(CC) -c $(CCFLAGS) $< -o $@
