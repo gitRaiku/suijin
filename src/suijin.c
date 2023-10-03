@@ -1312,35 +1312,38 @@ struct cloud {
   uint32_t prog;
   uint32_t vao;
   uint32_t vbo;
+
+  float t31wscale;
+  float t31pscale;
+  float t31pwscale;
+  float t31persistence;
+  float t31octaves;
+  float t31curslice;
   uint32_t t31; // 128^3 Perlin-worley + Worley (inc freq) * 3
+  struct i3da v31;
+  float t32scale;
   uint32_t t32; //  32^2 Worley (inc freq) * 3
+  struct i3d v32;
   uint32_t t2;  // 128^2 Curl noise * 3
+  struct i2df v2;
 };
 
-struct cloud init_clouds() {
-  struct cloud c = {0};
+void update_clouds(struct cloud *__restrict c) {
   { // Perlin-worley
-    glGenTextures(1, &t31);
-
+    glGenTextures(1, &c->t31);
+    noise_cloud3(128, 128, 128, c->t31octaves, c->t31persistence, c->t31pscale, c->t31pwscale, c->t31wscale, &c->v31);
     glBindTexture(GL_TEXTURE_3D, ttex);
-
-
-
-    glTexImage3D(GL_TEXTURE_3D, 0, GL_RGBA, 128, 128, 128, 0, GL_RGBA, GL_FLOAT, per.m->v);
-
-
-
-    glGenerateMipmap(GL_TEXTURE_2D);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST_MIPMAP_NEAREST);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    glTexImage3D(GL_TEXTURE_3D, 0, GL_RGBA, 128, 128, 128, 0, GL_RGBA, GL_FLOAT, c->v31.v);
+    glGenerateMipmap(GL_TEXTURE_3D);
+    glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+    glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+    glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_WRAP_R, GL_REPEAT);
+    glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_MIN_FILTER, GL_NEAREST_MIPMAP_NEAREST);
+    glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
     glBindTexture(GL_TEXTURE_2D, 0);
   }
 
-  glGenTextures(1, &t32);
-  glGenTextures(1, &t2 );
-
+  /*
   glGenVertexArrays(1, &cloudvao);
   glGenBuffers(1, &cloudvbo);
 
@@ -1356,22 +1359,19 @@ struct cloud init_clouds() {
   glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 5 * sizeof(float), (void *) (0 * sizeof(float)));
   glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 5 * sizeof(float), (void *) (3 * sizeof(float)));
   glEnableVertexAttribArray(0);
-  glEnableVertexAttribArray(1);
+  glEnableVertexAttribArray(1);*/
 }
 
 uint8_t run_suijin() {
   init_random();
+  reset_ft();
   setbuf(stdout, NULL);
   GL_CHECK(glfwInit(), "Could not initialize glfw!");
 
   GLFWwindow *__restrict window = window_init();
-
   glfwSetKeyCallback(window, kbp_callback);
   glfwSetMouseButtonCallback(window, mbp_callback);
-
   glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
-
-  identity_matrix(identity);
 
   glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
   glPointSize(6.0);
@@ -1381,8 +1381,21 @@ uint8_t run_suijin() {
   glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
   glEnable(GL_PROGRAM_POINT_SIZE);
   //glEnable(GL_CULL_FACE);
+  glLineWidth(10.0f);
 
-  struct objv objs;
+  identity_matrix(identity);
+
+  struct cloud c = {0}; /// Clouds
+  {
+    c.t31wscale = 1.0;
+    c.t31pscale = 1.0;
+    c.t31pwscale = 1.0;
+    c.t31persistence = 1.0;
+    c.t31octaves = 1.0;
+    c.t31curslice = 0.0;
+    c.t32scale = 0.0;
+    update_clouds(&c);
+  }
 
   { /// Asset loading
     modvi(&mods);
@@ -1398,7 +1411,8 @@ uint8_t run_suijin() {
     modvt(&mods);
   }
 
-  uint32_t lvao, lvbo;
+  uint32_t lvao, lvbo; /// Objects
+  struct objv objs;
   {
     struct object cb;
     objvi(&objs);
@@ -1427,11 +1441,8 @@ uint8_t run_suijin() {
     clines(&lvao, &lvbo);
   }
 
+#define PROGC 6 /// Shaders
   uint32_t nprog;
-
-  _ctime = _ltime = deltaTime = 0;
-
-#define PROGC 6
   uint32_t shaders[PROGC * 2];
   {
     char *snames[PROGC] = { "obj", "ui", "line", "point", "skybox", "cloud" };
@@ -1450,16 +1461,16 @@ uint8_t run_suijin() {
     PR_CHECK(program_get(2, shaders +  4, &lprog));
     PR_CHECK(program_get(2, shaders +  6, &pprog));
     PR_CHECK(program_get(2, shaders +  8, &skyprog));
-    PR_CHECK(program_get(2, shaders + 10, &cloudprog));
+    PR_CHECK(program_get(2, shaders + 10, &c.prog));
 
-    /*for (i = 0; i < PROGC; ++i) { // TODO: REMOVE
+    for (i = 0; i < PROGC; ++i) {
       glDeleteShader(shaders[i * 2]);
       glDeleteShader(shaders[i * 2 + 1]);
-    }*/
+    }
   }
 
-  uint32_t pvao, pvbo;
-  { /// Points
+  uint32_t pvao, pvbo; /// Points
+  { 
     cpoints(&pvao, &pvbo);
 
     v3 ce = {0.0f, 0.0f, 0.0f};
@@ -1469,72 +1480,66 @@ uint8_t run_suijin() {
     glBindBuffer(GL_ARRAY_BUFFER, 0);
   }
 
-  prep_ui(window, &uvao);
-
-  { // STAT
+  { // Fragment Shader Stat
     struct stat s;
     stat(FRAG_PATH, &s);
     la = s.st_ctim.tv_sec;
   }
 
-  memset(&initCam, 0, sizeof(initCam));
-
-  {
+  { /// Camera
     int iw, ih;
+    memset(&initCam, 0, sizeof(initCam));
     glfwGetWindowSize(window, &iw, &ih);
     initCam.ratio = (float)iw / (float)ih;
+
+    initCam.up.y = 1.0f;
+    initCam.fov = toRadians(90.0f);
+    initCam.pos = (vec3) { 0.0f, 60.0f, 0.0f };
+    initCam.orientation = (quat) { 1.0f, 0.0f, 0.0f, 0.0f};
+    memcpy(&cam, &initCam, sizeof(cam));
   }
 
-  initCam.up.y = 1.0f;
-  initCam.fov = toRadians(90.0f);
-  initCam.pos = (vec3) { 0.0f, 60.0f, 0.0f };
-  initCam.orientation = (quat) { 1.0f, 0.0f, 0.0f, 0.0f};
+  { /// Cursor
+    glfwGetCursorPos(window, &mouseX, &mouseY);
+    oldMouseX = 0.0;
+    oldMouseY = 0.0;
+  }
 
-  memcpy(&cam, &initCam, sizeof(cam));
+  { /// UI
+    prep_ui(window, &uvao);
+    {
+      mchvi(&nodes[0].children);
+      add_title(&nodes[0], "スプーク・プーク", 0.47f);
+      add_title(&nodes[0], "H", 0.20f);
+      add_slider(&nodes[0], &per.h, 0.0f, 1000.0f, init_therm);
+      add_title(&nodes[0], "W", 0.20f);
+      add_slider(&nodes[0], &per.w, 0.0f, 1000.0f, init_therm);
+      add_title(&nodes[0], "Oct", 0.20f);
+      add_slider(&nodes[0], &per.foct, 0.0f, 5.0f, init_therm);
+      add_title(&nodes[0], "Scale", 0.20f);
+      add_slider(&nodes[0], &per.sc, 0.0f, 200.0f, init_therm);
+      add_title(&nodes[0], "Persistance", 0.20f);
+      add_slider(&nodes[0], &per.per, 0.0f, 4.0f, init_therm);
+      add_title(&nodes[0], "Diffusion", 0.20f);
+      add_slider(&nodes[0], &DIFF_COEF, 0.0f, 0.2f, init_therm);
+      add_title(&nodes[0], "Style", 0.20f);
+      add_slider(&nodes[0], &per.style, 0.0f, 1.9f, init_therm);
+      nodes[0].px = 50.0f;
+      nodes[0].py = 50.0f;
+      nodes[0].sx = 300.0f;
+      nodes[0].sy = 500.0f;
+      nodes[0].bp = 20;
+      nodes[0].tp = 20;
+      nodes[0].lp = 20;
+      nodes[0].rp = 20;
+      mchvt(&nodes[0].children);
+    }
+  }
 
-  glfwGetCursorPos(window, &mouseX, &mouseY);
-  oldMouseX = 0.0;
-  oldMouseY = 0.0;
-
-  glLineWidth(10.0f);
-
-  uint32_t frame = 0;
-  reset_ft();
-
-  mchvi(&nodes[0].children);
-  add_title(&nodes[0], "スプーク・プーク", 0.47f);
-  add_title(&nodes[0], "H", 0.20f);
-  add_slider(&nodes[0], &per.h, 0.0f, 1000.0f, init_therm);
-  add_title(&nodes[0], "W", 0.20f);
-  add_slider(&nodes[0], &per.w, 0.0f, 1000.0f, init_therm);
-  add_title(&nodes[0], "Oct", 0.20f);
-  add_slider(&nodes[0], &per.foct, 0.0f, 5.0f, init_therm);
-  add_title(&nodes[0], "Scale", 0.20f);
-  add_slider(&nodes[0], &per.sc, 0.0f, 200.0f, init_therm);
-  add_title(&nodes[0], "Persistance", 0.20f);
-  add_slider(&nodes[0], &per.per, 0.0f, 4.0f, init_therm);
-  add_title(&nodes[0], "Diffusion", 0.20f);
-  add_slider(&nodes[0], &DIFF_COEF, 0.0f, 0.2f, init_therm);
-  add_title(&nodes[0], "Style", 0.20f);
-  add_slider(&nodes[0], &per.style, 0.0f, 1.9f, init_therm);
-  nodes[0].px = 50.0f;
-  nodes[0].py = 50.0f;
-  nodes[0].sx = 300.0f;
-  nodes[0].sy = 500.0f;
-  nodes[0].bp = 20;
-  nodes[0].tp = 20;
-  nodes[0].lp = 20;
-  nodes[0].rp = 20;
-  mchvt(&nodes[0].children);
-
-  struct sray cs;
-
-
-  struct skybox sb;
-
-  init_skybox(&sb);
+  struct skybox sb; /// Skybox
   uint32_t sbt;
   {
+    init_skybox(&sb);
     glGenTextures(1, &sbt);
     uint32_t sbw, sbh;
     uint8_t *buf = read_png("skybox.png", "Resources/Textures", &sbw, &sbh);
@@ -1542,7 +1547,7 @@ uint8_t run_suijin() {
     free(buf);
   }
 
-  {
+  { /// Init therm
     per.w    = per.h    = 500;
     per.o1.h = per.o1.w = 500;
     per.sc = 28.5;
@@ -1550,8 +1555,10 @@ uint8_t run_suijin() {
     per.foct = 3.5f;
     init_therm();
   }
-  //per.w = 501;
-  //init_therm();
+
+  uint32_t frame = 0;
+  struct sray cs;
+  _ctime = _ltime = deltaTime = 0;
 
   while (!glfwWindowShouldClose(window)) {
     ++frame;

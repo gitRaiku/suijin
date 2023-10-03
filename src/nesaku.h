@@ -42,6 +42,13 @@ struct i2df {
   uint32_t w;
 };
 
+struct i3df {
+  float *__restrict v;
+  uint32_t h;
+  uint32_t w;
+  uint32_t d;
+};
+
 struct i2d {
   struct fcol *__restrict v;
   uint32_t h;
@@ -65,7 +72,7 @@ struct i3da {
   uint32_t h;
   uint32_t w;
   uint32_t d;
-  struct frgba *__restrict v;
+  struct rgba *__restrict v;
 };
 
 void dump_image_to_file(char *__restrict fname, struct i2d *__restrict im);
@@ -79,5 +86,7 @@ void noise_w2d(uint32_t h, uint32_t w, float scale, struct i2df *__restrict im);
 void new_perlin_perms();
 
 void noise_p2d(uint32_t h, uint32_t w, uint32_t octaves, float persistence, float scale, struct i2df *__restrict im);
+
+void noise_cloud3(uint32_t h, uint32_t w, uint32_t d, uint32_t octaves, float persistence, float pscale, float pwscale, float wscale, struct i3da *__restrict im);
 
 #endif

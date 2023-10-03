@@ -83,6 +83,7 @@ void dump_image_to_file(char *__restrict fname, struct i2d *__restrict im) {
 
    fprintf(stdout, "Dumped current image to %s!\n", fname);
 }
+
 struct fcol f2c(float v) {
   struct fcol res;
   res.r = v;
@@ -140,54 +141,28 @@ float gnear3(uint32_t x, uint32_t y, uint32_t z, float scale, v3 *__restrict pts
   uint32_t uz = (uint32_t) z / scale;
   float md = INFINITY;
 
+#define CHCK(a,b,c) {if ((a) == 0 && (b) == 0) { continue; } if ((a) == 2 && (b) == (c) - 1) { continue; }}
   {
     int32_t i, j, k;
-    for (i = 0; i <= 1; ++i) {
-      for (j = 0; j <= 1; ++j) {
-        for (k = 0; k <= 1; ++k) {
-          md = min(md, dist2(x, y, G(pts, ux - 1, uy - 1, udx)));
+    for (k = 0; k <= 2; ++k) {
+      CHCK(k, uz, udz)
+      for (j = 0; j <= 2; ++j) {
+        CHCK(j, uy, udy)
+        for (i = 0; i <= 2; ++i) {
+          CHCK(i, ux, udx)
+          fprintf(stdout, " - %u/2 %u/2 %u/2\n", i, j, k);
+          fprintf(stdout, " - - %u %u %u\n", ux + i - 1, uy + j - 1, uz + k - 1);
+          md = min(md, dist3(x, y, z, D(pts, ux + i - 1, uy + j - 1, uz + k - 1, udx, udy)));
         }
       }
     }
   }
-  if (ux != 0) {
-    if (uy != 0) {
-      md = min(md, dist2(x, y, G(pts, ux - 1, uy - 1, udx)));
-    }
-
-      md = min(md, dist2(x, y, G(pts, ux - 1, uy    , udx)));
-
-    if (uy != udy - 1) {
-      md = min(md, dist2(x, y, G(pts, ux - 1, uy + 1, udx)));
-    }
-  }
-
-  if (uy != 0) {
-      md = min(md, dist2(x, y, G(pts, ux    , uy - 1, udx)));
-  }
-
-      md = min(md, dist2(x, y, G(pts, ux    , uy    , udx)));
-
-  if (uy != udy - 1) {
-      md = min(md, dist2(x, y, G(pts, ux    , uy + 1, udx)));
-  }
-  
-  if (ux != udx - 1) {
-    if (uy != 0) {
-      md = min(md, dist2(x, y, G(pts, ux + 1, uy - 1, udx)));
-    }
-
-      md = min(md, dist2(x, y, G(pts, ux + 1, uy    , udx)));
-
-    if (uy != udy - 1) {
-      md = min(md, dist2(x, y, G(pts, ux + 1, uy + 1, udx)));
-    }
-  }
+#undef CHCK
 
   return 1 - clamp(scale * pscale * sqrtf(md), 0.0f, 1.0f);
 }
 
-void noise_w3d(uint32_t h, uint32_t w, uint32_t d, float scale, struct i3da *__restrict im) {
+void noise_w3d(uint32_t h, uint32_t w, uint32_t d, float scale, struct i3df *__restrict im) {
   if (im == NULL) {
     im = malloc(sizeof(*im));
   }
@@ -209,7 +184,7 @@ void noise_w3d(uint32_t h, uint32_t w, uint32_t d, float scale, struct i3da *__r
   v3 *__restrict pts = calloc(sizeof(v3), udx * udy * udz);
 
   {
-    int32_t i, j;
+    int32_t i, j, k;
     for (i = 0; i < udx; ++i) {
       for (j = 0; j < udy; ++j) {
         for (k = 0; k < udz; ++k) {
@@ -219,30 +194,29 @@ void noise_w3d(uint32_t h, uint32_t w, uint32_t d, float scale, struct i3da *__r
         }
       }
     }
-    for (i = 0; i < w; ++i) {
+    for (k = 0; k < d; ++k) {
       for (j = 0; j < h; ++j) {
-        for (k = 0; k < d; ++k) {
+        for (i = 0; i < w; ++i) {
+          fprintf(stdout, "%u/%u %u/%u %u/%u\n", i, h, j, w, k, d);
           D(im->v, i, j, k, h, w) = gnear3(i, j, k, scale, pts, udx, udy, udz);
         }
       }
     }
   }
-
 }
 
 float dist2(float x, float y, v2 v) {
   return P2(v.x - x) + P2(v.y - y);
 }
 
-float gnear2(uint32_t x, uint32_t y, float scale, v2 *__restrict pts, uint32_t udx, uint32_t udy, uint32_t udz) {
+float gnear2(uint32_t x, uint32_t y, float scale, v2 *__restrict pts, uint32_t udx, uint32_t udy) {
   uint32_t ux = (uint32_t) x / scale;
   uint32_t uy = (uint32_t) y / scale;
-  uint32_t uz = (uint32_t) y / scale;
   float md = INFINITY;
 
   if (ux != 0) {
     if (uy != 0) {
-      md = min(md, dist3(x, y, z, D(pts, ux - 1, uy - 1, uz - 1, udx, udy)));
+      md = min(md, dist2(x, y, G(pts, ux - 1, uy - 1, udx)));
     }
 
       md = min(md, dist2(x, y, G(pts, ux - 1, uy    , udx)));
@@ -452,7 +426,7 @@ void noise_p2d(uint32_t h, uint32_t w, uint32_t octaves, float persistence, floa
   }
 }
 
-void noise_p3d(uint32_t h, uint32_t w, uint32_t d, uint32_t octaves, float persistence, float scale, struct i3da *__restrict im) {
+void noise_p3d(uint32_t h, uint32_t w, uint32_t d, uint32_t octaves, float persistence, float scale, struct i3df *__restrict im) {
   if (im == NULL) {
     im = malloc(sizeof(*im));
   }
@@ -474,4 +448,60 @@ void noise_p3d(uint32_t h, uint32_t w, uint32_t d, uint32_t octaves, float persi
       }
     }
   }
+}
+
+float pwb(float p, float w) {
+  return w - p * (1 - w);
+}
+
+void noise_pw3d(uint32_t h, uint32_t w, uint32_t d, uint32_t octaves, float persistence, float pscale, float wscale, struct i3df *__restrict im) {
+  noise_w3d(h, w, d, wscale, im);
+
+  int32_t i, j, k;
+  for (i = 0; i < h; ++i) {
+    for (j = 0; j < w; ++j) {
+      for (k = 0; k < d; ++k) {
+        D(im->v, i, j, d, w, h) = pwb(octave_perlin(i / pscale, j / pscale, k / pscale, octaves, persistence), D(im->v, i, j, d, w, h));
+      }
+    }
+  }
+}
+
+void noise_cloud3(uint32_t h, uint32_t w, uint32_t d, uint32_t octaves, float persistence, float pscale, float pwscale, float wscale, struct i3da *__restrict im) {
+  if (im == NULL) {
+    im = malloc(sizeof(*im));
+  }
+
+  im->h = h;
+  im->w = w;
+  im->d = d;
+  if (im->v == NULL) {
+    im->v = calloc(sizeof(im->v[0]), h * w * d);
+  }
+
+  struct i3df pw, w1, w2, w3;
+
+  noise_pw3d(h, w, d, octaves, persistence, pscale, pwscale, &pw);
+  noise_w3d(h, w, d, wscale, &w1);
+  noise_w3d(h, w, d, wscale, &w2);
+  noise_w3d(h, w, d, wscale, &w3);
+
+  {
+    int32_t i, j, k;
+    for (i = 0; i < h; ++i) {
+      for (j = 0; j < w; ++j) {
+        for (k = 0; k < d; ++k) {
+          D(im->v, i, j, k, h, w).r = D(pw.v, i, j, k, h, w);
+          D(im->v, i, j, k, h, w).g = D(w1.v, i, j, k, h, w);
+          D(im->v, i, j, k, h, w).b = D(w2.v, i, j, k, h, w);
+          D(im->v, i, j, k, h, w).a = D(w3.v, i, j, k, h, w);
+        }
+      }
+    }
+  }
+
+  free(pw.v);
+  free(w1.v);
+  free(w2.v);
+  free(w3.v);
 }
