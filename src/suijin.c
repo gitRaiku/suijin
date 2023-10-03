@@ -36,7 +36,9 @@ double deltaTime;
 uint8_t drawObjs = 1;
 uint8_t drawTerm = 0;
 uint8_t drawUi = 0;
-uint8_t drawBb = 0;
+uint8_t drawBb = 1;
+
+struct objv objs;
 
 mat4 identity;
 
@@ -820,6 +822,7 @@ struct sray {
   v3 d; // Dir
   v3 i; // 1 / Dir
   uint8_t s[3]; // Sign of dirs
+  uint32_t mask;
 };
 
 struct sray csray(v3 s, v3 e) {
@@ -836,7 +839,7 @@ struct sray csray(v3 s, v3 e) {
   return cs;
 }
 
-struct sray csrayd(v3 s, v3 d) {
+struct sray csrayd(v3 s, v3 d, uint32_t mask) {
   struct sray cs;
 
   cs.o = s;
@@ -847,11 +850,13 @@ struct sray csrayd(v3 s, v3 d) {
   cs.s[1] = cs.i.y < 0; 
   cs.s[2] = cs.i.z < 0; 
 
+  cs.mask = mask;
+
   return cs;
 }
 
 uint8_t rbi(struct sray *__restrict r, struct bbox *__restrict cb) {
-    float tmin, tmax, tymin, tymax, tzmin, tzmax;
+  float tmin, tmax, tymin, tymax, tzmin, tzmax;
 
      tmin = (V3C(cb)[    r->s[0]].x - r->o.x) * r->i.x; 
      tmax = (V3C(cb)[1 - r->s[0]].x - r->o.x) * r->i.x;
@@ -940,15 +945,16 @@ void addbb(struct bbox *__restrict cb, struct linv *__restrict v) {
 #undef CHSA
 }
 
-void aobj(uint32_t m, v3 sc, v3 pos, struct object *__restrict cb) {
+void aobj(uint32_t m, v3 sc, v3 pos, struct object *__restrict cb, uint32_t mask) {
   struct minf cm;
   cm.m = m;
   cm.scale = sc;
   cm.pos = pos;
-  cm.rot = (vec4) {0.0f, 1.0f, 0.0f, 0.0f};
+  cm.rot = (vec4) {0.0f, 0.0f, 0.0f, 0.5f};
   maff(&cm);
   cm.b.i = v3m4(cm.aff, mods.v[cm.m].b.i);
   cm.b.a = v3m4(cm.aff, mods.v[cm.m].b.a);
+  cm.mask = mask;
   minfvp(&cb->mins, cm);
   addbb(&cm.b, &lins);
 }
@@ -1025,12 +1031,13 @@ uint8_t rmif(struct sray *__restrict r, struct vv3p *__restrict p, float *__rest
 
 void rmi(struct sray *__restrict r, struct minf *__restrict cm, float *__restrict f) {
 #define cmm mods.v[cm->m]
+#define NEG_INF -99999999999.0f
   struct vv3p vv;
   float t = 0;
   float u = 0;
   float v = 0;
 
-  float mf = -99999999999.0f;
+  float mf = NEG_INF;
   uint32_t ht = 0;
 
   v3 px;
@@ -1085,6 +1092,7 @@ void init_skybox(struct skybox *__restrict sb) {
   sb->m.scale.x = sb->m.scale.y = sb->m.scale.z = 400.0f;
   quat qr = gen_quat((vec3) { 1.0f, 0.0f, 0.0f }, M_PI / 4);
   sb->m.rot = qnorm(qmul(qmul(qr, (quat) {0.0f, 1.0f, 0.0f, 0.0f} ), qconj(qr)));
+  sb->m.mask = MSKYBOX;
   maff(&sb->m);
 
   glGenVertexArrays(1, &skyvao);
@@ -1114,20 +1122,20 @@ void init_skybox(struct skybox *__restrict sb) {
 
   float sbv[] = {
     -1.0f, -1.0f, -1.0f, 0.25f, UP666,
-    -1.0f, -1.0f,  1.0f, 0.25f, UP333,
     -1.0f,  1.0f,  1.0f, 0.50f, UP333,
+    -1.0f, -1.0f,  1.0f, 0.25f, UP333,
 
     -1.0f, -1.0f, -1.0f, 0.25f, UP666,
-    -1.0f,  1.0f,  1.0f, 0.50f, UP333,
     -1.0f,  1.0f, -1.0f, 0.50f, UP666,
+    -1.0f,  1.0f,  1.0f, 0.50f, UP333,
 
     -1.0f, -1.0f,  1.0f, 0.25f, UP333,
     -1.0f,  1.0f,  1.0f, 0.50f, UP333,
      1.0f, -1.0f,  1.0f, 0.25f, 0.00f,
 
     -1.0f,  1.0f,  1.0f, 0.50f, UP333,
-     1.0f, -1.0f,  1.0f, 0.25f, 0.00f,
      1.0f,  1.0f,  1.0f, 0.50f, 0.00f,
+     1.0f, -1.0f,  1.0f, 0.25f, 0.00f,
 
     -1.0f, -1.0f, -1.0f, 0.25f, UP666,
     -1.0f, -1.0f,  1.0f, 0.25f, UP333,
@@ -1138,8 +1146,8 @@ void init_skybox(struct skybox *__restrict sb) {
      1.0f, -1.0f, -1.0f, 0.00f, UP666,
 
     -1.0f, -1.0f, -1.0f, 0.25f, UP666,
-    -1.0f,  1.0f, -1.0f, 0.50f, UP666,
      1.0f, -1.0f, -1.0f, 0.25f, 1.00f,
+    -1.0f,  1.0f, -1.0f, 0.50f, UP666,
 
     -1.0f,  1.0f, -1.0f, 0.50f, UP666,
      1.0f, -1.0f, -1.0f, 0.25f, 1.00f,
@@ -1150,16 +1158,16 @@ void init_skybox(struct skybox *__restrict sb) {
      1.0f,  1.0f,  1.0f, 0.75f, UP333,
 
     -1.0f,  1.0f, -1.0f, 0.50f, UP666,
-     1.0f,  1.0f,  1.0f, 0.75f, UP333,
-     1.0f,  1.0f, -1.0f, 0.75f, UP666,
-
      1.0f,  1.0f, -1.0f, 0.75f, UP666,
      1.0f,  1.0f,  1.0f, 0.75f, UP333,
-     1.0f, -1.0f,  1.0f, 1.00f, UP333,
 
      1.0f,  1.0f, -1.0f, 0.75f, UP666,
      1.0f, -1.0f,  1.0f, 1.00f, UP333,
-     1.0f, -1.0f, -1.0f, 1.00f, UP666
+     1.0f,  1.0f,  1.0f, 0.75f, UP333,
+
+     1.0f,  1.0f, -1.0f, 0.75f, UP666,
+     1.0f, -1.0f, -1.0f, 1.00f, UP666,
+     1.0f, -1.0f,  1.0f, 1.00f, UP333
   };
 
   sbvl = sizeof(sbv) / sizeof(float) / 5;
@@ -1213,6 +1221,9 @@ void init_therm() {
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
   glBindTexture(GL_TEXTURE_2D, 0);
 }
+
+#define OUTSIDE_TEMP 0.1f
+float DIFF_COEF = 0.05f;
 void upd_therm() {
   if (perlinR == 1) {
     perlinR = 0;
@@ -1285,6 +1296,7 @@ void upd_therm() {
   G(per.s->v, 0, h - 2, w) += x;
   G(per.s->v, 1, h - 1, w) += x;
 
+  /*
   double mean = 0;
   double rms = 0;
   double ma = -9999999;
@@ -1301,6 +1313,7 @@ void upd_therm() {
   rms = sqrtf(rms / (double)(w * h));
 
   fprintf(stdout, "%f %f %f %f\r", mean, rms, ma, mi);
+  */
   
   pswap((void **)&per.s, (void **)&per.m);
   glBindTexture(GL_TEXTURE_2D, ttex);
@@ -1362,6 +1375,29 @@ void update_clouds(struct cloud *__restrict c) {
   glEnableVertexAttribArray(1);*/
 }
 
+uint8_t rayHit(v3 s, v3 d, float dist, uint32_t mask) {
+  struct sray r = csrayd(s, d, mask);
+
+  uint32_t i, j;
+  float rd = 0;
+  uint8_t a;
+  for(i = 0; i < objs.l; ++i) {
+    //fprintf(stdout, "%u\n", i);
+    for(j = 0; j < objs.v[i].mins.l; ++j) {
+      //fprintf(stdout, "\\-%u\n", j);
+      a = rbi(&r, &objs.v[i].mins.v[j].b);
+      //fprintf(stdout, "  \\-%u\n", a);
+      if (a) {
+        rmi(&r, &objs.v[i].mins.v[j], &rd);
+        if (rd >= -dist) {
+          return 1;
+        }
+      }
+    }
+  }
+  return 0;
+}
+
 uint8_t run_suijin() {
   init_random();
   reset_ft();
@@ -1418,14 +1454,13 @@ uint8_t run_suijin() {
     objvi(&objs);
 
     init_object(&cb, "MIAN");
-    aobj(0, (v3) {10.0f, 10.0f, 10.0f} , (v3) {0.0f, 0.0f, 0.0f}, &cb);
-    minfvt(&cb.mins);
+    aobj(0, (v3) {10.0f, 10.0f, 10.0f} , (v3) {0.0f, 0.0f, 0.0f}, &cb, MGEOMETRY);
     objvp(&objs, cb);
 
+    
     init_object(&cb, "DOUGH");
-    aobj(1, (v3) {10.0f, 10.0f, 10.0f}, (v3) {-60.0f, 40.0f, -30.0f}, &cb);
-    aobj(2, (v3) {10.0f, 10.0f, 10.0f}, (v3) {-60.0f, 40.0f, -30.0f}, &cb);
-    minfvt(&cb.mins);
+    aobj(1, (v3) {10.0f, 10.0f, 10.0f}, (v3) {-60.0f, 40.0f, -30.0f}, &cb, MPROP);
+    aobj(2, (v3) {10.0f, 10.0f, 10.0f}, (v3) {-60.0f, 40.0f, -30.0f}, &cb, MPROP);
     objvp(&objs, cb);
     /*
 
@@ -1602,7 +1637,6 @@ uint8_t run_suijin() {
       glDrawArrays(GL_TRIANGLES, 0, sbvl);
     }
 
-    
     if (drawTerm) {
       draw_squaret((windowW - 500) / 2, (windowH - 500) / 2, 500, 500, ttex, 2);
       upd_therm();
@@ -1618,10 +1652,10 @@ uint8_t run_suijin() {
       program_set_float3v(nprog, "camPos", cam.pos);
 
       int32_t i, j;
-      float rd, mrd = -99999999.0f;
+      float rd, mrd = NEG_INF;
 
       if (canMoveCam && glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS) {
-        cs = csrayd(cam.pos, QV(cam.orientation));
+        cs = csrayd(cam.pos, QV(cam.orientation), MPROP);
       }
 
       for(i = 0; i < objs.l; ++i) {
@@ -1630,7 +1664,7 @@ uint8_t run_suijin() {
           if (canMoveCam && glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS) {
             if (rbi(&cs, &objs.v[i].mins.v[j].b)) {
               rmi(&cs, &objs.v[i].mins.v[j], &rd);
-              if (rd > mrd && rd > -9999999999.0f) {
+              if (rd > mrd && rd > NEG_INF) {
                 mrd = rd;
                 HITS = 1;
                 HITP = v3a(cam.pos, v3m(rd, QV(cam.orientation)));
