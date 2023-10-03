@@ -23,7 +23,8 @@ CCFLAGS  = -ggdb3 -Og \
 
 LINKER   = $(CC)
 
-DEBUGGER = gdb
+DEBUGGER = gdb -q
+VALGRIND = valgrind --leak-check=summary --log-file=valgrind.log
 
 DATE := $(shell date "+%Y-%m-%d")
 
@@ -60,6 +61,9 @@ $(BIN_DIR)/$(TARGET): $(C_OBJ) $(L_OBJ)
 
 run: build
 	./$(BIN_DIR)/$(TARGET)
+
+valgrind: build
+	$(VALGRIND) $(BIN_DIR)/$(TARGET)
 
 debug: build
 	$(DEBUGGER) $(BIN_DIR)/$(TARGET)

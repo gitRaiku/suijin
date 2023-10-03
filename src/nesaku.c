@@ -150,8 +150,8 @@ float gnear3(uint32_t x, uint32_t y, uint32_t z, float scale, v3 *__restrict pts
         CHCK(j, uy, udy)
         for (i = 0; i <= 2; ++i) {
           CHCK(i, ux, udx)
-          fprintf(stdout, " - %u/2 %u/2 %u/2\n", i, j, k);
-          fprintf(stdout, " - - %u %u %u\n", ux + i - 1, uy + j - 1, uz + k - 1);
+          //fprintf(stdout, " - %u/2 %u/2 %u/2\n", i, j, k);
+          //fprintf(stdout, " - - %u %u %u\n", ux + i - 1, uy + j - 1, uz + k - 1);
           md = min(md, dist3(x, y, z, D(pts, ux + i - 1, uy + j - 1, uz + k - 1, udx, udy)));
         }
       }
@@ -164,7 +164,7 @@ float gnear3(uint32_t x, uint32_t y, uint32_t z, float scale, v3 *__restrict pts
 
 void noise_w3d(uint32_t h, uint32_t w, uint32_t d, float scale, struct i3df *__restrict im) {
   if (im == NULL) {
-    im = malloc(sizeof(*im));
+    im = calloc(sizeof(*im), 1);
   }
 
   im->h = h;
@@ -197,7 +197,7 @@ void noise_w3d(uint32_t h, uint32_t w, uint32_t d, float scale, struct i3df *__r
     for (k = 0; k < d; ++k) {
       for (j = 0; j < h; ++j) {
         for (i = 0; i < w; ++i) {
-          fprintf(stdout, "%u/%u %u/%u %u/%u\n", i, h, j, w, k, d);
+          //fprintf(stdout, "%u/%u %u/%u %u/%u\n", i, h, j, w, k, d);
           D(im->v, i, j, k, h, w) = gnear3(i, j, k, scale, pts, udx, udy, udz);
         }
       }
@@ -253,7 +253,7 @@ float gnear2(uint32_t x, uint32_t y, float scale, v2 *__restrict pts, uint32_t u
 
 void noise_w2d(uint32_t h, uint32_t w, float scale, struct i2df *__restrict im) {
   if (im == NULL) {
-    im = malloc(sizeof(*im));
+    im = calloc(sizeof(*im), 1);
   }
 
   im->h = h;
@@ -407,7 +407,7 @@ float octave_perlin(float x, float y, float z, int octaves, float persistence) {
 
 void noise_p2d(uint32_t h, uint32_t w, uint32_t octaves, float persistence, float scale, struct i2df *__restrict im) {
   if (im == NULL) {
-    im = malloc(sizeof(*im));
+    im = calloc(sizeof(*im), 1);
   }
 
   im->h = h;
@@ -428,7 +428,7 @@ void noise_p2d(uint32_t h, uint32_t w, uint32_t octaves, float persistence, floa
 
 void noise_p3d(uint32_t h, uint32_t w, uint32_t d, uint32_t octaves, float persistence, float scale, struct i3df *__restrict im) {
   if (im == NULL) {
-    im = malloc(sizeof(*im));
+    im = calloc(sizeof(*im), 1);
   }
 
   im->h = h;
@@ -450,8 +450,8 @@ void noise_p3d(uint32_t h, uint32_t w, uint32_t d, uint32_t octaves, float persi
   }
 }
 
-float pwb(float p, float w) {
-  return w - p * (1 - w);
+float pwb(float p, float w) { /// TODO: Make nicer
+  return w - w * p;
 }
 
 void noise_pw3d(uint32_t h, uint32_t w, uint32_t d, uint32_t octaves, float persistence, float pscale, float wscale, struct i3df *__restrict im) {
@@ -461,7 +461,7 @@ void noise_pw3d(uint32_t h, uint32_t w, uint32_t d, uint32_t octaves, float pers
   for (i = 0; i < h; ++i) {
     for (j = 0; j < w; ++j) {
       for (k = 0; k < d; ++k) {
-        D(im->v, i, j, d, w, h) = pwb(octave_perlin(i / pscale, j / pscale, k / pscale, octaves, persistence), D(im->v, i, j, d, w, h));
+        D(im->v, i, j, k, w, h) = pwb(octave_perlin(i / pscale, j / pscale, k / pscale, octaves, persistence), D(im->v, i, j, k, w, h));
       }
     }
   }
@@ -469,7 +469,7 @@ void noise_pw3d(uint32_t h, uint32_t w, uint32_t d, uint32_t octaves, float pers
 
 void noise_cloud3(uint32_t h, uint32_t w, uint32_t d, uint32_t octaves, float persistence, float pscale, float pwscale, float wscale, struct i3da *__restrict im) {
   if (im == NULL) {
-    im = malloc(sizeof(*im));
+    im = calloc(sizeof(*im), 1);
   }
 
   im->h = h;
@@ -479,7 +479,10 @@ void noise_cloud3(uint32_t h, uint32_t w, uint32_t d, uint32_t octaves, float pe
     im->v = calloc(sizeof(im->v[0]), h * w * d);
   }
 
-  struct i3df pw, w1, w2, w3;
+  struct i3df pw = {0};
+  struct i3df w1 = {0};
+  struct i3df w2 = {0};
+  struct i3df w3 = {0};
 
   noise_pw3d(h, w, d, octaves, persistence, pscale, pwscale, &pw);
   noise_w3d(h, w, d, wscale, &w1);

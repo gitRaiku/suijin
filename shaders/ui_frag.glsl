@@ -6,10 +6,14 @@ out vec4 FragColor;
 in vec2 texCoords;
 
 uniform sampler2D tex;
+uniform sampler3D tex3;
+uniform float z;
 uniform vec4 col;
 uniform int type; // 0: No Texture, colour only
-                  // 1: Read from the texture
-                  // 2: Heat colours
+                  // 1: 2d Read from the texture
+                  // 2: 2d Heat colours
+                  //
+                  // 8: 3d
 
 vec3 h2c3(int c, int x) {
   return vec3(((c & 0xFF00) >> 8) / 255.0f, ((c & 0x00FF) >>  0) / 255.0f, ((x & 0x00FF) >>  0) / 255.0f);
@@ -26,7 +30,9 @@ void main() {
     FragColor = col;
   } else if (type == 1) {
     FragColor = vec4(vec3(texture(tex, texCoords).r), 1.0f);
-  } else {
+  } else if (type == 2) {
     FragColor = vec4(get_heat(texture(tex, texCoords).r), 1.0f);
+  } else if (type == 8) {
+    FragColor = vec4(vec3(texture(tex3, vec3(texCoords.x, texCoords.y, z)).r), 1.0f);
   }
 }

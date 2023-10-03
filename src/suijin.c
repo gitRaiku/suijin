@@ -35,8 +35,9 @@ double deltaTime;
 
 uint8_t drawObjs = 1;
 uint8_t drawTerm = 0;
+uint8_t drawClouds = 1;
 uint8_t drawUi = 0;
-uint8_t drawBb = 1;
+uint8_t drawBb = 0;
 
 struct objv objs;
 
@@ -418,6 +419,9 @@ void handle_input(GLFWwindow *__restrict window) {
       memcpy(&cam, &initCam, sizeof(cam));
       cameraUpdate = 1;
     }
+    if (KEY_PRESSED(GLFW_KEY_Q)) {
+      glfwSetWindowShouldClose(window, 1);
+    }
   }
 }
 
@@ -504,7 +508,8 @@ struct fslider {
   float *__restrict val;
   v2 lims;
   uint32_t bp;
-  void (*callback)(void);
+  void (*callback)(void*);
+  void *cbp;
 };
 
 enum MCHID {
@@ -543,7 +548,7 @@ void add_title(struct node *__restrict m, char *__restrict t, float sc) {
   mchvp(&m->children, mc);
 }
 
-void add_slider(struct node *__restrict m, float *__restrict v, float lb, float ub, void (*callback)(void)) {
+void add_slider(struct node *__restrict m, float *__restrict v, float lb, float ub, void (*callback)(void*), void *p) {
   struct mchild mc;
   mc.id = MFSLIDER;
   mc.c = malloc(sizeof(struct fslider));
@@ -552,6 +557,7 @@ void add_slider(struct node *__restrict m, float *__restrict v, float lb, float 
   tmc->lims = (v2) {lb, ub};
   tmc->bp = 36;
   tmc->callback = callback;
+  tmc->cbp = p;
 #undef tmc
 
   mchvp(&m->children, mc);
@@ -570,8 +576,8 @@ void create_affine_matrix(mat4 m, float xs, float ys, float zs, float x, float y
   m[2][0] =          0; m[2][1] =          0; m[2][2] = zs; m[2][3] = z; 
   m[3][0] =          0; m[3][1] =          0; m[3][2] =  0; m[3][3] = 1; 
 }
-uint32_t uvao, uprog, lprog, pprog; // Draw Square
 
+uint32_t uvao, uprog, lprog, pprog; // Draw Square
 void draw_squaret(float px, float py, float sx, float sy, uint32_t tex, int32_t type) {
   mat4 aff;
   glUseProgram(uprog);
@@ -591,6 +597,26 @@ void draw_squaret(float px, float py, float sx, float sy, uint32_t tex, int32_t 
   }
 
   glDrawArrays(GL_TRIANGLE_FAN, 0, 4);
+}
+
+void draw_squaret3(float px, float py, float sx, float sy, uint32_t tex, int32_t type, float z) {
+  mat4 aff;
+  glUseProgram(uprog);
+  glBindVertexArray(uvao);
+  float cpx = ((px + sx / 2) * iwinw) * 2 - 1;
+  float cpy = ((py + sy / 2) * iwinh) * 2 - 1;
+  create_affine_matrix(aff, sx, sy, 1.0f, cpx, -cpy, 0.0f);
+  program_set_mat4(uprog, "affine", aff);
+
+  glActiveTexture(GL_TEXTURE1);
+  glBindTexture(GL_TEXTURE_3D, tex);
+  program_set_int1(uprog, "tex3", 1);
+  program_set_int1(uprog, "type", type);
+  program_set_float1(uprog, "z", z);
+
+  glDrawArrays(GL_TRIANGLE_FAN, 0, 4);
+  glBindVertexArray(0);
+  glUseProgram(0);
 }
 
 v4 __attribute((pure)) h2c4(uint64_t c) { // INLINE
@@ -719,8 +745,8 @@ uint32_t draw_textbox(float x, uint32_t y, struct tbox *__restrict t) {
 
   return t->bp;
 }
-uint32_t sS = 21;
 
+uint32_t sS = 21; // Draw slider
 uint32_t draw_slider(float x, uint32_t y, struct node *__restrict cm, struct fslider *__restrict t) {
   int32_t tlen = cm->sx - cm->lp - cm->rp - sS;
   float   rlen = t->lims.y - t->lims.x;
@@ -740,8 +766,9 @@ uint32_t draw_slider(float x, uint32_t y, struct node *__restrict cm, struct fsl
 
   if (selui.t == UIT_SLIDERK && selui.id.fp == t->val) {
     *t->val = clamp(selui.dy + (mouseX - selui.dx) / tlen * rlen, t->lims.x, t->lims.y);
+    fprintf(stdout, "%f\n", *t->val);
     if (t->callback != NULL && mouseX != selui.dx) {
-      t->callback();
+      t->callback(t->cbp);
     }
   }
 
@@ -895,7 +922,7 @@ uint8_t rbi(struct sray *__restrict r, struct bbox *__restrict cb) {
     return 1; 
 }
 
-struct linv lins;
+struct linv lins; /// Bounding box
 float *__restrict linsv;
 void addbb(struct bbox *__restrict cb, struct linv *__restrict v) {
 #define CHEA(i) (FPC(&cl.e)[i] = FPC(&cb->a)[i])
@@ -1181,9 +1208,9 @@ void init_skybox(struct skybox *__restrict sb) {
   glEnableVertexAttribArray(0);
   glEnableVertexAttribArray(1);
 }
+
 uint32_t ttex = 0;
-  
-void init_therm() {
+void init_therm(void *ignored) {
   if (ttex == 0) {
     glGenTextures(1, &ttex);
   }
@@ -1225,7 +1252,7 @@ void init_therm() {
 void upd_therm() {
   if (perlinR == 1) {
     perlinR = 0;
-    init_therm();
+    init_therm(NULL);
     return;
   }
   uint32_t h, w;
@@ -1331,7 +1358,8 @@ struct cloud {
   float t31octaves;
   float t31curslice;
   uint32_t t31; // 128^3 Perlin-worley + Worley (inc freq) * 3
-  struct i3da v31;
+  //struct i3da v31;
+  struct i3df v31;
   float t32scale;
   uint32_t t32; //  32^2 Worley (inc freq) * 3
   struct i3d v32;
@@ -1339,38 +1367,25 @@ struct cloud {
   struct i2df v2;
 };
 
-void update_clouds(struct cloud *__restrict c) {
+void update_clouds(void *__restrict cp) {
+  struct cloud *__restrict c = cp;
   { // Perlin-worley
-    glGenTextures(1, &c->t31);
-    noise_cloud3(128, 128, 128, c->t31octaves, c->t31persistence, c->t31pscale, c->t31pwscale, c->t31wscale, &c->v31);
-    glBindTexture(GL_TEXTURE_3D, ttex);
-    glTexImage3D(GL_TEXTURE_3D, 0, GL_RGBA, 128, 128, 128, 0, GL_RGBA, GL_FLOAT, c->v31.v);
+    if (!c->t31) {
+      glGenTextures(1, &c->t31);
+    }
+    //noise_cloud3(128, 128, 128, c->t31octaves, c->t31persistence, c->t31pscale, c->t31pwscale, c->t31wscale, &c->v31);
+    noise_pw3d(128, 128, 128, c->t31octaves, c->t31persistence, c->t31pscale, c->t31pwscale, &c->v31);
+    glBindTexture(GL_TEXTURE_3D, c->t31);
+    //glTexImage3D(GL_TEXTURE_3D, 0, GL_RGBA, 128, 128, 128, 0, GL_RGBA, GL_FLOAT, c->v31.v);
+    glTexImage3D(GL_TEXTURE_3D, 0, GL_RED, 128, 128, 128, 0, GL_RED, GL_FLOAT, c->v31.v);
     glGenerateMipmap(GL_TEXTURE_3D);
     glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_WRAP_S, GL_REPEAT);
     glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_WRAP_T, GL_REPEAT);
     glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_WRAP_R, GL_REPEAT);
     glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_MIN_FILTER, GL_NEAREST_MIPMAP_NEAREST);
     glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-    glBindTexture(GL_TEXTURE_2D, 0);
+    glBindTexture(GL_TEXTURE_3D, 0);
   }
-
-  /*
-  glGenVertexArrays(1, &cloudvao);
-  glGenBuffers(1, &cloudvbo);
-
-  float cbv[] = {
-  };
-
-  cbvl = sizeof(cbv) / sizeof(float) / 5;
-
-  glBindVertexArray(cloudvao);
-  glBindBuffer(GL_ARRAY_BUFFER, cloudvbo);
-  glBufferData(GL_ARRAY_BUFFER, sizeof(cbv), sbv, GL_STATIC_DRAW);
-
-  glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 5 * sizeof(float), (void *) (0 * sizeof(float)));
-  glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 5 * sizeof(float), (void *) (3 * sizeof(float)));
-  glEnableVertexAttribArray(0);
-  glEnableVertexAttribArray(1);*/
 }
 
 uint8_t rayHit(v3 s, v3 d, float dist, uint32_t mask) {
@@ -1396,6 +1411,13 @@ uint8_t rayHit(v3 s, v3 d, float dist, uint32_t mask) {
   return 0;
 }
 
+void messageCallback(GLenum source, GLenum type, GLuint id, GLenum severity, GLsizei length, const GLchar* message, const void* userParam) { 
+  if (id == 0x20071) {
+    return;
+  }
+  fprintf(stderr, "GL CALLBACK: %s id = 0x%x, type = 0x%x,\n\tseverity = 0x%x, message = %s\n", (type==GL_DEBUG_TYPE_ERROR?"** GL ERROR **":""), id, type, severity, message); 
+}
+
 uint8_t run_suijin() {
   init_random();
   reset_ft();
@@ -1405,7 +1427,9 @@ uint8_t run_suijin() {
   GLFWwindow *__restrict window = window_init();
   glfwSetKeyCallback(window, kbp_callback);
   glfwSetMouseButtonCallback(window, mbp_callback);
-  glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+
+  glEnable(GL_DEBUG_OUTPUT);
+  glDebugMessageCallback(messageCallback, 0);
 
   glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
   glPointSize(6.0);
@@ -1420,17 +1444,16 @@ uint8_t run_suijin() {
   identity_matrix(identity);
 
   struct cloud c = {0}; /// Clouds
-  /*
   {
-    c.t31wscale = 1.0;
-    c.t31pscale = 1.0;
-    c.t31pwscale = 1.0;
-    c.t31persistence = 1.0;
-    c.t31octaves = 1.0;
+    c.t31pscale = 82.8;
+    c.t31pwscale = 13.34;
+    c.t31persistence = 3.46;
+    c.t31octaves = 2.1;
     c.t31curslice = 0.0;
+    c.t31wscale = 10.0;
     c.t32scale = 0.0;
     update_clouds(&c);
-  }*/
+  }
 
   { /// Asset loading
     modvi(&mods);
@@ -1514,7 +1537,7 @@ uint8_t run_suijin() {
     glBindBuffer(GL_ARRAY_BUFFER, 0);
   }
 
-  { // Fragment Shader Stat
+  { /// Fragment Shader Stat
     struct stat s;
     stat(FRAG_PATH, &s);
     la = s.st_ctim.tv_sec;
@@ -1543,21 +1566,26 @@ uint8_t run_suijin() {
     prep_ui(window, &uvao);
     {
       mchvi(&nodes[0].children);
+#define TSL(node, name, namescale, var, mi, ma, fun, funp) \
+      add_title(node, name, namescale); \
+      add_slider(node, var, mi, ma, fun, funp)
+
       add_title(&nodes[0], "スプーク・プーク", 0.47f);
-      add_title(&nodes[0], "H", 0.20f);
-      add_slider(&nodes[0], &per.h, 0.0f, 1000.0f, init_therm);
+      TSL(&nodes[0], "H", 0.20f, &per.h, 0.0, 1000.0, init_therm, NULL);
+      // add_title(&nodes[0], "H", 0.20f);
+      // add_slider(&nodes[0], &per.h, 0.0f, 1000.0f, init_therm);
       add_title(&nodes[0], "W", 0.20f);
-      add_slider(&nodes[0], &per.w, 0.0f, 1000.0f, init_therm);
+      add_slider(&nodes[0], &per.w, 0.0f, 1000.0f, init_therm, NULL);
       add_title(&nodes[0], "Oct", 0.20f);
-      add_slider(&nodes[0], &per.foct, 0.0f, 5.0f, init_therm);
+      add_slider(&nodes[0], &per.foct, 0.0f, 5.0f, init_therm, NULL);
       add_title(&nodes[0], "Scale", 0.20f);
-      add_slider(&nodes[0], &per.sc, 0.0f, 200.0f, init_therm);
+      add_slider(&nodes[0], &per.sc, 0.0f, 200.0f, init_therm, NULL);
       add_title(&nodes[0], "Persistance", 0.20f);
-      add_slider(&nodes[0], &per.per, 0.0f, 4.0f, init_therm);
+      add_slider(&nodes[0], &per.per, 0.0f, 4.0f, init_therm, NULL);
       add_title(&nodes[0], "Diffusion", 0.20f);
-      add_slider(&nodes[0], &DIFF_COEF, 0.0f, 0.2f, init_therm);
+      add_slider(&nodes[0], &DIFF_COEF, 0.0f, 0.2f, init_therm, NULL);
       add_title(&nodes[0], "Style", 0.20f);
-      add_slider(&nodes[0], &per.style, 0.0f, 1.9f, init_therm);
+      add_slider(&nodes[0], &per.style, 0.0f, 1.9f, init_therm, NULL);
       nodes[0].px = 50.0f;
       nodes[0].py = 50.0f;
       nodes[0].sx = 300.0f;
@@ -1567,6 +1595,27 @@ uint8_t run_suijin() {
       nodes[0].lp = 20;
       nodes[0].rp = 20;
       mchvt(&nodes[0].children);
+    }
+
+    {
+      mchvi(&nodes[1].children);
+      add_title(&nodes[1], "Clouds", 0.47f);
+      TSL(&nodes[1], "pscale", 0.20f, &c.t31pscale, 0.0, 200.0f, update_clouds, &c);
+      TSL(&nodes[1], "pwscale", 0.20f, &c.t31pwscale, 0.0, 100.0f, update_clouds, &c);
+      TSL(&nodes[1], "persistence", 0.20f, &c.t31persistence, 0.0, 4.0f, update_clouds, &c);
+      TSL(&nodes[1], "octaves", 0.20f, &c.t31octaves, 0.0, 5.0f, update_clouds, &c);
+      TSL(&nodes[1], "curslice", 0.20f, &c.t31curslice, 0.0, 1.0f, NULL, NULL);
+      TSL(&nodes[1], "wscale", 0.20f, &c.t31wscale, 0.0, 200.0f, update_clouds, &c);
+      TSL(&nodes[1], "scale", 0.20f, &c.t32scale, 0.0, 200.0f, update_clouds, &c);
+      nodes[1].px = 400.0f;
+      nodes[1].py = 50.0f;
+      nodes[1].sx = 300.0f;
+      nodes[1].sy = 500.0f;
+      nodes[1].bp = 20;
+      nodes[1].tp = 20;
+      nodes[1].lp = 20;
+      nodes[1].rp = 20;
+      mchvt(&nodes[1].children);
     }
   }
 
@@ -1587,12 +1636,13 @@ uint8_t run_suijin() {
     per.sc = 28.5;
     per.per = 1.0f;
     per.foct = 3.5f;
-    init_therm();
+    init_therm(NULL);
   }
 
   uint32_t frame = 0;
   struct sray cs;
   _ctime = _ltime = deltaTime = 0;
+  glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
 
   while (!glfwWindowShouldClose(window)) {
     ++frame;
@@ -1610,7 +1660,7 @@ uint8_t run_suijin() {
       cameraUpdate = 0;
     }
 
-    {
+    { /// Skybox
       glUseProgram(skyprog);
       program_set_mat4(skyprog, "fn", fn);
       sb.m.pos = cam.pos;
@@ -1635,13 +1685,6 @@ uint8_t run_suijin() {
       glBindVertexArray(skyvao);
       glDrawArrays(GL_TRIANGLES, 0, sbvl);
     }
-
-    if (drawTerm) {
-      draw_squaret((windowW - 500) / 2, (windowH - 500) / 2, 500, 500, ttex, 2);
-      upd_therm();
-    }
-
-    //fprintf(stdout, "Oct: %f\nPer: %f\nScale: %f\nSize: %f-%f\n", per.foct, per.per, per.sc, per.w, per.h);
 
     if (drawObjs) { // NPROG
       glUseProgram(nprog);
@@ -1700,19 +1743,27 @@ uint8_t run_suijin() {
       }
     }
 
+    if (drawTerm) {
+      draw_squaret((windowW - 500) / 2, (windowH - 500) / 2, 500, 500, ttex, 2);
+      upd_therm();
+    }
+
+    if (drawClouds) {
+      draw_squaret3((windowW - 500) / 2, (windowH - 500) / 2, 500, 500, c.t31, 8, c.t31curslice);
+    }
 
     if (drawUi) { // UPROG
       glUseProgram(uprog);
       glDisable(GL_DEPTH_TEST);
 
       int32_t i;
-      for(i = 0; i < MC; ++i) {
+      for(i = 1; i < MC; ++i) {
         draw_node(i);
       }
 
     }
 
-    if (frame % 30 == 0) {
+    if (frame % 30 == 0) { /// Frag update
       while (!glfwWindowShouldClose(window)) {
         uint8_t r = check_frag_update(&skyprog, 9);
         if (r < 2) {
