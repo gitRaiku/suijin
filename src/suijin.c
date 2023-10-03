@@ -1222,8 +1222,6 @@ void init_therm() {
   glBindTexture(GL_TEXTURE_2D, 0);
 }
 
-#define OUTSIDE_TEMP 0.1f
-float DIFF_COEF = 0.05f;
 void upd_therm() {
   if (perlinR == 1) {
     perlinR = 0;
@@ -1422,6 +1420,7 @@ uint8_t run_suijin() {
   identity_matrix(identity);
 
   struct cloud c = {0}; /// Clouds
+  /*
   {
     c.t31wscale = 1.0;
     c.t31pscale = 1.0;
@@ -1431,7 +1430,7 @@ uint8_t run_suijin() {
     c.t31curslice = 0.0;
     c.t32scale = 0.0;
     update_clouds(&c);
-  }
+  }*/
 
   { /// Asset loading
     modvi(&mods);
@@ -1476,11 +1475,11 @@ uint8_t run_suijin() {
     clines(&lvao, &lvbo);
   }
 
-#define PROGC 6 /// Shaders
+#define PROGC 5 /// Shaders
   uint32_t nprog;
   uint32_t shaders[PROGC * 2];
   {
-    char *snames[PROGC] = { "obj", "ui", "line", "point", "skybox", "cloud" };
+    char *snames[PROGC] = { "obj", "ui", "line", "point", "skybox" }; //, "cloud" };
     char tmpn[128];
 
     uint32_t i;
@@ -1496,7 +1495,7 @@ uint8_t run_suijin() {
     PR_CHECK(program_get(2, shaders +  4, &lprog));
     PR_CHECK(program_get(2, shaders +  6, &pprog));
     PR_CHECK(program_get(2, shaders +  8, &skyprog));
-    PR_CHECK(program_get(2, shaders + 10, &c.prog));
+    //PR_CHECK(program_get(2, shaders + 10, &c.prog));
 
     for (i = 0; i < PROGC; ++i) {
       glDeleteShader(shaders[i * 2]);
