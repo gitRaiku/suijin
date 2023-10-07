@@ -36,7 +36,7 @@ double deltaTime;
 uint8_t drawObjs = 1;
 uint8_t drawTerm = 0;
 uint8_t drawClouds = 1;
-uint8_t drawUi = 0;
+uint8_t drawUi = 1;
 uint8_t drawBb = 0;
 
 struct objv objs;
@@ -107,6 +107,12 @@ uint8_t cameraUpdate = 1;
 #define ZOOM_SPEED 0.01f
 #define PAN_SPEED 13.0f
 #define SENS 0.001f
+
+#define UI_COL_BG1 0x181818FF
+#define UI_COL_BG2 0x484848FF
+#define UI_COL_FG1 0xBA2636FF
+#define UI_COL_FG2 0xA232B4FF
+#define UI_COL_FG3 0xFFFFFFFF
 
 mat4 fn;
 int windowW, windowH;
@@ -524,6 +530,19 @@ struct mchild {
 VECSTRUCT(mch, struct mchild);
 VECTOR_SUITE(mch, struct mchv *__restrict, struct mchild)
 
+v4 __attribute((pure)) h2c4(uint64_t c) { // INLINE
+  return (v4) { ((c & 0xFF000000) >> 24) / 255.0f,
+                ((c & 0x00FF0000) >> 16) / 255.0f, 
+                ((c & 0x0000FF00) >>  8) / 255.0f, 
+                ((c & 0x000000FF) >>  0) / 255.0f };
+}
+
+v3 __attribute((pure)) h2c3(uint64_t c) { // INLINE
+  return (v3) { ((c & 0x00FF0000) >> 16) / 255.0f,
+                ((c & 0x0000FF00) >>  8) / 255.0f, 
+                ((c & 0x000000FF) >>  0) / 255.0f };
+}
+
 struct node {
   float px, py;    // Pos
   float sx, sy;    // Size
@@ -579,6 +598,7 @@ void create_affine_matrix(mat4 m, float xs, float ys, float zs, float x, float y
 
 uint32_t uvao, uprog, lprog, pprog; // Draw Square
 void draw_squaret(float px, float py, float sx, float sy, uint32_t tex, int32_t type) {
+  glUseProgram(uprog);
   mat4 aff;
   glUseProgram(uprog);
   glBindVertexArray(uvao);
@@ -596,6 +616,27 @@ void draw_squaret(float px, float py, float sx, float sy, uint32_t tex, int32_t 
     program_set_int1(uprog, "type", 0);
   }
 
+  glDrawArrays(GL_TRIANGLE_FAN, 0, 4);
+}
+
+v4 gcor(v4 in, float gamma) {
+  return (v4) { pow(in.x, gamma), pow(in.y, gamma), pow(in.z, gamma), in.w };
+}
+
+uint32_t textprog; // Draw text
+void draw_squaretext(float px, float py, float sx, float sy, uint32_t tex, uint64_t bgcol, uint64_t fgcol) {
+  mat4 aff;
+  float cpx = ((px + sx / 2) * iwinw) * 2 - 1;
+  float cpy = ((py + sy / 2) * iwinh) * 2 - 1;
+  create_affine_matrix(aff, sx, sy, 1.0f, cpx, -cpy, 0.0f);
+  program_set_mat4(textprog, "affine", aff);
+  glActiveTexture(GL_TEXTURE1);
+  glBindTexture(GL_TEXTURE_2D, tex);
+  program_set_int1(textprog, "tex", 1);
+  v4 bg = gcor(h2c4(bgcol), 1 / 1.8);
+  program_set_float4(textprog, "bgcol", bg.x, bg.y, bg.z, bg.w);
+  v4 fg = gcor(h2c4(fgcol), 1 / 1.8);
+  program_set_float4(textprog, "fgcol", fg.x, fg.y, fg.z, fg.w);
   glDrawArrays(GL_TRIANGLE_FAN, 0, 4);
 }
 
@@ -617,19 +658,6 @@ void draw_squaret3(float px, float py, float sx, float sy, uint32_t tex, int32_t
   glDrawArrays(GL_TRIANGLE_FAN, 0, 4);
   glBindVertexArray(0);
   glUseProgram(0);
-}
-
-v4 __attribute((pure)) h2c4(uint64_t c) { // INLINE
-  return (v4) { ((c & 0xFF000000) >> 24) / 255.0f,
-                ((c & 0x00FF0000) >> 16) / 255.0f, 
-                ((c & 0x0000FF00) >>  8) / 255.0f, 
-                ((c & 0x000000FF) >>  0) / 255.0f };
-}
-
-v3 __attribute((pure)) h2c3(uint64_t c) { // INLINE
-  return (v3) { ((c & 0x00FF0000) >> 16) / 255.0f,
-                ((c & 0x0000FF00) >>  8) / 255.0f, 
-                ((c & 0x000000FF) >>  0) / 255.0f };
 }
 
 void draw_squarec(float px, float py, float sx, float sy, uint32_t col) {
@@ -709,9 +737,14 @@ uint32_t utf8_to_unicode(char *__restrict str, uint32_t l) {
 }
 
 uint32_t draw_textbox(float x, uint32_t y, struct tbox *__restrict t) {
+  glPixelStorei(GL_UNPACK_ALIGNMENT, 4);
   uint32_t px = 0;
   FT_UInt gi;
   FT_GlyphSlot slot = ftface->glyph;
+
+  glUseProgram(textprog);
+  glBindVertexArray(uvao);
+  FT_CHECK(FT_Set_Char_Size(ftface, 0, 20 * 64, 0, 88),"Could not set the character size!");
 
   {
     char *__restrict ct = t->text;
@@ -724,10 +757,9 @@ uint32_t draw_textbox(float x, uint32_t y, struct tbox *__restrict t) {
       cchar = utf8_to_unicode(ct, cl);
       gi = FT_Get_Char_Index(ftface, cchar);
 
-      FT_CHECK(FT_Load_Glyph(ftface, gi, FT_LOAD_DEFAULT), "Could not load glyph");
-      FT_Render_Glyph(ftface->glyph, FT_RENDER_MODE_NORMAL);
-
-      update_bw_tex(&ctex, slot->bitmap.rows, slot->bitmap.width, slot->bitmap.buffer);
+      FT_CHECK(FT_Load_Glyph(ftface, gi, FT_LOAD_DEFAULT | FT_LOAD_COLOR | FT_LOAD_TARGET_LCD | FT_LOAD_FORCE_AUTOHINT), "Could not load glyph");
+      FT_Render_Glyph(ftface->glyph, FT_RENDER_MODE_LCD);
+      update_rgb_tex(&ctex, slot->bitmap.rows, slot->bitmap.width / 3, slot->bitmap.buffer);
 
       int32_t advance = ftface->glyph->metrics.horiAdvance >> 6;
       int32_t fw = ftface->glyph->metrics.width >> 6;
@@ -735,14 +767,17 @@ uint32_t draw_textbox(float x, uint32_t y, struct tbox *__restrict t) {
       int32_t xoff = ftface->glyph->metrics.horiBearingX >> 6;
       int32_t yoff = (ftface->bbox.yMax - ftface->glyph->metrics.horiBearingY) >> 6;
 
-      draw_squaret(x + (px + xoff) * t->scale, y + yoff * t->scale, fw * t->scale, fh * t->scale, ctex, 1);
+      //draw_squaretext(x + (px + xoff) * t->scale, y + yoff * t->scale, fw * t->scale, fh * t->scale, ctex, UI_COL_BG1, UI_COL_FG2);
+      draw_squaretext(x + (px + xoff) * t->scale, y + yoff * t->scale, fw * t->scale, fh * t->scale, ctex, UI_COL_BG1, UI_COL_FG3);
 
       px += advance;
 
       ct += cl;
     }
+    glDeleteTextures(1, &ctex);
   }
 
+  glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
   return t->bp;
 }
 
@@ -751,8 +786,8 @@ uint32_t draw_slider(float x, uint32_t y, struct node *__restrict cm, struct fsl
   int32_t tlen = cm->sx - cm->lp - cm->rp - sS;
   float   rlen = t->lims.y - t->lims.x;
   int32_t xoff = (*t->val - t->lims.x) / rlen * tlen;
-  draw_squarec(x + sS / 2, y + sS * 0.375f, cm->sx - cm->lp - cm->rp - sS, sS / 4, 0xC2C2C2FF); // Line
-  draw_squarec(x + xoff, y, sS, sS, 0x323232FF);
+  draw_squarec(x + sS / 2, y + sS * 0.375f, cm->sx - cm->lp - cm->rp - sS, sS / 4, UI_COL_BG2); // Line
+  draw_squarec(x + xoff, y, sS, sS, UI_COL_FG1);
 
 
   if (selui.t == UIT_CAN &&
@@ -766,7 +801,7 @@ uint32_t draw_slider(float x, uint32_t y, struct node *__restrict cm, struct fsl
 
   if (selui.t == UIT_SLIDERK && selui.id.fp == t->val) {
     *t->val = clamp(selui.dy + (mouseX - selui.dx) / tlen * rlen, t->lims.x, t->lims.y);
-    fprintf(stdout, "%f\n", *t->val);
+    //fprintf(stdout, "%f\n", *t->val);
     if (t->callback != NULL && mouseX != selui.dx) {
       t->callback(t->cbp);
     }
@@ -777,7 +812,7 @@ uint32_t draw_slider(float x, uint32_t y, struct node *__restrict cm, struct fsl
 
 void draw_node(uint32_t mi) {
 #define cm nodes[mi]
-  draw_squarec(cm.px, cm.py, cm.sx, cm.sy, 0x181818FF);
+  draw_squarec(cm.px, cm.py, cm.sx, cm.sy, UI_COL_BG1);
 
   {
     int32_t i;
@@ -840,6 +875,7 @@ void reset_ft() {
 
   FT_CHECK(FT_New_Face(ftlib, "Resources/Fonts/Koruri/Koruri-Regular.ttf", 0, &ftface), "Could not load the font");
   // FT_CHECK(FT_New_Face(ftlib, "Resources/Fonts/JetBrains/jetbrainsmono.ttf", 0, &ftface), "Could not load the font");
+  FT_CHECK(FT_Set_Char_Size(ftface, 0, 16 * 64, 300, 300),"Could not set the character size!");
   FT_CHECK(FT_Set_Pixel_Sizes(ftface, 0, (int32_t)72), "Could not set pixel sizes");
   FT_CHECK(FT_Select_Charmap(ftface, FT_ENCODING_UNICODE), "Could not select char map");
 }
@@ -1498,11 +1534,11 @@ uint8_t run_suijin() {
     clines(&lvao, &lvbo);
   }
 
-#define PROGC 5 /// Shaders
+#define PROGC 6 /// Shaders
   uint32_t nprog;
   uint32_t shaders[PROGC * 2];
   {
-    char *snames[PROGC] = { "obj", "ui", "line", "point", "skybox" }; //, "cloud" };
+    char *snames[PROGC] = { "obj", "ui", "line", "point", "skybox", "text"}; //, "cloud" };
     char tmpn[128];
 
     uint32_t i;
@@ -1513,11 +1549,12 @@ uint8_t run_suijin() {
       PR_CHECK(shader_get(tmpn, GL_FRAGMENT_SHADER, shaders + 2 * i + 1));
     }
 
-    PR_CHECK(program_get(2, shaders     , &nprog));
-    PR_CHECK(program_get(2, shaders +  2, &uprog));
-    PR_CHECK(program_get(2, shaders +  4, &lprog));
-    PR_CHECK(program_get(2, shaders +  6, &pprog));
-    PR_CHECK(program_get(2, shaders +  8, &skyprog));
+    PR_CHECK(program_get(2, shaders      , &nprog));
+    PR_CHECK(program_get(2, shaders +   2, &uprog));
+    PR_CHECK(program_get(2, shaders +   4, &lprog));
+    PR_CHECK(program_get(2, shaders +   6, &pprog));
+    PR_CHECK(program_get(2, shaders +   8, &skyprog));
+    PR_CHECK(program_get(2, shaders +  10, &textprog));
     //PR_CHECK(program_get(2, shaders + 10, &c.prog));
 
     for (i = 0; i < PROGC; ++i) {
@@ -1570,7 +1607,7 @@ uint8_t run_suijin() {
       add_title(node, name, namescale); \
       add_slider(node, var, mi, ma, fun, funp)
 
-      add_title(&nodes[0], "スプーク・プーク", 0.47f);
+      add_title(&nodes[0], "スプーク・プーク", 1.0f);
       TSL(&nodes[0], "H", 0.20f, &per.h, 0.0, 1000.0, init_therm, NULL);
       // add_title(&nodes[0], "H", 0.20f);
       // add_slider(&nodes[0], &per.h, 0.0f, 1000.0f, init_therm);
@@ -1599,14 +1636,14 @@ uint8_t run_suijin() {
 
     {
       mchvi(&nodes[1].children);
-      add_title(&nodes[1], "Clouds", 0.47f);
-      TSL(&nodes[1], "pscale", 0.20f, &c.t31pscale, 0.0, 200.0f, update_clouds, &c);
-      TSL(&nodes[1], "pwscale", 0.20f, &c.t31pwscale, 0.0, 100.0f, update_clouds, &c);
-      TSL(&nodes[1], "persistence", 0.20f, &c.t31persistence, 0.0, 4.0f, update_clouds, &c);
-      TSL(&nodes[1], "octaves", 0.20f, &c.t31octaves, 0.0, 5.0f, update_clouds, &c);
-      TSL(&nodes[1], "curslice", 0.20f, &c.t31curslice, 0.0, 1.0f, NULL, NULL);
-      TSL(&nodes[1], "wscale", 0.20f, &c.t31wscale, 0.0, 200.0f, update_clouds, &c);
-      TSL(&nodes[1], "scale", 0.20f, &c.t32scale, 0.0, 200.0f, update_clouds, &c);
+      add_title(&nodes[1], "Clouds", 1.0f);
+      TSL(&nodes[1], "pscale", 1.00f, &c.t31pscale, 0.0, 200.0f, update_clouds, &c);
+      TSL(&nodes[1], "pwscale", 1.00f, &c.t31pwscale, 0.0, 100.0f, update_clouds, &c);
+      TSL(&nodes[1], "persistence", 1.00f, &c.t31persistence, 0.0, 4.0f, update_clouds, &c);
+      TSL(&nodes[1], "octaves", 1.00f, &c.t31octaves, 0.0, 5.0f, update_clouds, &c);
+      TSL(&nodes[1], "curslice", 1.00f, &c.t31curslice, 0.0, 1.0f, NULL, NULL);
+      TSL(&nodes[1], "wscale", 1.00f, &c.t31wscale, 0.0, 200.0f, update_clouds, &c);
+      TSL(&nodes[1], "scale", 1.00f, &c.t32scale, 0.0, 200.0f, update_clouds, &c);
       nodes[1].px = 400.0f;
       nodes[1].py = 50.0f;
       nodes[1].sx = 300.0f;
