@@ -508,7 +508,7 @@ void draw_model(uint32_t program, struct matv *__restrict m, struct model *__res
 
 struct tbox {
   char text[64];
-  float scale;
+  uint32_t tsize;
   uint32_t bp;
 };
 
@@ -556,14 +556,16 @@ struct node {
 #define MC 2
 struct node nodes[MC];
 
-void add_title(struct node *__restrict m, char *__restrict t, float sc) {
+void add_title(struct node *__restrict m, char *__restrict t, uint32_t tsize) {
   struct mchild mc;
   mc.id = MTEXT_BOX;
   mc.c = malloc(sizeof(struct tbox));
 #define tmc ((struct tbox *)mc.c)
   strncpy(tmc->text, t, sizeof(tmc->text));
-  tmc->scale = sc;
-  tmc->bp = (uint32_t) 36.0f * sc;
+  tmc->tsize = tsize * 64;
+  FT_CHECK(FT_Set_Char_Size(ftface, 0, tmc->tsize, 0, 88), "");
+  //tmc->bp = ((double)(ftface->bbox.yMax - ftface->bbox.yMin) / (double)ftface->units_per_EM) / 64 * tsize;
+  tmc->bp = ftface->size->metrics.height / 64;
 #undef tmc
 
   mchvp(&m->children, mc);
@@ -746,7 +748,7 @@ uint32_t draw_textbox(float x, uint32_t y, struct tbox *__restrict t) {
 
   glUseProgram(textprog);
   glBindVertexArray(uvao);
-  FT_CHECK(FT_Set_Char_Size(ftface, 0, floor(TEXT_SIZE) * 64, 0, 88),"Could not set the character size!");
+  FT_CHECK(FT_Set_Char_Size(ftface, 0, t->tsize, 0, 88),"Could not set the character size!");
 
   {
     char *__restrict ct = t->text;
@@ -767,10 +769,11 @@ uint32_t draw_textbox(float x, uint32_t y, struct tbox *__restrict t) {
       int32_t fw = ftface->glyph->metrics.width >> 6;
       int32_t fh = ftface->glyph->metrics.height >> 6;
       int32_t xoff = ftface->glyph->metrics.horiBearingX >> 6;
-      int32_t yoff = (ftface->bbox.yMax - ftface->glyph->metrics.horiBearingY) >> 6;
+      //int32_t yoff = ((ftface->bbox.yMax - ftface->glyph->metrics.horiBearingY) >> 6) + t->bp;
+      int32_t yoff = (-ftface->glyph->metrics.horiBearingY >> 6) + t->bp;
 
       //draw_squaretext(x + (px + xoff) * t->scale, y + yoff * t->scale, fw * t->scale, fh * t->scale, ctex, UI_COL_BG1, UI_COL_FG2);
-      draw_squaretext(x + (px + xoff) * t->scale, y + yoff * t->scale, fw * t->scale, fh * t->scale, ctex, UI_COL_BG1, UI_COL_FG3);
+      draw_squaretext(x + px + xoff, y + yoff, fw, fh, ctex, UI_COL_BG1, UI_COL_FG3);
 
       px += advance;
 
@@ -1604,31 +1607,23 @@ uint8_t run_suijin() {
   }
 
   { /// UI
-    prep_ui(window, &uvao);
-    {
-      mchvi(&nodes[0].children);
 #define TSL(node, name, namescale, var, mi, ma, fun, funp) \
       add_title(node, name, namescale); \
       add_slider(node, var, mi, ma, fun, funp)
+    prep_ui(window, &uvao);
+    /*{
+      mchvi(&nodes[0].children);
 
       add_title(&nodes[0], "スプーク・プーク", 1.0f);
       TSL(&nodes[0], "H", 0.20f, &per.h, 0.0, 1000.0, init_therm, NULL);
-      // add_title(&nodes[0], "H", 0.20f);
-      // add_slider(&nodes[0], &per.h, 0.0f, 1000.0f, init_therm);
-      add_title(&nodes[0], "W", 0.20f);
-      add_slider(&nodes[0], &per.w, 0.0f, 1000.0f, init_therm, NULL);
-      add_title(&nodes[0], "Oct", 0.20f);
-      add_slider(&nodes[0], &per.foct, 0.0f, 5.0f, init_therm, NULL);
-      add_title(&nodes[0], "Scale", 0.20f);
-      add_slider(&nodes[0], &per.sc, 0.0f, 200.0f, init_therm, NULL);
-      add_title(&nodes[0], "Persistance", 0.20f);
-      add_slider(&nodes[0], &per.per, 0.0f, 4.0f, init_therm, NULL);
-      add_title(&nodes[0], "Diffusion", 0.20f);
-      add_slider(&nodes[0], &DIFF_COEF, 0.0f, 0.2f, init_therm, NULL);
-      add_title(&nodes[0], "Style", 0.20f);
-      add_slider(&nodes[0], &per.style, 0.0f, 1.9f, init_therm, NULL);
-      nodes[0].px = 50.0f;
-      nodes[0].py = 50.0f;
+      TSL(&nodes[0], "W", 0.20f, &per.w, 0.0, 1000.0, init_therm, NULL);
+      TSL(&nodes[0], "Oct", 0.20f, &per.foct, 0.0f, 5.0f, init_therm, NULL);
+      TSL(&nodes[0], "Scale", 0.20f, &per.sc, 0.0f, 200.0f, init_therm, NULL);
+      TSL(&nodes[0], "Persistance", 0.20f, &per.per, 0.0f, 4.0f, init_therm, NULL);
+      TSL(&nodes[0], "Diffusion", 0.20f, &DIFF_COEF, 0.0f, 0.2f, init_therm, NULL);
+      TSL(&nodes[0], "Style", 0.20f, &per.style, 0.0f, 1.9f, init_therm, NULL);
+      nodes[1].px = 400.0f;
+      nodes[1].py = 50.0f;
       nodes[0].sx = 300.0f;
       nodes[0].sy = 500.0f;
       nodes[0].bp = 20;
@@ -1636,29 +1631,30 @@ uint8_t run_suijin() {
       nodes[0].lp = 20;
       nodes[0].rp = 20;
       mchvt(&nodes[0].children);
-    }
+    }*/
 
     {
       mchvi(&nodes[1].children);
-      add_title(&nodes[1], "Clouds", 1.0f);
-      TSL(&nodes[1], "pscale", 1.00f, &c.t31pscale, 0.0, 200.0f, NULL, NULL);
-      TSL(&nodes[1], "pwscale", 1.00f, &c.t31pwscale, 0.0, 100.0f, NULL, NULL);
-      TSL(&nodes[1], "persistence", 1.00f, &c.t31persistence, 0.0, 4.0f, NULL, NULL);
-      TSL(&nodes[1], "octaves", 1.00f, &c.t31octaves, 0.0, 5.0f, NULL, NULL);
-      TSL(&nodes[1], "curslice", 1.00f, &c.t31curslice, 0.0, 1.0f, NULL, NULL);
-      TSL(&nodes[1], "wscale", 1.00f, &c.t31wscale, 0.0, 200.0f, NULL, NULL);
-      TSL(&nodes[1], "scale", 1.00f, &c.t32scale, 0.0, 200.0f, NULL, NULL);
-      TSL(&nodes[1], "TEXT_SIZE", 1.00f, &TEXT_SIZE, 0.0, 60.0f, NULL, NULL);
-      TSL(&nodes[1], "colch", 1.00f, &c.t31colCh, 0.0, 3.9f, NULL, NULL);
-      TSL(&nodes[1], "colch", 1.00f, &DELETE_ME, 0.0, 3.9f, update_clouds, &c);
+      add_title(&nodes[1], "Clouds", 20);
+      TSL(&nodes[1], "pscale", 10, &c.t31pscale, 0.0, 200.0f, NULL, NULL);
+      TSL(&nodes[1], "pwscale", 10, &c.t31pwscale, 0.0, 100.0f, NULL, NULL);
+      TSL(&nodes[1], "persistence", 10, &c.t31persistence, 0.0, 4.0f, NULL, NULL);
+      TSL(&nodes[1], "octaves", 10, &c.t31octaves, 0.0, 5.0f, NULL, NULL);
+      TSL(&nodes[1], "curslice", 10, &c.t31curslice, 0.0, 1.0f, NULL, NULL);
+      TSL(&nodes[1], "wscale", 10, &c.t31wscale, 0.0, 200.0f, NULL, NULL);
+      TSL(&nodes[1], "scale", 10, &c.t32scale, 0.0, 200.0f, NULL, NULL);
+      TSL(&nodes[1], "TEXT_SIZE", 10, &TEXT_SIZE, 0.0, 60.0f, NULL, NULL);
+      TSL(&nodes[1], "colch", 10, &c.t31colCh, 0.0, 3.9f, NULL, NULL);
+      TSL(&nodes[1], "Update", 10, &DELETE_ME, 0.0, 3.9f, update_clouds, &c);
+
       nodes[1].px = 400.0f;
       nodes[1].py = 50.0f;
       nodes[1].sx = 300.0f;
       nodes[1].sy = 800.0f;
-      nodes[1].bp = 20;
-      nodes[1].tp = 20;
-      nodes[1].lp = 20;
-      nodes[1].rp = 20;
+      nodes[1].bp = 0;
+      nodes[1].tp = 0;
+      nodes[1].lp = 0;
+      nodes[1].rp = 0;
       mchvt(&nodes[1].children);
     }
   }
