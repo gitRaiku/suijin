@@ -17,7 +17,7 @@ void main() {
   vec3 ct = texture(tex, texCoords).rgb;
 
   FragColor = vec4(pow(ablend(ct.r, fgcol.r, bgcol.r), 1.8),
-                   pow(ablend(ct.g, fgcol.g, bgcol.g), 1.8),
-                   pow(ablend(ct.b, fgcol.b, bgcol.b), 1.8),
-                   fgcol.a * bgcol.a);
+                   pow(ablend(ct.r, fgcol.g, bgcol.g), 1.8),
+                   pow(ablend(ct.r, fgcol.b, bgcol.b), 1.8),
+                   ablend(ct.r, fgcol.a, bgcol.a));
 }

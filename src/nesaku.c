@@ -1,6 +1,6 @@
 #include "nesaku.h"
 
-float pscale = 0.001f;
+float pscale = 0.002f;
 
 float rf() {
   return (float)rand() / (float)RAND_MAX;
@@ -159,7 +159,8 @@ float gnear3(uint32_t x, uint32_t y, uint32_t z, float scale, v3 *__restrict pts
   }
 #undef CHCK
 
-  return 1 - clamp(scale * pscale * sqrtf(md), 0.0f, 1.0f);
+  //return 1 - clamp(scale * pscale * sqrtf(md), 0.0f, 1.0f);
+  return 1 - clamp(sqrtf(md * 0.5) / scale, 0.0f, 1.0f);
 }
 
 void noise_w3d(uint32_t h, uint32_t w, uint32_t d, float scale, struct i3df *__restrict im) {
@@ -485,9 +486,9 @@ void noise_cloud3(uint32_t h, uint32_t w, uint32_t d, uint32_t octaves, float pe
   struct i3df w3 = {0};
 
   noise_pw3d(h, w, d, octaves, persistence, pscale, pwscale, &pw);
-  noise_w3d(h, w, d, wscale, &w1);
-  noise_w3d(h, w, d, wscale, &w2);
-  noise_w3d(h, w, d, wscale, &w3);
+  noise_w3d(h, w, d, wscale / 1.0, &w1);
+  noise_w3d(h, w, d, wscale / 1.6, &w2);
+  noise_w3d(h, w, d, wscale / 2.2, &w3);
 
   {
     int32_t i, j, k;

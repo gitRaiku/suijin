@@ -27,6 +27,8 @@
 
 #define EPS 0.0000000001
 
+float DELETE_ME;
+
 #define OUTSIDE_TEMP 0.1f
 float DIFF_COEF = 0.05f;
 
@@ -736,15 +738,15 @@ uint32_t utf8_to_unicode(char *__restrict str, uint32_t l) {
   return res;
 }
 
+float TEXT_SIZE = 20.0;
 uint32_t draw_textbox(float x, uint32_t y, struct tbox *__restrict t) {
-  glPixelStorei(GL_UNPACK_ALIGNMENT, 4);
   uint32_t px = 0;
   FT_UInt gi;
   FT_GlyphSlot slot = ftface->glyph;
 
   glUseProgram(textprog);
   glBindVertexArray(uvao);
-  FT_CHECK(FT_Set_Char_Size(ftface, 0, 20 * 64, 0, 88),"Could not set the character size!");
+  FT_CHECK(FT_Set_Char_Size(ftface, 0, floor(TEXT_SIZE) * 64, 0, 88),"Could not set the character size!");
 
   {
     char *__restrict ct = t->text;
@@ -757,9 +759,9 @@ uint32_t draw_textbox(float x, uint32_t y, struct tbox *__restrict t) {
       cchar = utf8_to_unicode(ct, cl);
       gi = FT_Get_Char_Index(ftface, cchar);
 
-      FT_CHECK(FT_Load_Glyph(ftface, gi, FT_LOAD_DEFAULT | FT_LOAD_COLOR | FT_LOAD_TARGET_LCD | FT_LOAD_FORCE_AUTOHINT), "Could not load glyph");
-      FT_Render_Glyph(ftface->glyph, FT_RENDER_MODE_LCD);
-      update_rgb_tex(&ctex, slot->bitmap.rows, slot->bitmap.width / 3, slot->bitmap.buffer);
+      FT_CHECK(FT_Load_Glyph(ftface, gi, FT_LOAD_DEFAULT | FT_LOAD_COLOR | FT_LOAD_FORCE_AUTOHINT), "Could not load glyph");
+      FT_Render_Glyph(ftface->glyph, FT_RENDER_MODE_NORMAL);
+      update_bw_tex(&ctex, slot->bitmap.rows, slot->bitmap.width, slot->bitmap.buffer);
 
       int32_t advance = ftface->glyph->metrics.horiAdvance >> 6;
       int32_t fw = ftface->glyph->metrics.width >> 6;
@@ -1387,6 +1389,8 @@ struct cloud {
   uint32_t vao;
   uint32_t vbo;
 
+  float t31colCh;
+
   float t31wscale;
   float t31pscale;
   float t31pwscale;
@@ -1394,8 +1398,8 @@ struct cloud {
   float t31octaves;
   float t31curslice;
   uint32_t t31; // 128^3 Perlin-worley + Worley (inc freq) * 3
-  //struct i3da v31;
-  struct i3df v31;
+  struct i3da v31;
+  //struct i3df v31;
   float t32scale;
   uint32_t t32; //  32^2 Worley (inc freq) * 3
   struct i3d v32;
@@ -1409,11 +1413,11 @@ void update_clouds(void *__restrict cp) {
     if (!c->t31) {
       glGenTextures(1, &c->t31);
     }
-    //noise_cloud3(128, 128, 128, c->t31octaves, c->t31persistence, c->t31pscale, c->t31pwscale, c->t31wscale, &c->v31);
-    noise_pw3d(128, 128, 128, c->t31octaves, c->t31persistence, c->t31pscale, c->t31pwscale, &c->v31);
     glBindTexture(GL_TEXTURE_3D, c->t31);
-    //glTexImage3D(GL_TEXTURE_3D, 0, GL_RGBA, 128, 128, 128, 0, GL_RGBA, GL_FLOAT, c->v31.v);
-    glTexImage3D(GL_TEXTURE_3D, 0, GL_RED, 128, 128, 128, 0, GL_RED, GL_FLOAT, c->v31.v);
+    noise_cloud3(128, 128, 128, c->t31octaves, c->t31persistence, c->t31pscale, c->t31pwscale, c->t31wscale, &c->v31);
+    glTexImage3D(GL_TEXTURE_3D, 0, GL_RGBA, 128, 128, 128, 0, GL_RGBA, GL_FLOAT, c->v31.v);
+    //noise_pw3d(128, 128, 128, c->t31octaves, c->t31persistence, c->t31pscale, c->t31pwscale, &c->v31);
+    //glTexImage3D(GL_TEXTURE_3D, 0, GL_RED, 128, 128, 128, 0, GL_RED, GL_FLOAT, c->v31.v);
     glGenerateMipmap(GL_TEXTURE_3D);
     glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_WRAP_S, GL_REPEAT);
     glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_WRAP_T, GL_REPEAT);
@@ -1448,7 +1452,7 @@ uint8_t rayHit(v3 s, v3 d, float dist, uint32_t mask) {
 }
 
 void messageCallback(GLenum source, GLenum type, GLuint id, GLenum severity, GLsizei length, const GLchar* message, const void* userParam) { 
-  if (id == 0x20071) {
+  if (severity == GL_DEBUG_SEVERITY_NOTIFICATION) {
     return;
   }
   fprintf(stderr, "GL CALLBACK: %s id = 0x%x, type = 0x%x,\n\tseverity = 0x%x, message = %s\n", (type==GL_DEBUG_TYPE_ERROR?"** GL ERROR **":""), id, type, severity, message); 
@@ -1637,17 +1641,20 @@ uint8_t run_suijin() {
     {
       mchvi(&nodes[1].children);
       add_title(&nodes[1], "Clouds", 1.0f);
-      TSL(&nodes[1], "pscale", 1.00f, &c.t31pscale, 0.0, 200.0f, update_clouds, &c);
-      TSL(&nodes[1], "pwscale", 1.00f, &c.t31pwscale, 0.0, 100.0f, update_clouds, &c);
-      TSL(&nodes[1], "persistence", 1.00f, &c.t31persistence, 0.0, 4.0f, update_clouds, &c);
-      TSL(&nodes[1], "octaves", 1.00f, &c.t31octaves, 0.0, 5.0f, update_clouds, &c);
+      TSL(&nodes[1], "pscale", 1.00f, &c.t31pscale, 0.0, 200.0f, NULL, NULL);
+      TSL(&nodes[1], "pwscale", 1.00f, &c.t31pwscale, 0.0, 100.0f, NULL, NULL);
+      TSL(&nodes[1], "persistence", 1.00f, &c.t31persistence, 0.0, 4.0f, NULL, NULL);
+      TSL(&nodes[1], "octaves", 1.00f, &c.t31octaves, 0.0, 5.0f, NULL, NULL);
       TSL(&nodes[1], "curslice", 1.00f, &c.t31curslice, 0.0, 1.0f, NULL, NULL);
-      TSL(&nodes[1], "wscale", 1.00f, &c.t31wscale, 0.0, 200.0f, update_clouds, &c);
-      TSL(&nodes[1], "scale", 1.00f, &c.t32scale, 0.0, 200.0f, update_clouds, &c);
+      TSL(&nodes[1], "wscale", 1.00f, &c.t31wscale, 0.0, 200.0f, NULL, NULL);
+      TSL(&nodes[1], "scale", 1.00f, &c.t32scale, 0.0, 200.0f, NULL, NULL);
+      TSL(&nodes[1], "TEXT_SIZE", 1.00f, &TEXT_SIZE, 0.0, 60.0f, NULL, NULL);
+      TSL(&nodes[1], "colch", 1.00f, &c.t31colCh, 0.0, 3.9f, NULL, NULL);
+      TSL(&nodes[1], "colch", 1.00f, &DELETE_ME, 0.0, 3.9f, update_clouds, &c);
       nodes[1].px = 400.0f;
       nodes[1].py = 50.0f;
       nodes[1].sx = 300.0f;
-      nodes[1].sy = 500.0f;
+      nodes[1].sy = 800.0f;
       nodes[1].bp = 20;
       nodes[1].tp = 20;
       nodes[1].lp = 20;
@@ -1786,18 +1793,18 @@ uint8_t run_suijin() {
     }
 
     if (drawClouds) {
+      glUseProgram(uprog);
+      program_set_int1(uprog, "ch", floor(c.t31colCh));
       draw_squaret3((windowW - 500) / 2, (windowH - 500) / 2, 500, 500, c.t31, 8, c.t31curslice);
     }
 
     if (drawUi) { // UPROG
-      glUseProgram(uprog);
       glDisable(GL_DEPTH_TEST);
 
       int32_t i;
       for(i = 1; i < MC; ++i) {
         draw_node(i);
       }
-
     }
 
     if (frame % 30 == 0) { /// Frag update
