@@ -509,3 +509,64 @@ void noise_cloud3(uint32_t h, uint32_t w, uint32_t d, uint32_t octaves, float pe
   free(w2.v);
   free(w3.v);
 }
+
+void noise_worl3(uint32_t h, uint32_t w, uint32_t d, float scale, struct i3d *__restrict im) {
+  if (im == NULL) {
+    im = calloc(sizeof(*im), 1);
+  }
+
+  im->h = h;
+  im->w = w;
+  im->d = d;
+  if (im->v == NULL) {
+    im->v = calloc(sizeof(im->v[0]), h * w * d);
+  }
+
+  struct i3df w1 = {0};
+  struct i3df w2 = {0};
+  struct i3df w3 = {0};
+  noise_w3d(h, w, d, scale / 1.0, &w1);
+  noise_w3d(h, w, d, scale / 2.0, &w2);
+  noise_w3d(h, w, d, scale / 3.0, &w3);
+
+  {
+    int32_t i, j, k;
+    for (i = 0; i < h; ++i) {
+      for (j = 0; j < w; ++j) {
+        for (k = 0; k < d; ++k) {
+          D(im->v, i, j, k, h, w).r = D(w1.v, i, j, k, h, w);
+          D(im->v, i, j, k, h, w).g = D(w2.v, i, j, k, h, w);
+          D(im->v, i, j, k, h, w).b = D(w3.v, i, j, k, h, w);
+        }
+      }
+    }
+  }
+
+  free(w1.v);
+  free(w2.v);
+  free(w3.v);
+}
+
+void noise_curl3(uint32_t h, uint32_t w, uint32_t octaves, float persistence, float scale, struct i2d *__restrict im) { /// TODO: Be more efficient
+  if (im == NULL) {
+    im = calloc(sizeof(*im), 1);
+  }
+
+  im->h = h;
+  im->w = w;
+  if (im->v == NULL) {
+    im->v = calloc(sizeof(im->v[0]), h * w);
+  }
+
+  {
+    int32_t i, j;
+    float eps = 0.01;
+    for (i = 0; i < h; ++i) {
+      for (j = 0; j < w; ++j) {
+        G(im->v, i, j, w).r = (octave_perlin(i / scale, (j + eps) / scale, 0.0f, octaves, persistence) - octave_perlin(i / scale, (j - eps) / scale, 0.0f, octaves, persistence)) / (2 * eps);
+        G(im->v, i, j, w).g = (octave_perlin((i + eps) / scale, j / scale, 0.0f, octaves, persistence) - octave_perlin((i - eps) / scale, j / scale, 0.0f, octaves, persistence)) / (2 * eps);
+        G(im->v, i, j, w).b = (octave_perlin(i / scale, j / scale, eps / scale, octaves, persistence) - octave_perlin(i / scale, j / scale, -eps / scale, octaves, persistence)) / (2 * eps);
+      }
+    }
+  }
+}

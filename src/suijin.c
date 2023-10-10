@@ -803,7 +803,7 @@ uint32_t draw_slider(float x, uint32_t y, struct node *__restrict cm, struct fsl
 
   if (selui.t == UIT_SLIDERK && selui.id.fp == t->val) {
     *t->val = clamp(selui.dy + (mouseX - selui.dx) / tlen * rlen, t->lims.x, t->lims.y);
-    //fprintf(stdout, "%f\n", *t->val);
+    fprintf(stdout, "%f\n", *t->val);
     if (t->callback != NULL && mouseX != selui.dx) {
       t->callback(t->cbp);
     }
@@ -1403,8 +1403,11 @@ struct cloud {
   float t32scale;
   uint32_t t32; //  32^2 Worley (inc freq) * 3
   struct i3d v32;
+  float t2scale;
+  float t2persistence;
+  float t2octaves;
   uint32_t t2;  // 128^2 Curl noise * 3
-  struct i2df v2;
+  struct i2d v2;
 };
 
 void update_clouds(void *__restrict cp) {
@@ -1419,12 +1422,44 @@ void update_clouds(void *__restrict cp) {
     //noise_pw3d(128, 128, 128, c->t31octaves, c->t31persistence, c->t31pscale, c->t31pwscale, &c->v31);
     //glTexImage3D(GL_TEXTURE_3D, 0, GL_RED, 128, 128, 128, 0, GL_RED, GL_FLOAT, c->v31.v);
     glGenerateMipmap(GL_TEXTURE_3D);
-    glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_WRAP_S, GL_REPEAT);
-    glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_WRAP_T, GL_REPEAT);
-    glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_WRAP_R, GL_REPEAT);
+    glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_EDGE);
     glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_MIN_FILTER, GL_NEAREST_MIPMAP_NEAREST);
     glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
     glBindTexture(GL_TEXTURE_3D, 0);
+  }
+
+  { // Worley
+    if (!c->t32) {
+      glGenTextures(1, &c->t32);
+    }
+    glBindTexture(GL_TEXTURE_3D, c->t32);
+    noise_worl3(32, 32, 32, c->t32scale, &c->v32);
+    glTexImage3D(GL_TEXTURE_3D, 0, GL_RGB, 32, 32, 32, 0, GL_RGB, GL_FLOAT, c->v32.v);
+    glGenerateMipmap(GL_TEXTURE_3D);
+    glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_MIN_FILTER, GL_NEAREST_MIPMAP_NEAREST);
+    glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    glBindTexture(GL_TEXTURE_3D, 0);
+  }
+
+  { // Curl
+    if (!c->t2) {
+      glGenTextures(1, &c->t2);
+    }
+    glBindTexture(GL_TEXTURE_2D, c->t2);
+    noise_curl3(128, 128, c->t2octaves, c->t2persistence, c->t2scale, &c->v2);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, 128, 128, 0, GL_RGB, GL_FLOAT, c->v2.v);
+    glGenerateMipmap(GL_TEXTURE_2D);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST_MIPMAP_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    glBindTexture(GL_TEXTURE_2D, 0);
   }
 }
 
@@ -1491,7 +1526,10 @@ uint8_t run_suijin() {
     c.t31octaves = 2.1;
     c.t31curslice = 0.0;
     c.t31wscale = 10.0;
-    c.t32scale = 0.0;
+    c.t32scale = 8.64;
+    c.t2scale = 8.64;
+    c.t2persistence = 3.46;
+    c.t2octaves = 2.1;
     update_clouds(&c);
   }
 
@@ -1795,7 +1833,9 @@ uint8_t run_suijin() {
     if (drawClouds) {
       glUseProgram(uprog);
       program_set_int1(uprog, "ch", floor(c.t31colCh));
-      draw_squaret3((windowW - 500) / 2, (windowH - 500) / 2, 500, 500, c.t31, 8, c.t31curslice);
+      draw_squaret3((windowW - 500) / 2 - 275, (windowH - 500) / 2 - 275, 500, 500, c.t31, 8, c.t31curslice);
+      draw_squaret3((windowW - 500) / 2 + 275, (windowH - 500) / 2 - 275, 500, 500, c.t32, 8, c.t31curslice);
+      draw_squaret((windowW - 500) / 2, (windowH - 500) / 2 + 275, 500, 500, c.t2, 9);
     }
 
     if (drawUi) { // UPROG

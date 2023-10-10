@@ -91,4 +91,8 @@ void noise_pw3d(uint32_t h, uint32_t w, uint32_t d, uint32_t octaves, float pers
 
 void noise_cloud3(uint32_t h, uint32_t w, uint32_t d, uint32_t octaves, float persistence, float pscale, float pwscale, float wscale, struct i3da *__restrict im);
 
+void noise_worl3(uint32_t h, uint32_t w, uint32_t d, float scale, struct i3d *__restrict im);
+
+void noise_curl3(uint32_t h, uint32_t w, uint32_t octaves, float persistence, float scale, struct i2d *__restrict im);
+
 #endif

@@ -46,5 +46,18 @@ void main() {
       v = c.a;
     }
     FragColor = vec4(vec3(v), 1.0f);
+  } else if (type == 9) {
+    vec4 c = texture(tex, vec2(texCoords.x, texCoords.y));
+    double v;
+    if (ch == 0) {
+      v = c.r;
+    } else if (ch == 1) {
+      v = c.g;
+    } else if (ch == 2) {
+      v = c.b;
+    } else {
+      v = c.a;
+    }
+    FragColor = vec4(vec3(v), 1.0f);
   }
 }
