@@ -111,8 +111,8 @@ uint8_t cameraUpdate = 1;
 #define SENS 0.001f
 
 #define UI_COL_BG1 0x181818FF
-#define UI_COL_BG2 0x484848FF
-#define UI_COL_FG1 0xBA2636FF
+#define UI_COL_BG2 0x484848A0
+#define UI_COL_FG1 0xBA2636A0
 #define UI_COL_FG2 0xA232B4FF
 #define UI_COL_FG3 0xFFFFFFFF
 
@@ -556,7 +556,7 @@ struct node {
 #define MC 2
 struct node nodes[MC];
 
-void add_title(struct node *__restrict m, char *__restrict t, uint32_t tsize) {
+void add_title(struct node *__restrict m, char *__restrict t, uint32_t tsize) { /// Should be 31
   struct mchild mc;
   mc.id = MTEXT_BOX;
   mc.c = malloc(sizeof(struct tbox));
@@ -565,7 +565,7 @@ void add_title(struct node *__restrict m, char *__restrict t, uint32_t tsize) {
   tmc->tsize = tsize * 64;
   FT_CHECK(FT_Set_Char_Size(ftface, 0, tmc->tsize, 0, 88), "");
   //tmc->bp = ((double)(ftface->bbox.yMax - ftface->bbox.yMin) / (double)ftface->units_per_EM) / 64 * tsize;
-  tmc->bp = ftface->size->metrics.height / 64;
+  tmc->bp = ftface->size->metrics.y_ppem;
 #undef tmc
 
   mchvp(&m->children, mc);
@@ -769,7 +769,6 @@ uint32_t draw_textbox(float x, uint32_t y, struct tbox *__restrict t) {
       int32_t fw = ftface->glyph->metrics.width >> 6;
       int32_t fh = ftface->glyph->metrics.height >> 6;
       int32_t xoff = ftface->glyph->metrics.horiBearingX >> 6;
-      //int32_t yoff = ((ftface->bbox.yMax - ftface->glyph->metrics.horiBearingY) >> 6) + t->bp;
       int32_t yoff = (-ftface->glyph->metrics.horiBearingY >> 6) + t->bp;
 
       //draw_squaretext(x + (px + xoff) * t->scale, y + yoff * t->scale, fw * t->scale, fh * t->scale, ctex, UI_COL_BG1, UI_COL_FG2);
@@ -825,10 +824,10 @@ void draw_node(uint32_t mi) {
     for(i = 0; i < cm.children.l; ++i) {
       switch (cm.children.v[i].id) {
         case MTEXT_BOX:
-          cy += draw_textbox(cm.px + cm.lp, cm.py + cy, cm.children.v[i].c) + 11;
+          cy += draw_textbox(cm.px + cm.lp, cm.py + cy, cm.children.v[i].c);
           break;
         case MFSLIDER:
-          cy += draw_slider(cm.px + cm.lp, cm.py + cy, &cm, cm.children.v[i].c) + 11;
+          cy += draw_slider(cm.px + cm.lp, cm.py + cy, &cm, cm.children.v[i].c);
           break;
       }
     }
@@ -1673,17 +1672,23 @@ uint8_t run_suijin() {
 
     {
       mchvi(&nodes[1].children);
-      add_title(&nodes[1], "Clouds", 20);
-      TSL(&nodes[1], "pscale", 10, &c.t31pscale, 0.0, 200.0f, NULL, NULL);
-      TSL(&nodes[1], "pwscale", 10, &c.t31pwscale, 0.0, 100.0f, NULL, NULL);
-      TSL(&nodes[1], "persistence", 10, &c.t31persistence, 0.0, 4.0f, NULL, NULL);
-      TSL(&nodes[1], "octaves", 10, &c.t31octaves, 0.0, 5.0f, NULL, NULL);
-      TSL(&nodes[1], "curslice", 10, &c.t31curslice, 0.0, 1.0f, NULL, NULL);
-      TSL(&nodes[1], "wscale", 10, &c.t31wscale, 0.0, 200.0f, NULL, NULL);
-      TSL(&nodes[1], "scale", 10, &c.t32scale, 0.0, 200.0f, NULL, NULL);
-      TSL(&nodes[1], "TEXT_SIZE", 10, &TEXT_SIZE, 0.0, 60.0f, NULL, NULL);
-      TSL(&nodes[1], "colch", 10, &c.t31colCh, 0.0, 3.9f, NULL, NULL);
-      TSL(&nodes[1], "Update", 10, &DELETE_ME, 0.0, 3.9f, update_clouds, &c);
+      add_title(&nodes[1], "│#Clpouds", 25);
+      add_title(&nodes[1], "│#Clouds", 25);
+      add_title(&nodes[1], "│#Clouds", 25);
+      add_title(&nodes[1], "│#Clouds", 25);
+      add_title(&nodes[1], "│#Clouds", 25);
+      add_title(&nodes[1], "│#Clouds", 25);
+      add_title(&nodes[1], "│#Clouds", 25);
+      TSL(&nodes[1], "pscale", 15, &c.t31pscale, 0.0, 200.0f, NULL, NULL);
+      TSL(&nodes[1], "pwscale", 15, &c.t31pwscale, 0.0, 100.0f, NULL, NULL);
+      TSL(&nodes[1], "persistence", 15, &c.t31persistence, 0.0, 4.0f, NULL, NULL);
+      TSL(&nodes[1], "octaves", 15, &c.t31octaves, 0.0, 5.0f, NULL, NULL);
+      TSL(&nodes[1], "curslice", 15, &c.t31curslice, 0.0, 1.0f, NULL, NULL);
+      TSL(&nodes[1], "wscale", 15, &c.t31wscale, 0.0, 200.0f, NULL, NULL);
+      TSL(&nodes[1], "scale", 15, &c.t32scale, 0.0, 200.0f, NULL, NULL);
+      TSL(&nodes[1], "TEXT_SIZE", 15, &TEXT_SIZE, 0.0, 60.0f, NULL, NULL);
+      TSL(&nodes[1], "colch", 15, &c.t31colCh, 0.0, 3.9f, NULL, NULL);
+      TSL(&nodes[1], "Update", 15, &DELETE_ME, 0.0, 3.9f, update_clouds, &c);
 
       nodes[1].px = 400.0f;
       nodes[1].py = 50.0f;
