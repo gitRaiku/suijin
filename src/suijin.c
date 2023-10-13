@@ -74,16 +74,17 @@ struct matv mats;
 struct modv mods;
 
 enum UIT {
-  UIT_CANNOT, UIT_CAN, UIT_NODE, UIT_SLIDERK
+  UIT_CANNOT, UIT_CAN, UIT_NODE, UIT_SLIDERK, UIT_TEXT
 };
 
 union KMS {
   uint32_t u32;
-  float *__restrict fp;
+  void *__restrict fp;
 };
 
 struct uiSelection {
   enum UIT t;
+  enum UIT nt;
   union KMS id;
   float dx, dy;
 };
@@ -507,17 +508,15 @@ void draw_model(uint32_t program, struct matv *__restrict m, struct model *__res
 }
 
 struct tbox {
+  uint32_t tlen;
+  uint32_t tex;
   char text[64];
   uint32_t tsize;
-  uint32_t bp;
 };
 
 struct fslider {
   float *__restrict val;
   v2 lims;
-  uint32_t bp;
-  void (*callback)(void*);
-  void *cbp;
 };
 
 enum MCHID {
@@ -527,7 +526,15 @@ enum MCHID {
 struct mchild {
   enum MCHID id;
   void *__restrict c;
+  uint8_t flags;
+  void (*callback)(void*);
+  void *cbp;
+  uint32_t height;
+  uint32_t pad;
+  uint64_t fg;
+  uint64_t bg;
 };
+#define UI_CLICKABLE 0b1
 
 VECSTRUCT(mch, struct mchild);
 VECTOR_SUITE(mch, struct mchv *__restrict, struct mchild)
@@ -556,32 +563,54 @@ struct node {
 #define MC 2
 struct node nodes[MC];
 
-void add_title(struct node *__restrict m, char *__restrict t, uint32_t tsize) { /// Should be 31
-  struct mchild mc;
+void add_title(struct node *__restrict m, char *__restrict t, uint32_t tsize, uint32_t pad) {
+  struct mchild mc = {0};
   mc.id = MTEXT_BOX;
-  mc.c = malloc(sizeof(struct tbox));
+  mc.c = calloc(sizeof(struct tbox), 1);
 #define tmc ((struct tbox *)mc.c)
   strncpy(tmc->text, t, sizeof(tmc->text));
   tmc->tsize = tsize * 64;
   FT_CHECK(FT_Set_Char_Size(ftface, 0, tmc->tsize, 0, 88), "");
-  //tmc->bp = ((double)(ftface->bbox.yMax - ftface->bbox.yMin) / (double)ftface->units_per_EM) / 64 * tsize;
-  tmc->bp = ftface->size->metrics.y_ppem;
+  mc.height = ftface->size->metrics.y_ppem;
 #undef tmc
+  mc.pad = pad;
 
   mchvp(&m->children, mc);
 }
 
-void add_slider(struct node *__restrict m, float *__restrict v, float lb, float ub, void (*callback)(void*), void *p) {
+void add_button(struct node *__restrict m, char *__restrict t, uint64_t bg, uint32_t tsize, uint32_t pad, void (*callback)(void*), void *p) {
+  struct mchild mc;
+  mc.id = MTEXT_BOX;
+  mc.c = calloc(sizeof(struct tbox), 1);
+#define tmc ((struct tbox *)mc.c)
+  strncpy(tmc->text, t, sizeof(tmc->text));
+  tmc->tsize = tsize * 64;
+  FT_CHECK(FT_Set_Char_Size(ftface, 0, tmc->tsize, 0, 88), "");
+#undef tmc
+  mc.flags = UI_CLICKABLE;
+  mc.callback = callback;
+  mc.cbp = p;
+  mc.pad = pad;
+  mc.bg = bg;
+  mc.height = ftface->size->metrics.y_ppem;
+
+  mchvp(&m->children, mc);
+}
+
+void add_slider(struct node *__restrict m, float *__restrict v, float lb, float ub, uint32_t pad, void (*callback)(void*), void *p) {
   struct mchild mc;
   mc.id = MFSLIDER;
-  mc.c = malloc(sizeof(struct fslider));
+  mc.c = calloc(sizeof(struct fslider), 1);
 #define tmc ((struct fslider *)mc.c)
   tmc->val = v;
   tmc->lims = (v2) {lb, ub};
-  tmc->bp = 36;
-  tmc->callback = callback;
-  tmc->cbp = p;
 #undef tmc
+
+  mc.flags = UI_CLICKABLE;
+  mc.callback = callback;
+  mc.cbp = p;
+  mc.pad = pad;
+  mc.height = 36;
 
   mchvp(&m->children, mc);
 }
@@ -690,8 +719,8 @@ void update_bw_tex(uint32_t *__restrict tex, uint32_t h, uint32_t w, void *__res
   glBindTexture(GL_TEXTURE_2D, *tex);
   glTexImage2D(GL_TEXTURE_2D, 0, GL_RED, w, h, 0, GL_RED, GL_UNSIGNED_BYTE, buf);
   glGenerateMipmap(GL_TEXTURE_2D);
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
 }
@@ -740,8 +769,14 @@ uint32_t utf8_to_unicode(char *__restrict str, uint32_t l) {
   return res;
 }
 
+uint8_t ui_pointer_in(float x, float y, float w, float h) {
+  return (0 <= mouseX - x && mouseX - x <= w) &&
+         (0 <= mouseY - y && mouseY - y <= h);
+}
+
 float TEXT_SIZE = 20.0;
-uint32_t draw_textbox(float x, uint32_t y, struct tbox *__restrict t) {
+uint32_t draw_textbox(float x, uint32_t y, struct mchild *__restrict mc) {
+  struct tbox *__restrict t = (struct tbox *__restrict)mc->c;
   uint32_t px = 0;
   FT_UInt gi;
   FT_GlyphSlot slot = ftface->glyph;
@@ -750,12 +785,37 @@ uint32_t draw_textbox(float x, uint32_t y, struct tbox *__restrict t) {
   glBindVertexArray(uvao);
   FT_CHECK(FT_Set_Char_Size(ftface, 0, t->tsize, 0, 88),"Could not set the character size!");
 
+
   {
     char *__restrict ct = t->text;
-    uint32_t ctex;
     uint8_t cl;
     FT_ULong cchar;
-    glGenTextures(1, &ctex);
+
+    if (!t->tex) {
+      glGenTextures(1, &t->tex);
+    }
+
+    px = 0;
+    if (!t->tlen) {
+      while (*ct) {
+        cl = runel(ct);
+        cchar = utf8_to_unicode(ct, cl);
+        gi = FT_Get_Char_Index(ftface, cchar);
+
+        FT_CHECK(FT_Load_Glyph(ftface, gi, FT_LOAD_DEFAULT | FT_LOAD_COLOR | FT_LOAD_FORCE_AUTOHINT), "Could not load glyph");
+        FT_Render_Glyph(ftface->glyph, FT_RENDER_MODE_NORMAL);
+
+        px += ftface->glyph->metrics.horiAdvance >> 6;
+        ct += cl;
+      }
+      t->tlen = px;
+    }
+
+    if (mc->bg) {
+      draw_squarec(x, y + mc->pad, px, mc->height, mc->bg);
+    }
+
+    px = 0;
     while (*ct) {
       cl = runel(ct);
       cchar = utf8_to_unicode(ct, cl);
@@ -763,55 +823,67 @@ uint32_t draw_textbox(float x, uint32_t y, struct tbox *__restrict t) {
 
       FT_CHECK(FT_Load_Glyph(ftface, gi, FT_LOAD_DEFAULT | FT_LOAD_COLOR | FT_LOAD_FORCE_AUTOHINT), "Could not load glyph");
       FT_Render_Glyph(ftface->glyph, FT_RENDER_MODE_NORMAL);
-      update_bw_tex(&ctex, slot->bitmap.rows, slot->bitmap.width, slot->bitmap.buffer);
+      update_bw_tex(&t->tex, slot->bitmap.rows, slot->bitmap.width, slot->bitmap.buffer);
 
       int32_t advance = ftface->glyph->metrics.horiAdvance >> 6;
       int32_t fw = ftface->glyph->metrics.width >> 6;
       int32_t fh = ftface->glyph->metrics.height >> 6;
       int32_t xoff = ftface->glyph->metrics.horiBearingX >> 6;
-      int32_t yoff = (-ftface->glyph->metrics.horiBearingY >> 6) + t->bp;
+      int32_t yoff = (-ftface->glyph->metrics.horiBearingY >> 6) + mc->height;
 
-      //draw_squaretext(x + (px + xoff) * t->scale, y + yoff * t->scale, fw * t->scale, fh * t->scale, ctex, UI_COL_BG1, UI_COL_FG2);
-      draw_squaretext(x + px + xoff, y + yoff, fw, fh, ctex, UI_COL_BG1, UI_COL_FG3);
+      draw_squaretext(x + px + xoff, y + mc->pad + yoff, fw, fh, t->tex, mc->bg ? mc->bg : UI_COL_BG1, mc->fg ? mc->fg : UI_COL_FG3);
 
       px += advance;
 
       ct += cl;
     }
-    glDeleteTextures(1, &ctex);
-  }
 
-  glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
-  return t->bp;
-}
+    if (mc->flags & UI_CLICKABLE) {
+      if (selui.t == UIT_CAN && ui_pointer_in(x, y, px, mc->height)) {
+        selui.nt = UIT_TEXT;
+        selui.id.fp = t;
+      }
 
-uint32_t sS = 21; // Draw slider
-uint32_t draw_slider(float x, uint32_t y, struct node *__restrict cm, struct fslider *__restrict t) {
-  int32_t tlen = cm->sx - cm->lp - cm->rp - sS;
-  float   rlen = t->lims.y - t->lims.x;
-  int32_t xoff = (*t->val - t->lims.x) / rlen * tlen;
-  draw_squarec(x + sS / 2, y + sS * 0.375f, cm->sx - cm->lp - cm->rp - sS, sS / 4, UI_COL_BG2); // Line
-  draw_squarec(x + xoff, y, sS, sS, UI_COL_FG1);
-
-
-  if (selui.t == UIT_CAN &&
-      (0 <= mouseX - x - xoff && mouseX - x - xoff <= sS) &&
-      (0 <= mouseY - y && mouseY - y <= sS)) { 
-    selui.t = UIT_SLIDERK;
-    selui.id.fp = t->val;
-    selui.dx = mouseX;
-    selui.dy = *t->val;
-  }
-
-  if (selui.t == UIT_SLIDERK && selui.id.fp == t->val) {
-    *t->val = clamp(selui.dy + (mouseX - selui.dx) / tlen * rlen, t->lims.x, t->lims.y);
-    fprintf(stdout, "%f\n", *t->val);
-    if (t->callback != NULL && mouseX != selui.dx) {
-      t->callback(t->cbp);
+      if (selui.t == UIT_TEXT && selui.id.fp == t) {
+        selui.nt = UIT_CANNOT;
+        if (mc->callback) {
+          mc->callback(mc->cbp);
+        }
+      }
     }
   }
 
-  return t->bp;
+  glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+  return mc->height;
+}
+
+uint32_t sS = 21; // Draw slider
+uint32_t draw_slider(float x, uint32_t y, struct node *__restrict cm, struct mchild *__restrict mc) {
+  struct fslider *__restrict t = (struct fslider *__restrict)mc->c;
+  int32_t tlen = cm->sx - cm->lp - cm->rp - sS;
+  float   rlen = t->lims.y - t->lims.x;
+  int32_t xoff = (*t->val - t->lims.x) / rlen * tlen;
+  draw_squarec(x + sS / 2, y + sS * 0.375f, cm->sx - cm->lp - cm->rp - sS, sS / 4, mc->bg ? mc->bg : UI_COL_BG2); // Line
+  draw_squarec(x + xoff, y, sS, sS, mc->fg ? mc->fg : UI_COL_FG1);
+
+  if (mc->flags & UI_CLICKABLE) {
+    if (selui.t == UIT_CAN && ui_pointer_in(x - xoff, y, sS, sS)) {
+      selui.nt = UIT_SLIDERK;
+      selui.id.fp = t;
+      selui.dx = mouseX;
+      selui.dy = *t->val;
+    }
+
+    if (selui.t == UIT_SLIDERK && selui.id.fp == t) {
+      *t->val = clamp(selui.dy + (mouseX - selui.dx) / tlen * rlen, t->lims.x, t->lims.y);
+      fprintf(stdout, "%f\n", *t->val);
+      if (mc->callback != NULL && mouseX != selui.dx) {
+        mc->callback(mc->cbp);
+      }
+    }
+  }
+
+  return mc->height;
 }
 
 void draw_node(uint32_t mi) {
@@ -824,10 +896,10 @@ void draw_node(uint32_t mi) {
     for(i = 0; i < cm.children.l; ++i) {
       switch (cm.children.v[i].id) {
         case MTEXT_BOX:
-          cy += draw_textbox(cm.px + cm.lp, cm.py + cy, cm.children.v[i].c);
+          cy += draw_textbox(cm.px + cm.lp, cm.py + cy, cm.children.v + i) + cm.children.v[i].pad;
           break;
         case MFSLIDER:
-          cy += draw_slider(cm.px + cm.lp, cm.py + cy, &cm, cm.children.v[i].c);
+          cy += draw_slider(cm.px + cm.lp, cm.py + cy, &cm, cm.children.v + i) + cm.children.v[i].pad;
           break;
       }
     }
@@ -877,7 +949,8 @@ void reset_ft() {
   }
   FT_CHECK(FT_Init_FreeType(&ftlib), "Could not initialize the freetype lib");
 
-  FT_CHECK(FT_New_Face(ftlib, "Resources/Fonts/Koruri/Koruri-Regular.ttf", 0, &ftface), "Could not load the font");
+  //FT_CHECK(FT_New_Face(ftlib, "Resources/Fonts/Koruri/Koruri-Regular.ttf", 0, &ftface), "Could not load the font");
+  FT_CHECK(FT_New_Face(ftlib, "Resources/Fonts/JetBrains/jetbrainsmono.ttf", 0, &ftface), "Could not load the font");
   // FT_CHECK(FT_New_Face(ftlib, "Resources/Fonts/JetBrains/jetbrainsmono.ttf", 0, &ftface), "Could not load the font");
   FT_CHECK(FT_Set_Char_Size(ftface, 0, 16 * 64, 300, 300),"Could not set the character size!");
   FT_CHECK(FT_Set_Pixel_Sizes(ftface, 0, (int32_t)72), "Could not set pixel sizes");
@@ -1645,8 +1718,8 @@ uint8_t run_suijin() {
 
   { /// UI
 #define TSL(node, name, namescale, var, mi, ma, fun, funp) \
-      add_title(node, name, namescale); \
-      add_slider(node, var, mi, ma, fun, funp)
+      add_title(node, name, namescale, 10); \
+      add_slider(node, var, mi, ma, 10, fun, funp)
     prep_ui(window, &uvao);
     /*{
       mchvi(&nodes[0].children);
@@ -1672,13 +1745,7 @@ uint8_t run_suijin() {
 
     {
       mchvi(&nodes[1].children);
-      add_title(&nodes[1], "│#Clpouds", 25);
-      add_title(&nodes[1], "│#Clouds", 25);
-      add_title(&nodes[1], "│#Clouds", 25);
-      add_title(&nodes[1], "│#Clouds", 25);
-      add_title(&nodes[1], "│#Clouds", 25);
-      add_title(&nodes[1], "│#Clouds", 25);
-      add_title(&nodes[1], "│#Clouds", 25);
+      add_title(&nodes[1], "│#Clpouds", 25, 10);
       TSL(&nodes[1], "pscale", 15, &c.t31pscale, 0.0, 200.0f, NULL, NULL);
       TSL(&nodes[1], "pwscale", 15, &c.t31pwscale, 0.0, 100.0f, NULL, NULL);
       TSL(&nodes[1], "persistence", 15, &c.t31persistence, 0.0, 4.0f, NULL, NULL);
