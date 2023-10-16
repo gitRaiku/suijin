@@ -579,7 +579,7 @@ void add_title(struct node *__restrict m, char *__restrict t, uint32_t tsize, ui
 }
 
 void add_button(struct node *__restrict m, char *__restrict t, uint64_t bg, uint32_t tsize, uint32_t pad, void (*callback)(void*), void *p) {
-  struct mchild mc;
+  struct mchild mc = {0};
   mc.id = MTEXT_BOX;
   mc.c = calloc(sizeof(struct tbox), 1);
 #define tmc ((struct tbox *)mc.c)
@@ -598,7 +598,7 @@ void add_button(struct node *__restrict m, char *__restrict t, uint64_t bg, uint
 }
 
 void add_slider(struct node *__restrict m, float *__restrict v, float lb, float ub, uint32_t pad, void (*callback)(void*), void *p) {
-  struct mchild mc;
+  struct mchild mc = {0};
   mc.id = MFSLIDER;
   mc.c = calloc(sizeof(struct fslider), 1);
 #define tmc ((struct fslider *)mc.c)
@@ -775,10 +775,6 @@ uint8_t ui_pointer_in(float x, float y, float w, float h) {
          (0 <= mouseY - y && mouseY - y <= h);
 }
 
-void PRINT(void *p) {
-  fprintf(stdout, "AAAAAAAAAAAAAAAAAA\n");
-}
-
 uint64_t invc(uint64_t c) {
   return ((0xFF - ((c & 0xFF000000) >> 24)) << 24) | 
          ((0xFF - ((c & 0x00FF0000) >> 16)) << 16) | 
@@ -824,8 +820,7 @@ uint32_t draw_textbox(float x, uint32_t y, struct mchild *__restrict mc) {
 
     uint64_t curbg = mc->bg;
     if (mc->flags & UI_CLICKABLE) {
-      if (selui.t == UIT_CAN && ui_pointer_in(x, y - mc->pad / 2, t->tlen, mc->height + mc->pad)) {
-        fprintf(stdout, "Hit text %p %s\n", t, t->text);
+      if (selui.t == UIT_CAN && ui_pointer_in(x, y - mc->pad / 1.4, t->tlen, mc->height + mc->pad)) {
         curbg = invc(mc->bg);
         selui.t = UIT_TEXT;
         selui.id.fp = t;
@@ -841,7 +836,7 @@ uint32_t draw_textbox(float x, uint32_t y, struct mchild *__restrict mc) {
     }
 
     if (mc->bg) {
-      draw_squarec(x, y + mc->pad / 2, t->tlen, mc->height + mc->pad, curbg);
+      draw_squarec(x, y + mc->pad / 1.4, t->tlen, mc->height + mc->pad, curbg);
       glUseProgram(textprog);
     }
 
@@ -874,16 +869,17 @@ uint32_t draw_textbox(float x, uint32_t y, struct mchild *__restrict mc) {
 }
 
 uint32_t sS = 21; // Draw slider
-uint32_t draw_slider(float x, uint32_t y, struct node *__restrict cm, struct mchild *__restrict mc) {
+uint32_t draw_slider(float x, float y, struct node *__restrict cm, struct mchild *__restrict mc) {
   struct fslider *__restrict t = (struct fslider *__restrict)mc->c;
   int32_t tlen = cm->sx - cm->lp - cm->rp - sS;
   float   rlen = t->lims.y - t->lims.x;
   int32_t xoff = (*t->val - t->lims.x) / rlen * tlen;
+
   draw_squarec(x + sS / 2, y + sS * 0.375f, cm->sx - cm->lp - cm->rp - sS, sS / 4, mc->bg ? mc->bg : UI_COL_BG2); // Line
   draw_squarec(x + xoff, y, sS, sS, mc->fg ? mc->fg : UI_COL_FG1);
 
   if (mc->flags & UI_CLICKABLE) {
-    if (selui.t == UIT_CAN && ui_pointer_in(x - xoff, y, sS, sS)) {
+    if (selui.t == UIT_CAN && ui_pointer_in(x + xoff, y, sS, sS)) {
       fprintf(stdout, "Hit slider %p\n", t);
       selui.t = UIT_SLIDERK;
       selui.id.fp = t;
@@ -1735,6 +1731,7 @@ uint8_t run_suijin() {
 #define TSL(node, name, namescale, var, mi, ma, fun, funp) \
       add_title(node, name, namescale, 5); \
       add_slider(node, var, mi, ma, 5, fun, funp)
+#define UI_GET_HEIGHT(res, node) { uint32_t _ch = 0; int32_t _i; for(_i = 0; _i < (node).children.l; ++_i) { _ch += (node).children.v[_i].height + (node).children.v[_i].pad; } res = _ch; }
     prep_ui(window, &uvao);
     /*{
       mchvi(&nodes[0].children);
@@ -1771,11 +1768,10 @@ uint8_t run_suijin() {
       TSL(&nodes[1], "TEXT_SIZE", 15, &TEXT_SIZE, 0.0, 60.0f, NULL, NULL);
       TSL(&nodes[1], "colch", 15, &c.t31colCh, 0.0, 3.9f, NULL, NULL);
       add_button(&nodes[1], "Update", 0xFF0000FF, 20, 10, update_clouds, &c);
-
       nodes[1].px = 400.0f;
       nodes[1].py = 50.0f;
       nodes[1].sx = 300.0f;
-      nodes[1].sy = 800.0f;
+      UI_GET_HEIGHT(nodes[1].sy, nodes[1]);
       nodes[1].bp = 0;
       nodes[1].tp = 0;
       nodes[1].lp = 8;
@@ -1936,6 +1932,7 @@ uint8_t run_suijin() {
       for(i = 1; i < MC; ++i) {
         draw_node(i);
       }
+      // if (selui.t == UIT_CAN) { selui.t = UIT_CANNOT; }
     }
 
     if (frame % 30 == 0) { /// Frag update
