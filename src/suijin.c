@@ -770,6 +770,7 @@ uint32_t utf8_to_unicode(char *__restrict str, uint32_t l) {
 }
 
 uint8_t ui_pointer_in(float x, float y, float w, float h) {
+  fprintf(stdout, "Try pointer %f %f in %f - %f; %f - %f\n", mouseX, mouseY, x, x + w, y, y + h);
   return (0 <= mouseX - x && mouseX - x <= w) &&
          (0 <= mouseY - y && mouseY - y <= h);
 }
@@ -784,7 +785,6 @@ uint32_t draw_textbox(float x, uint32_t y, struct mchild *__restrict mc) {
   glUseProgram(textprog);
   glBindVertexArray(uvao);
   FT_CHECK(FT_Set_Char_Size(ftface, 0, t->tsize, 0, 88),"Could not set the character size!");
-
 
   {
     char *__restrict ct = t->text;
@@ -815,6 +815,7 @@ uint32_t draw_textbox(float x, uint32_t y, struct mchild *__restrict mc) {
       draw_squarec(x, y + mc->pad, px, mc->height, mc->bg);
     }
 
+    ct = t->text;
     px = 0;
     while (*ct) {
       cl = runel(ct);
@@ -825,7 +826,6 @@ uint32_t draw_textbox(float x, uint32_t y, struct mchild *__restrict mc) {
       FT_Render_Glyph(ftface->glyph, FT_RENDER_MODE_NORMAL);
       update_bw_tex(&t->tex, slot->bitmap.rows, slot->bitmap.width, slot->bitmap.buffer);
 
-      int32_t advance = ftface->glyph->metrics.horiAdvance >> 6;
       int32_t fw = ftface->glyph->metrics.width >> 6;
       int32_t fh = ftface->glyph->metrics.height >> 6;
       int32_t xoff = ftface->glyph->metrics.horiBearingX >> 6;
@@ -833,13 +833,14 @@ uint32_t draw_textbox(float x, uint32_t y, struct mchild *__restrict mc) {
 
       draw_squaretext(x + px + xoff, y + mc->pad + yoff, fw, fh, t->tex, mc->bg ? mc->bg : UI_COL_BG1, mc->fg ? mc->fg : UI_COL_FG3);
 
-      px += advance;
+      px += ftface->glyph->metrics.horiAdvance >> 6;
 
       ct += cl;
     }
 
     if (mc->flags & UI_CLICKABLE) {
-      if (selui.t == UIT_CAN && ui_pointer_in(x, y, px, mc->height)) {
+      if (selui.t == UIT_CAN && ui_pointer_in(x, y, t->tlen, mc->height)) {
+        fprintf(stdout, "Hit text %p %s\n", t, t->text);
         selui.nt = UIT_TEXT;
         selui.id.fp = t;
       }
@@ -868,6 +869,7 @@ uint32_t draw_slider(float x, uint32_t y, struct node *__restrict cm, struct mch
 
   if (mc->flags & UI_CLICKABLE) {
     if (selui.t == UIT_CAN && ui_pointer_in(x - xoff, y, sS, sS)) {
+      fprintf(stdout, "Hit slider %p\n", t);
       selui.nt = UIT_SLIDERK;
       selui.id.fp = t;
       selui.dx = mouseX;
@@ -901,20 +903,18 @@ void draw_node(uint32_t mi) {
         case MFSLIDER:
           cy += draw_slider(cm.px + cm.lp, cm.py + cy, &cm, cm.children.v + i) + cm.children.v[i].pad;
           break;
-      }
+        }
     }
   }
 
-  if (selui.t == UIT_CAN &&
-      (0 <= mouseX - cm.px && mouseX - cm.px <= cm.sx) &&
-      (0 <= mouseY - cm.py && mouseY - cm.py <= cm.sy)) { 
+  if (selui.t == UIT_CAN && ui_pointer_in(cm.px, cm.py, cm.sx, cm.sy)) {
     selui.t = UIT_NODE;
-    selui.id.u32 = mi;
+    selui.id.fp = &cm;
     selui.dx = cm.px - mouseX;
     selui.dy = cm.py - mouseY;
   }
 
-  if (selui.t == UIT_NODE && selui.id.u32 == mi) {
+  if (selui.t == UIT_NODE && selui.id.fp == &cm) {
     cm.px = mouseX + selui.dx;
     cm.py = mouseY + selui.dy;
   }
@@ -1745,7 +1745,10 @@ uint8_t run_suijin() {
 
     {
       mchvi(&nodes[1].children);
-      add_title(&nodes[1], "│#Clpouds", 25, 10);
+      add_title(&nodes[1], "│#Clpouds", 25, 0);
+      add_button(&nodes[1], "│#Clpouds", 0xFFFFFFFF, 25, 0, NULL, NULL);
+      //add_title(&nodes[1], "│#Clpouds", 25, 0);
+      /*
       TSL(&nodes[1], "pscale", 15, &c.t31pscale, 0.0, 200.0f, NULL, NULL);
       TSL(&nodes[1], "pwscale", 15, &c.t31pwscale, 0.0, 100.0f, NULL, NULL);
       TSL(&nodes[1], "persistence", 15, &c.t31persistence, 0.0, 4.0f, NULL, NULL);
@@ -1756,6 +1759,7 @@ uint8_t run_suijin() {
       TSL(&nodes[1], "TEXT_SIZE", 15, &TEXT_SIZE, 0.0, 60.0f, NULL, NULL);
       TSL(&nodes[1], "colch", 15, &c.t31colCh, 0.0, 3.9f, NULL, NULL);
       TSL(&nodes[1], "Update", 15, &DELETE_ME, 0.0, 3.9f, update_clouds, &c);
+      */
 
       nodes[1].px = 400.0f;
       nodes[1].py = 50.0f;
@@ -1791,6 +1795,7 @@ uint8_t run_suijin() {
 
   uint32_t frame = 0;
   struct sray cs;
+  selui.nt = 0xFF;
   _ctime = _ltime = deltaTime = 0;
   glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
 
@@ -1867,6 +1872,10 @@ uint8_t run_suijin() {
           }
         }
       }
+      if (selui.nt != 0xFF) {
+        selui.t = selui.nt;
+        selui.nt = 0xFF;
+      }
     }
 
     if (drawBb) { // LPROG
@@ -1925,6 +1934,8 @@ uint8_t run_suijin() {
         }
       }
     }
+
+
 
     glfwPollEvents();
     glfwSwapBuffers(window);
