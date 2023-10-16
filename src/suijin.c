@@ -1733,8 +1733,8 @@ uint8_t run_suijin() {
 
   { /// UI
 #define TSL(node, name, namescale, var, mi, ma, fun, funp) \
-      add_title(node, name, namescale, 10); \
-      add_slider(node, var, mi, ma, 10, fun, funp)
+      add_title(node, name, namescale, 5); \
+      add_slider(node, var, mi, ma, 5, fun, funp)
     prep_ui(window, &uvao);
     /*{
       mchvi(&nodes[0].children);
@@ -1760,9 +1760,7 @@ uint8_t run_suijin() {
 
     {
       mchvi(&nodes[1].children);
-      add_title(&nodes[1], "│#Clpoudss", 25, 0);
-      add_button(&nodes[1], "│#Clpouds", 0xFF0000FF, 25, 10, NULL, NULL);
-      //add_title(&nodes[1], "│#Clpouds", 25, 0);
+      add_title(&nodes[1], "#Clouds", 25, 8);
       TSL(&nodes[1], "pscale", 15, &c.t31pscale, 0.0, 200.0f, NULL, NULL);
       TSL(&nodes[1], "pwscale", 15, &c.t31pwscale, 0.0, 100.0f, NULL, NULL);
       TSL(&nodes[1], "persistence", 15, &c.t31persistence, 0.0, 4.0f, NULL, NULL);
@@ -1772,7 +1770,7 @@ uint8_t run_suijin() {
       TSL(&nodes[1], "scale", 15, &c.t32scale, 0.0, 200.0f, NULL, NULL);
       TSL(&nodes[1], "TEXT_SIZE", 15, &TEXT_SIZE, 0.0, 60.0f, NULL, NULL);
       TSL(&nodes[1], "colch", 15, &c.t31colCh, 0.0, 3.9f, NULL, NULL);
-      TSL(&nodes[1], "Update", 15, &DELETE_ME, 0.0, 3.9f, update_clouds, &c);
+      add_button(&nodes[1], "Update", 0xFF0000FF, 20, 10, update_clouds, &c);
 
       nodes[1].px = 400.0f;
       nodes[1].py = 50.0f;
@@ -1780,7 +1778,7 @@ uint8_t run_suijin() {
       nodes[1].sy = 800.0f;
       nodes[1].bp = 0;
       nodes[1].tp = 0;
-      nodes[1].lp = 0;
+      nodes[1].lp = 8;
       nodes[1].rp = 0;
       mchvt(&nodes[1].children);
     }
