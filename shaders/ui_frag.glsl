@@ -49,5 +49,7 @@ void main() {
     if (ch == 2) { v = c.b; } else 
                  { v = c.a; }
     FragColor = vec4(vec3(v), 1.0f);
+  } else if (type == 10) {
+    FragColor = vec4(texture(tex, vec2(texCoords.x, texCoords.y)).rgb, 1.0f);
   }
 }

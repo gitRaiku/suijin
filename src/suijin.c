@@ -519,8 +519,15 @@ struct fslider {
   v2 lims;
 };
 
+struct mtslider {
+  struct tbox text;
+  struct fslider slid;
+  uint32_t slen;
+  struct tbox val;
+};
+
 enum MCHID {
-  MTEXT_BOX, MFSLIDER
+  MTEXT_BOX, MFSLIDER, MTSLIDER
 };
 
 struct mchild {
@@ -611,6 +618,28 @@ void add_slider(struct node *__restrict m, float *__restrict v, float lb, float 
   mc.cbp = p;
   mc.pad = pad;
   mc.height = 36;
+
+  mchvp(&m->children, mc);
+}
+
+void add_tslider(struct node *__restrict m, char *__restrict t, uint32_t tsize, float *__restrict v, float lb, float ub, uint32_t pad, void (*callback)(void*), void *p) {
+  struct mchild mc = {0};
+  mc.id = MTSLIDER;
+  mc.c = calloc(sizeof(struct mtslider), 1);
+#define tmc ((struct mtslider *)mc.c)
+  strncpy(tmc->text.text, t, sizeof(tmc->text.text));
+  tmc->text.tsize = tsize * 64;
+  FT_CHECK(FT_Set_Char_Size(ftface, 0, tmc->text.tsize, 0, 88), "");
+  mc.height = ftface->size->metrics.y_ppem;
+  tmc->val.tsize = tsize * 64;
+  tmc->slid.val = v;
+  tmc->slen = 150;
+  tmc->slid.lims = (v2) {lb, ub};
+#undef tmc
+
+  mc.callback = callback;
+  mc.cbp = p;
+  mc.pad = pad;
 
   mchvp(&m->children, mc);
 }
@@ -783,8 +812,7 @@ uint64_t invc(uint64_t c) {
 }
 
 float TEXT_SIZE = 20.0;
-uint32_t draw_textbox(float x, uint32_t y, struct mchild *__restrict mc) {
-  struct tbox *__restrict t = (struct tbox *__restrict)mc->c;
+uint32_t draw_textbox(float x, uint32_t y, struct mchild *__restrict mc, struct tbox *__restrict t) {
   uint32_t px = 0;
   FT_UInt gi;
   FT_GlyphSlot slot = ftface->glyph;
@@ -865,17 +893,18 @@ uint32_t draw_textbox(float x, uint32_t y, struct mchild *__restrict mc) {
   }
 
   glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
-  return mc->height;
+  return mc->height + mc->pad;
 }
 
 uint32_t sS = 21; // Draw slider
-uint32_t draw_slider(float x, float y, struct node *__restrict cm, struct mchild *__restrict mc) {
-  struct fslider *__restrict t = (struct fslider *__restrict)mc->c;
-  int32_t tlen = cm->sx - cm->lp - cm->rp - sS;
+uint32_t draw_slider(float x, float y, uint32_t tlen, struct node *__restrict cm, struct mchild *__restrict mc, struct fslider *__restrict t) {
+  if (tlen == 0) {
+    tlen = cm->sx - cm->lp - cm->rp - sS;
+  }
   float   rlen = t->lims.y - t->lims.x;
   int32_t xoff = (*t->val - t->lims.x) / rlen * tlen;
 
-  draw_squarec(x + sS / 2, y + sS * 0.375f, cm->sx - cm->lp - cm->rp - sS, sS / 4, mc->bg ? mc->bg : UI_COL_BG2); // Line
+  draw_squarec(x + sS / 2, y + sS * 0.375f, tlen, sS / 4, mc->bg ? mc->bg : UI_COL_BG2); // Line
   draw_squarec(x + xoff, y, sS, sS, mc->fg ? mc->fg : UI_COL_FG1);
 
   if (mc->flags & UI_CLICKABLE) {
@@ -896,7 +925,17 @@ uint32_t draw_slider(float x, float y, struct node *__restrict cm, struct mchild
     }
   }
 
-  return mc->height;
+  return mc->height + mc->pad;
+}
+
+uint32_t draw_tslider(float x, float y, struct node *__restrict cm, struct mchild *__restrict mc, struct mtslider *__restrict t) {
+  uint32_t h = draw_textbox(x, y, mc, &t->text);
+  mc->flags |= UI_CLICKABLE;
+  draw_slider(x + t->text.tlen + sS / 2, y + h / 3, t->slen, cm, mc, &t->slid);
+  mc->flags &= ~UI_CLICKABLE;
+  snprintf(t->val.text, sizeof(t->val.text), "%.2f", *t->slid.val);
+  draw_textbox(x + t->text.tlen + t->slen + sS + sS, y, mc, &t->val);
+  return mc->height + mc->pad;
 }
 
 void draw_node(uint32_t mi) {
@@ -909,10 +948,13 @@ void draw_node(uint32_t mi) {
     for(i = 0; i < cm.children.l; ++i) {
       switch (cm.children.v[i].id) {
         case MTEXT_BOX:
-          cy += draw_textbox(cm.px + cm.lp, cm.py + cy, cm.children.v + i) + cm.children.v[i].pad;
+          cy += draw_textbox(cm.px + cm.lp, cm.py + cy, cm.children.v + i, cm.children.v[i].c);
           break;
         case MFSLIDER:
-          cy += draw_slider(cm.px + cm.lp, cm.py + cy, &cm, cm.children.v + i) + cm.children.v[i].pad;
+          cy += draw_slider(cm.px + cm.lp, cm.py + cy, 0, &cm, cm.children.v + i, cm.children.v[i].c);
+          break;
+        case MTSLIDER:
+          cy += draw_tslider(cm.px + cm.lp, cm.py + cy, &cm, cm.children.v + i, cm.children.v[i].c);
           break;
         }
     }
@@ -1496,9 +1538,10 @@ struct cloud {
   struct i2d v2;
 };
 
+#define DRAW_CLOUDS 0b111
 void update_clouds(void *__restrict cp) {
   struct cloud *__restrict c = cp;
-  { // Perlin-worley
+  if (DRAW_CLOUDS & 0b001) { // Perlin-worley
     if (!c->t31) {
       glGenTextures(1, &c->t31);
     }
@@ -1516,7 +1559,7 @@ void update_clouds(void *__restrict cp) {
     glBindTexture(GL_TEXTURE_3D, 0);
   }
 
-  { // Worley
+  if (DRAW_CLOUDS & 0b010) { // Worley
     if (!c->t32) {
       glGenTextures(1, &c->t32);
     }
@@ -1532,7 +1575,7 @@ void update_clouds(void *__restrict cp) {
     glBindTexture(GL_TEXTURE_3D, 0);
   }
 
-  { // Curl
+  if (DRAW_CLOUDS & 0b100) { // Curl
     if (!c->t2) {
       glGenTextures(1, &c->t2);
     }
@@ -1613,9 +1656,9 @@ uint8_t run_suijin() {
     c.t31curslice = 0.0;
     c.t31wscale = 10.0;
     c.t32scale = 8.64;
-    c.t2scale = 8.64;
-    c.t2persistence = 3.46;
-    c.t2octaves = 2.1;
+    c.t2scale = 26.556;
+    c.t2persistence = 0.583;
+    c.t2octaves = 4.8;
     update_clouds(&c);
   }
 
@@ -1731,12 +1774,12 @@ uint8_t run_suijin() {
 #define TSL(node, name, namescale, var, mi, ma, fun, funp) \
       add_title(node, name, namescale, 5); \
       add_slider(node, var, mi, ma, 5, fun, funp)
-#define UI_GET_HEIGHT(res, node) { uint32_t _ch = 0; int32_t _i; for(_i = 0; _i < (node).children.l; ++_i) { _ch += (node).children.v[_i].height + (node).children.v[_i].pad; } res = _ch; }
+#define UI_GET_HEIGHT(res, node) { uint32_t _ch = 0; int32_t _i; for(_i = 0; _i < (node).children.l; ++_i) { _ch += (node).children.v[_i].height + (node).children.v[_i].pad; } res = _ch + 10; }
     prep_ui(window, &uvao);
     /*{
       mchvi(&nodes[0].children);
 
-      add_title(&nodes[0], "スプーク・プーク", 1.0f);
+      add_title(&nodes[0], "スプーク・プーク", 25, 0);
       TSL(&nodes[0], "H", 0.20f, &per.h, 0.0, 1000.0, init_therm, NULL);
       TSL(&nodes[0], "W", 0.20f, &per.w, 0.0, 1000.0, init_therm, NULL);
       TSL(&nodes[0], "Oct", 0.20f, &per.foct, 0.0f, 5.0f, init_therm, NULL);
@@ -1744,8 +1787,8 @@ uint8_t run_suijin() {
       TSL(&nodes[0], "Persistance", 0.20f, &per.per, 0.0f, 4.0f, init_therm, NULL);
       TSL(&nodes[0], "Diffusion", 0.20f, &DIFF_COEF, 0.0f, 0.2f, init_therm, NULL);
       TSL(&nodes[0], "Style", 0.20f, &per.style, 0.0f, 1.9f, init_therm, NULL);
-      nodes[1].px = 400.0f;
-      nodes[1].py = 50.0f;
+      nodes[0].px = 400.0f;
+      nodes[0].py = 50.0f;
       nodes[0].sx = 300.0f;
       nodes[0].sy = 500.0f;
       nodes[0].bp = 20;
@@ -1758,19 +1801,23 @@ uint8_t run_suijin() {
     {
       mchvi(&nodes[1].children);
       add_title(&nodes[1], "#Clouds", 25, 8);
-      TSL(&nodes[1], "pscale", 15, &c.t31pscale, 0.0, 200.0f, NULL, NULL);
-      TSL(&nodes[1], "pwscale", 15, &c.t31pwscale, 0.0, 100.0f, NULL, NULL);
-      TSL(&nodes[1], "persistence", 15, &c.t31persistence, 0.0, 4.0f, NULL, NULL);
-      TSL(&nodes[1], "octaves", 15, &c.t31octaves, 0.0, 5.0f, NULL, NULL);
-      TSL(&nodes[1], "curslice", 15, &c.t31curslice, 0.0, 1.0f, NULL, NULL);
-      TSL(&nodes[1], "wscale", 15, &c.t31wscale, 0.0, 200.0f, NULL, NULL);
-      TSL(&nodes[1], "scale", 15, &c.t32scale, 0.0, 200.0f, NULL, NULL);
-      TSL(&nodes[1], "TEXT_SIZE", 15, &TEXT_SIZE, 0.0, 60.0f, NULL, NULL);
-      TSL(&nodes[1], "colch", 15, &c.t31colCh, 0.0, 3.9f, NULL, NULL);
+      //add_tslider(&nodes[1], "#Clouds", 15, &c.t31pscale, 0.001, 200.0f, 8, NULL, NULL);
+      add_tslider(&nodes[1], "pscale", 15, &c.t31pscale, 0.001, 200.0f, 8, NULL, NULL);
+      add_tslider(&nodes[1], "pwscale", 15, &c.t31pwscale, 0.001, 200.0f, 8, NULL, NULL);
+      add_tslider(&nodes[1], "persistence", 15, &c.t31persistence, 0.0, 4.0f, 8, NULL, NULL);
+      add_tslider(&nodes[1], "octaves", 15, &c.t31octaves, 0.0, 5.0f, 8, NULL, NULL);
+      add_tslider(&nodes[1], "curslice", 15, &c.t31curslice, 0.0, 1.0f, 8, NULL, NULL);
+      add_tslider(&nodes[1], "wscale", 15, &c.t31wscale, 0.001, 10.0f, 8, NULL, NULL);
+      add_tslider(&nodes[1], "scale", 15, &c.t32scale, 0.0, 200.0f, 8, NULL, NULL);
+      add_tslider(&nodes[1], "TEXT_SIZE", 15, &TEXT_SIZE, 0.0, 60.0f, 8, NULL, NULL);
+      add_tslider(&nodes[1], "colch", 15, &c.t31colCh, 0.0, 3.9f, 8, NULL, NULL);
+      add_tslider(&nodes[1], "t2scale", 15, &c.t2scale, 0.001, 30.0f, 8, update_clouds, &c);
+      add_tslider(&nodes[1], "t2persistence", 15, &c.t2persistence, 0.0, 4.0f, 8, update_clouds, &c);
+      add_tslider(&nodes[1], "t2octaves", 15, &c.t2octaves, 0.0, 5.0f, 8, update_clouds, &c);
       add_button(&nodes[1], "Update", 0xFF0000FF, 20, 10, update_clouds, &c);
       nodes[1].px = 400.0f;
       nodes[1].py = 50.0f;
-      nodes[1].sx = 300.0f;
+      nodes[1].sx = 400.0f;
       UI_GET_HEIGHT(nodes[1].sy, nodes[1]);
       nodes[1].bp = 0;
       nodes[1].tp = 0;
@@ -1929,7 +1976,7 @@ uint8_t run_suijin() {
       glDisable(GL_DEPTH_TEST);
 
       int32_t i;
-      for(i = 1; i < MC; ++i) {
+      for(i = 0; i < MC; ++i) {
         draw_node(i);
       }
       // if (selui.t == UIT_CAN) { selui.t = UIT_CANNOT; }

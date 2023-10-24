@@ -561,11 +561,13 @@ void noise_curl3(uint32_t h, uint32_t w, uint32_t octaves, float persistence, fl
   {
     int32_t i, j;
     float eps = 0.01;
+#define CURLA 3
+#define CURLB 0.5
     for (i = 0; i < h; ++i) {
       for (j = 0; j < w; ++j) {
-        G(im->v, i, j, w).r = (octave_perlin(i / scale, (j + eps) / scale, 0.0f, octaves, persistence) - octave_perlin(i / scale, (j - eps) / scale, 0.0f, octaves, persistence)) / (2 * eps);
-        G(im->v, i, j, w).g = (octave_perlin((i + eps) / scale, j / scale, 0.0f, octaves, persistence) - octave_perlin((i - eps) / scale, j / scale, 0.0f, octaves, persistence)) / (2 * eps);
-        G(im->v, i, j, w).b = (octave_perlin(i / scale, j / scale, eps / scale, octaves, persistence) - octave_perlin(i / scale, j / scale, -eps / scale, octaves, persistence)) / (2 * eps);
+        G(im->v, i, j, w).r = (octave_perlin(i / scale, (j + eps) / scale, 0.0f, octaves, persistence) - octave_perlin(i / scale, (j - eps) / scale, 0.0f, octaves, persistence)) / (2 * eps) * CURLA + CURLB;
+        G(im->v, i, j, w).g = (octave_perlin((i + eps) / scale, j / scale, 0.0f, octaves, persistence) - octave_perlin((i - eps) / scale, j / scale, 0.0f, octaves, persistence)) / (2 * eps) * CURLA + CURLB;
+        G(im->v, i, j, w).b = (octave_perlin(0.0f, i / scale, (j + eps) / scale, octaves, persistence) - octave_perlin(0.0f, i / scale, j / scale, octaves, persistence)) / (2 * eps) * CURLA + CURLB;
       }
     }
   }
