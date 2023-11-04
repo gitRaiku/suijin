@@ -660,7 +660,6 @@ void create_affine_matrix(mat4 m, float xs, float ys, float zs, float x, float y
 
 uint32_t uvao, uprog, lprog, pprog; // Draw Square
 void draw_squaret(float px, float py, float sx, float sy, uint32_t tex, int32_t type) {
-  glUseProgram(uprog);
   mat4 aff;
   glUseProgram(uprog);
   glBindVertexArray(uvao);
@@ -670,11 +669,12 @@ void draw_squaret(float px, float py, float sx, float sy, uint32_t tex, int32_t 
   program_set_mat4(uprog, "affine", aff);
 
   if (tex) {
-    glActiveTexture(GL_TEXTURE0);
+    glActiveTexture(GL_TEXTURE2);
     glBindTexture(GL_TEXTURE_2D, tex);
-    program_set_int1(uprog, "tex", 0);
+    program_set_int1(uprog, "tex", 2);
     program_set_int1(uprog, "type", type);
   } else {
+    program_set_float4(uprog, "col", 0.0f, 0.0f, 0.0f, 1.0f);
     program_set_int1(uprog, "type", 0);
   }
 
@@ -718,8 +718,6 @@ void draw_squaret3(float px, float py, float sx, float sy, uint32_t tex, int32_t
   program_set_float1(uprog, "z", z);
 
   glDrawArrays(GL_TRIANGLE_FAN, 0, 4);
-  glBindVertexArray(0);
-  glUseProgram(0);
 }
 
 void draw_squarec(float px, float py, float sx, float sy, uint32_t col) {
@@ -1538,8 +1536,9 @@ struct cloud {
   struct i2d v2;
 };
 
-#define DRAW_CLOUDS 0b111
+#define DRAW_CLOUDS 0b001
 void update_clouds(void *__restrict cp) {
+  TIME(
   struct cloud *__restrict c = cp;
   if (DRAW_CLOUDS & 0b001) { // Perlin-worley
     if (!c->t31) {
@@ -1590,6 +1589,9 @@ void update_clouds(void *__restrict cp) {
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
     glBindTexture(GL_TEXTURE_2D, 0);
   }
+  , "Clouds");
+  //fprintf(stdout, "Time: %li\n", (ed.tv_sec - st.tv_sec) * 1000 + (ed.tv_usec - st.tv_usec) / 1000);
+  fprintf(stdout, "Finish updating\n");
 }
 
 uint8_t rayHit(v3 s, v3 d, float dist, uint32_t mask) {
@@ -1972,7 +1974,9 @@ uint8_t run_suijin() {
       draw_squaret((windowW - 500) / 2, (windowH - 500) / 2 + 275, 500, 500, c.t2, 9);
     }
 
+
     if (drawUi) { // UPROG
+      glUseProgram(uprog);
       glDisable(GL_DEPTH_TEST);
 
       int32_t i;
@@ -1992,8 +1996,6 @@ uint8_t run_suijin() {
         }
       }
     }
-
-
 
     glfwPollEvents();
     glfwSwapBuffers(window);

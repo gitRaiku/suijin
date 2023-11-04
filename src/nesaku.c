@@ -1,6 +1,6 @@
 #include "nesaku.h"
 
-float pscale = 0.002f;
+struct rthread threads[THREAD_COUNT];
 
 float rf() {
   return (float)rand() / (float)RAND_MAX;
@@ -159,8 +159,45 @@ float gnear3(uint32_t x, uint32_t y, uint32_t z, float scale, v3 *__restrict pts
   }
 #undef CHCK
 
-  //return 1 - clamp(scale * pscale * sqrtf(md), 0.0f, 1.0f);
   return 1 - clamp(sqrtf(md * 0.5) / scale, 0.0f, 1.0f);
+}
+
+#define FFF(o1, o2, o3, o4, o5, o6, c) {int32_t x, y, z; for (z = o1; z < o2; ++z) { for (y = o3; y < o4; ++y) { for (x = o5; x < o6; ++x) { c } } } }
+#define GA(n, t) t n; n = va_arg(v->ap, t);
+void *tmkpoints(void *vp) { struct rthread *v = (struct rthread*)vp; uint32_t sz = v->sz; uint32_t ez = v->ez; GA(sx, uint32_t); GA(ex, uint32_t); GA(sy, uint32_t); GA(ey, uint32_t); GA(pts, v3*__restrict); GA(scale, double); FFF(sz, ez, sy, ey, sx, ex, D(pts, x, y, z, ex, ey).x = (x + rf()) * scale; D(pts, x, y, z, ex, ey).y = (y + rf()) * scale; D(pts, x, y, z, ex, ey).z = (z + rf()) * scale;); return NULL; }
+
+void *tmkw3d(void *vp) { struct rthread *v = (struct rthread*)vp;  uint32_t d = v->ez; GA(h, uint32_t); GA(w, uint32_t); GA(imv, float*); GA(pts, v3*__restrict); GA(udx, uint32_t); GA(udy, uint32_t); GA(udz, uint32_t); GA(scale, double); FFF(v->sz, d, 0, h, 0, w, D(imv, x, y, z, h, w) = gnear3(x, y, z, scale, pts, udx, udy, udz);); return NULL;}
+
+uint8_t AAAAAAAAAA = 0;
+void init_threads(void *(*callback)(void *), uint32_t sz, uint32_t ez, ...) {
+  if (AAAAAAAAAA) { fprintf(stdout, "STARTING THREADS EZ\n"); }
+  int32_t i;
+  pthread_attr_t attr;
+  PCH(pthread_attr_init(&attr));
+  uint32_t dif = (ez - sz + THREAD_COUNT - 1) / THREAD_COUNT;
+  for(i = 0; i < THREAD_COUNT; ++i) {
+    if (i < THREAD_COUNT - 1) {
+      threads[i].sz = sz + dif * i;
+      threads[i].ez = sz + dif * (i + 1);
+    } else {
+      threads[i].sz = sz + dif * i;
+      threads[i].ez = ez;
+    }
+    if (threads[i].sz >= ez) { threads[i].id = 0; continue; }
+    if (threads[i].ez > ez) { threads[i].ez = ez; }
+    if (threads[i].sz == threads[i].ez) { threads[i].id = 0; continue; }
+
+    va_start(threads[i].ap, ez);
+    PCH(pthread_create(&threads[i].id, &attr, callback, threads + i));
+    if (AAAAAAAAAA) {fprintf(stdout, "Create thread %lu %u->%u/%u\n", threads[i].id, threads[i].sz, threads[i].ez, ez);}
+  }
+  PCH(pthread_attr_destroy(&attr));
+  for(i = 0; i < THREAD_COUNT; ++i) {
+    if (threads[i].id) {
+      PCH(pthread_join(threads[i].id, NULL));
+      va_end(threads[i].ap);
+    }
+  }
 }
 
 void noise_w3d(uint32_t h, uint32_t w, uint32_t d, float scale, struct i3df *__restrict im) {
@@ -184,26 +221,8 @@ void noise_w3d(uint32_t h, uint32_t w, uint32_t d, float scale, struct i3df *__r
 
   v3 *__restrict pts = calloc(sizeof(v3), udx * udy * udz);
 
-  {
-    int32_t i, j, k;
-    for (i = 0; i < udx; ++i) {
-      for (j = 0; j < udy; ++j) {
-        for (k = 0; k < udz; ++k) {
-          D(pts, i, j, k, udx, udy).x = (i + rf()) * scale;
-          D(pts, i, j, k, udx, udy).y = (j + rf()) * scale;
-          D(pts, i, j, k, udx, udy).z = (k + rf()) * scale;
-        }
-      }
-    }
-    for (k = 0; k < d; ++k) {
-      for (j = 0; j < h; ++j) {
-        for (i = 0; i < w; ++i) {
-          //fprintf(stdout, "%u/%u %u/%u %u/%u\n", i, h, j, w, k, d);
-          D(im->v, i, j, k, h, w) = gnear3(i, j, k, scale, pts, udx, udy, udz);
-        }
-      }
-    }
-  }
+  init_threads(tmkpoints, 0, udz, 0, udx, 0, udy, pts, (double)scale);
+  init_threads(tmkw3d, 0, w, h, d, im->v, pts, udx, udy, udz, (double)scale);
 }
 
 float dist2(float x, float y, v2 v) {
@@ -249,6 +268,7 @@ float gnear2(uint32_t x, uint32_t y, float scale, v2 *__restrict pts, uint32_t u
     }
   }
 
+  float pscale = 0.002f;
   return 1 - clamp(scale * pscale * sqrtf(md), 0.0f, 1.0f);
 }
 
@@ -453,110 +473,90 @@ void noise_p3d(uint32_t h, uint32_t w, uint32_t d, uint32_t octaves, float persi
 
 float pwb(float p, float w) { /// TODO: Make nicer
   return w - w * p;
+  //return w * p;
 }
+
+void *tmkpw3d(void *vp) {  struct rthread *v = (struct rthread*)vp; uint32_t d = v->ez; GA(h, uint32_t); GA(w, uint32_t); GA(imv, float*); GA(pscale, double); GA(octaves, uint32_t); GA(persistence, double); FFF(v->sz, d, 0, h, 0, w, D(imv, x, y, z, w, h) = pwb(octave_perlin(x / pscale, y / pscale, z / pscale, octaves, persistence), D(imv, x, y, z, w, h));); return NULL; }
 
 void noise_pw3d(uint32_t h, uint32_t w, uint32_t d, uint32_t octaves, float persistence, float pscale, float wscale, struct i3df *__restrict im) {
   noise_w3d(h, w, d, wscale, im);
+  init_threads(tmkpw3d, 0, d, h, w, im->v, (double)pscale, octaves, (double)persistence);
+}
 
-  int32_t i, j, k;
-  for (i = 0; i < h; ++i) {
-    for (j = 0; j < w; ++j) {
-      for (k = 0; k < d; ++k) {
-        D(im->v, i, j, k, w, h) = pwb(octave_perlin(i / pscale, j / pscale, k / pscale, octaves, persistence), D(im->v, i, j, k, w, h));
-      }
-    }
-  }
+void *tmkcloud3(void *vp) { 
+  struct rthread *v = (struct rthread*)vp; 
+  uint32_t d = v->ez; 
+  GA(h, uint32_t); 
+  GA(w, uint32_t); 
+  GA(imv, struct rgba*); 
+  GA(pw, float*); 
+  GA(w1, float*); 
+  GA(w2, float*); 
+  GA(w3, float*); 
+
+  FFF(v->sz, d, 0, h, 0, w, 
+          D(imv, x, y, z, h, w).r = D(pw, x, y, z, h, w);
+          D(imv, x, y, z, h, w).g = D(w1, x, y, z, h, w);
+          D(imv, x, y, z, h, w).b = D(w2, x, y, z, h, w);
+          D(imv, x, y, z, h, w).a = D(w3, x, y, z, h, w);
+     );
+
+  return NULL;
 }
 
 void noise_cloud3(uint32_t h, uint32_t w, uint32_t d, uint32_t octaves, float persistence, float pscale, float pwscale, float wscale, struct i3da *__restrict im) {
-  if (im == NULL) {
-    im = calloc(sizeof(*im), 1);
-  }
+  if (im == NULL) { im = calloc(sizeof(*im), 1); }
 
-  im->h = h;
-  im->w = w;
-  im->d = d;
-  if (im->v == NULL) {
-    im->v = calloc(sizeof(im->v[0]), h * w * d);
-  }
+  im->h = h; im->w = w; im->d = d;
+  if (im->v == NULL) { im->v = calloc(sizeof(im->v[0]), h * w * d); }
 
-  struct i3df pw = {0};
-  struct i3df w1 = {0};
-  struct i3df w2 = {0};
-  struct i3df w3 = {0};
+  struct i3df pw = {0}, w1 = {0}, w2 = {0}, w3 = {0} ;
+  TIME(noise_pw3d(h, w, d, octaves, persistence, pscale, pwscale, &pw);,"pw")
+  TIME(noise_w3d(h, w, d, wscale / 1.0, &w1);,"w1") 
+  TIME(noise_w3d(h, w, d, wscale / 1.6, &w2);,"w2") 
+  TIME(noise_w3d(h, w, d, wscale / 2.2, &w3);,"w3")
+  AAAAAAAAAA = 1;
+  TIME(init_threads(tmkcloud3, 0, d, h, w, im->v, pw.v, w1.v, w2.v, w3.v);,"IT")
+  AAAAAAAAAA = 0;
+  free(pw.v); free(w1.v); free(w2.v); free(w3.v);
+}
 
-  noise_pw3d(h, w, d, octaves, persistence, pscale, pwscale, &pw);
-  noise_w3d(h, w, d, wscale / 1.0, &w1);
-  noise_w3d(h, w, d, wscale / 1.6, &w2);
-  noise_w3d(h, w, d, wscale / 2.2, &w3);
+void *tmkworl3(void *vp) { 
+  struct rthread *v = (struct rthread*)vp; 
+  uint32_t d = v->ez; 
+  GA(h, uint32_t); 
+  GA(w, uint32_t); 
+  GA(imv, struct fcol*); 
+  GA(w1, float*); 
+  GA(w2, float*); 
+  GA(w3, float*); 
 
-  {
-    int32_t i, j, k;
-    for (i = 0; i < h; ++i) {
-      for (j = 0; j < w; ++j) {
-        for (k = 0; k < d; ++k) {
-          D(im->v, i, j, k, h, w).r = D(pw.v, i, j, k, h, w);
-          D(im->v, i, j, k, h, w).g = D(w1.v, i, j, k, h, w);
-          D(im->v, i, j, k, h, w).b = D(w2.v, i, j, k, h, w);
-          D(im->v, i, j, k, h, w).a = D(w3.v, i, j, k, h, w);
-        }
-      }
-    }
-  }
+  FFF(v->sz, d, 0, h, 0, w, 
+          D(imv, x, y, z, h, w).r = D(w1, x, y, z, h, w);
+          D(imv, x, y, z, h, w).g = D(w2, x, y, z, h, w);
+          D(imv, x, y, z, h, w).b = D(w3, x, y, z, h, w);
+     );
 
-  free(pw.v);
-  free(w1.v);
-  free(w2.v);
-  free(w3.v);
+  return NULL;
 }
 
 void noise_worl3(uint32_t h, uint32_t w, uint32_t d, float scale, struct i3d *__restrict im) {
-  if (im == NULL) {
-    im = calloc(sizeof(*im), 1);
-  }
+  if (im == NULL) { im = calloc(sizeof(*im), 1); }
 
-  im->h = h;
-  im->w = w;
-  im->d = d;
-  if (im->v == NULL) {
-    im->v = calloc(sizeof(im->v[0]), h * w * d);
-  }
+  im->h = h; im->w = w; im->d = d;
+  if (im->v == NULL) { im->v = calloc(sizeof(im->v[0]), h * w * d); }
 
-  struct i3df w1 = {0};
-  struct i3df w2 = {0};
-  struct i3df w3 = {0};
-  noise_w3d(h, w, d, scale / 1.0, &w1);
-  noise_w3d(h, w, d, scale / 2.0, &w2);
-  noise_w3d(h, w, d, scale / 3.0, &w3);
+  struct i3df w1 = {0}, w2 = {0}, w3 = {0};
+  noise_w3d(h, w, d, scale / 1.0, &w1); noise_w3d(h, w, d, scale / 2.0, &w2); noise_w3d(h, w, d, scale / 3.0, &w3);
 
-  {
-    int32_t i, j, k;
-    for (i = 0; i < h; ++i) {
-      for (j = 0; j < w; ++j) {
-        for (k = 0; k < d; ++k) {
-          D(im->v, i, j, k, h, w).r = D(w1.v, i, j, k, h, w);
-          D(im->v, i, j, k, h, w).g = D(w2.v, i, j, k, h, w);
-          D(im->v, i, j, k, h, w).b = D(w3.v, i, j, k, h, w);
-        }
-      }
-    }
-  }
-
-  free(w1.v);
-  free(w2.v);
-  free(w3.v);
+  init_threads(tmkworl3, 0, d, h, w, im->v, w1.v, w2.v, w3.v);
+  free(w1.v); free(w2.v); free(w3.v);
 }
 
 void noise_curl3(uint32_t h, uint32_t w, uint32_t octaves, float persistence, float scale, struct i2d *__restrict im) { /// TODO: Be more efficient
-  if (im == NULL) {
-    im = calloc(sizeof(*im), 1);
-  }
-
-  im->h = h;
-  im->w = w;
-  if (im->v == NULL) {
-    im->v = calloc(sizeof(im->v[0]), h * w);
-  }
+  if (im == NULL) { im = calloc(sizeof(*im), 1); }
+  im->h = h; im->w = w;
+  if (im->v == NULL) { im->v = calloc(sizeof(im->v[0]), h * w); }
 
   {
     int32_t i, j;
