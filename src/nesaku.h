@@ -86,6 +86,13 @@ struct i3d {
   struct fcol *__restrict v;
 };
 
+struct i2da {
+  uint32_t h;
+  uint32_t w;
+  uint32_t d;
+  struct rgba *__restrict v;
+};
+
 struct i3da {
   uint32_t h;
   uint32_t w;
@@ -112,5 +119,9 @@ void noise_cloud3(uint32_t h, uint32_t w, uint32_t d, uint32_t octaves, float pe
 void noise_worl3(uint32_t h, uint32_t w, uint32_t d, float scale, struct i3d *__restrict im);
 
 void noise_curl3(uint32_t h, uint32_t w, uint32_t octaves, float persistence, float scale, struct i2d *__restrict im);
+
+uint32_t create_image24(uint32_t w, uint32_t h);
+uint32_t create_image34(uint32_t w, uint32_t h, uint32_t d);
+uint32_t create_image33(uint32_t w, uint32_t h, uint32_t d);
 
 #endif

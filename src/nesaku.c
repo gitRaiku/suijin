@@ -572,3 +572,19 @@ void noise_curl3(uint32_t h, uint32_t w, uint32_t octaves, float persistence, fl
     }
   }
 }
+#define CIMG(A, B, ...) \
+  uint32_t texture; \
+  glGenTextures(1, &texture); \
+  glActiveTexture(GL_TEXTURE0); \
+  glBindTexture(GL_TEXTURE_ ##A, texture); \
+  glTexParameteri(GL_TEXTURE_ ##A, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE); \
+  glTexParameteri(GL_TEXTURE_ ##A, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE); \
+  glTexParameteri(GL_TEXTURE_ ##A, GL_TEXTURE_MAG_FILTER, GL_LINEAR); \
+  glTexParameteri(GL_TEXTURE_ ##A, GL_TEXTURE_MIN_FILTER, GL_LINEAR); \
+  glTexImage ##A(GL_TEXTURE_ ##A, 0, B ##32F, __VA_ARGS__, 0, B, GL_FLOAT, NULL); \
+  glBindImageTexture(0, texture, 0, GL_FALSE, 0, GL_READ_WRITE, B ##32F); \
+  return texture;
+
+uint32_t create_image24(uint32_t w, uint32_t h) { CIMG(2D, GL_RGBA, w, h); }
+uint32_t create_image34(uint32_t w, uint32_t h, uint32_t d) { CIMG(3D, GL_RGBA, w, h, d) }
+uint32_t create_image33(uint32_t w, uint32_t h, uint32_t d) { CIMG(3D, GL_RGB, w, h, d) }

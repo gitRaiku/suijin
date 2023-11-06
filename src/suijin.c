@@ -37,7 +37,7 @@ double deltaTime;
 
 uint8_t drawObjs = 1;
 uint8_t drawTerm = 0;
-uint8_t drawClouds = 1;
+uint8_t drawClouds = 0;
 uint8_t drawUi = 1;
 uint8_t drawBb = 0;
 
@@ -165,6 +165,7 @@ GLFWwindow *window_init() {
 
     glfwSetFramebufferSizeCallback(window, callback_window_resize);
     glfwSetWindowCloseCallback(window, callback_window_should_close);
+    glfwSwapInterval(0);
 
 #ifdef SUIJIN_DEBUG
     {
@@ -1624,6 +1625,22 @@ void messageCallback(GLenum source, GLenum type, GLuint id, GLenum severity, GLs
   fprintf(stderr, "GL CALLBACK: %s id = 0x%x, type = 0x%x,\n\tseverity = 0x%x, message = %s\n", (type==GL_DEBUG_TYPE_ERROR?"** GL ERROR **":""), id, type, severity, message); 
 }
 
+uint32_t compShader, compProg, compTex;
+uint8_t prep_compute_shader() {
+  PR_CHECK(shader_get("shaders/worley_compute.glsl", GL_COMPUTE_SHADER, &compShader))
+  PR_CHECK(program_get(1, &compShader, &compProg))
+  compTex = create_image24(128, 128);
+  return 0;
+}
+
+void compute_shader() {
+  glUseProgram(compProg);
+  glActiveTexture(GL_TEXTURE0);
+  glBindTexture(GL_TEXTURE_2D, compTex);
+  glDispatchCompute(128, 128, 1);
+  glMemoryBarrier(GL_SHADER_IMAGE_ACCESS_BARRIER_BIT);
+}
+
 uint8_t run_suijin() {
   init_random();
   reset_ft();
@@ -1734,7 +1751,10 @@ uint8_t run_suijin() {
       glDeleteShader(shaders[i * 2]);
       glDeleteShader(shaders[i * 2 + 1]);
     }
+    prep_compute_shader();
   }
+
+
 
   uint32_t pvao, pvbo; /// Points
   { 
@@ -1855,10 +1875,16 @@ uint8_t run_suijin() {
   _ctime = _ltime = deltaTime = 0;
   glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
 
+  double dt = 0;
   while (!glfwWindowShouldClose(window)) {
     ++frame;
     _ctime = glfwGetTime();
     deltaTime = _ctime - _ltime;
+    dt += deltaTime;
+    if (frame % 60 == 0) {
+      fprintf(stdout, "Frametime %f       \r", 60 / dt);
+      dt = 0;
+    }
 
     glClearColor(0.2f, 0.2f, 0.2f, 1.0f);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
@@ -1972,6 +1998,9 @@ uint8_t run_suijin() {
       draw_squaret3((windowW - 500) / 2 - 275, (windowH - 500) / 2 - 275, 500, 500, c.t31, 8, c.t31curslice);
       draw_squaret3((windowW - 500) / 2 + 275, (windowH - 500) / 2 - 275, 500, 500, c.t32, 8, c.t31curslice);
       draw_squaret((windowW - 500) / 2, (windowH - 500) / 2 + 275, 500, 500, c.t2, 9);
+    } else {
+      compute_shader();
+      draw_squaret((windowW - 500) / 2, (windowH - 500) / 2, 500, 500, compTex, 10);
     }
 
 
