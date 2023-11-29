@@ -15,6 +15,8 @@ uniform int type; // 0: No Texture, colour only
                   // 2: 2d Heat colours
                   //
                   // 8: 3d
+                  // 9: 2d with channel
+                  // 10: 2d
 
 vec3 h2c3(int c, int x) {
   return vec3(((c & 0xFF00) >> 8) / 255.0f, ((c & 0x00FF) >>  0) / 255.0f, ((x & 0x00FF) >>  0) / 255.0f);

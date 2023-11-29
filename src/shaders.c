@@ -111,6 +111,11 @@ void program_set_int1(uint32_t program, const char *uniform_name, int32_t val1) 
     glUniform1i(uniform_loc, val1);
 }
 
+void program_set_uint1(uint32_t program, const char *uniform_name, uint32_t val1) {
+    uint32_t uniform_loc = glGetUniformLocation(program, uniform_name);
+    glUniform1ui(uniform_loc, val1);
+}
+
 void program_set_mat3(uint32_t program, const char *uniform_name, mat3 val1) {
     uint32_t uniform_loc = glGetUniformLocation(program, uniform_name);
     glUniformMatrix3fv(uniform_loc, 1, GL_TRUE, &val1[0][0]);
@@ -119,4 +124,9 @@ void program_set_mat3(uint32_t program, const char *uniform_name, mat3 val1) {
 void program_set_mat4(uint32_t program, const char *uniform_name, mat4 val1) {
     uint32_t uniform_loc = glGetUniformLocation(program, uniform_name);
     glUniformMatrix4fv(uniform_loc, 1, GL_TRUE, &val1[0][0]);
+}
+
+void program_set_floatv(uint32_t program, const char *uniform_name, uint32_t len, float *__restrict a) {
+    uint32_t uniform_loc = glGetUniformLocation(program, uniform_name);
+    glUniform1fv(uniform_loc, len, a);
 }

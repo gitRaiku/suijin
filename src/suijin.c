@@ -27,7 +27,7 @@
 
 #define EPS 0.0000000001
 
-float DELETE_ME;
+float DELETE_ME; /// TODO: Delete
 
 #define OUTSIDE_TEMP 0.1f
 float DIFF_COEF = 0.05f;
@@ -38,7 +38,7 @@ double deltaTime;
 uint8_t drawObjs = 1;
 uint8_t drawTerm = 0;
 uint8_t drawClouds = 0;
-uint8_t drawUi = 1;
+uint8_t drawUi = 0;
 uint8_t drawBb = 0;
 
 struct objv objs;
@@ -811,7 +811,7 @@ uint64_t invc(uint64_t c) {
 }
 
 float TEXT_SIZE = 20.0;
-uint32_t draw_textbox(float x, uint32_t y, struct mchild *__restrict mc, struct tbox *__restrict t) {
+uint32_t draw_textbox(float x, uint32_t y, struct mchild *__restrict mc, struct tbox *__restrict t) { /// MAKE EFFICIENT
   uint32_t px = 0;
   FT_UInt gi;
   FT_GlyphSlot slot = ftface->glyph;
@@ -908,7 +908,7 @@ uint32_t draw_slider(float x, float y, uint32_t tlen, struct node *__restrict cm
 
   if (mc->flags & UI_CLICKABLE) {
     if (selui.t == UIT_CAN && ui_pointer_in(x + xoff, y, sS, sS)) {
-      fprintf(stdout, "Hit slider %p\n", t);
+      //fprintf(stdout, "Hit slider %p\n", t);
       selui.t = UIT_SLIDERK;
       selui.id.fp = t;
       selui.dx = mouseX;
@@ -917,7 +917,7 @@ uint32_t draw_slider(float x, float y, uint32_t tlen, struct node *__restrict cm
 
     if (selui.t == UIT_SLIDERK && selui.id.fp == t) {
       *t->val = clamp(selui.dy + (mouseX - selui.dx) / tlen * rlen, t->lims.x, t->lims.y);
-      fprintf(stdout, "%f\n", *t->val);
+      //fprintf(stdout, "%f\n", *t->val);
       if (mc->callback != NULL && mouseX != selui.dx) {
         mc->callback(mc->cbp);
       }
@@ -1537,7 +1537,7 @@ struct cloud {
   struct i2d v2;
 };
 
-#define DRAW_CLOUDS 0b001
+#define DRAW_CLOUDS 0b111
 void update_clouds(void *__restrict cp) {
   TIME(
   struct cloud *__restrict c = cp;
@@ -1625,20 +1625,54 @@ void messageCallback(GLenum source, GLenum type, GLuint id, GLenum severity, GLs
   fprintf(stderr, "GL CALLBACK: %s id = 0x%x, type = 0x%x,\n\tseverity = 0x%x, message = %s\n", (type==GL_DEBUG_TYPE_ERROR?"** GL ERROR **":""), id, type, severity, message); 
 }
 
-uint32_t compShader, compProg, compTex;
+uint32_t wpCompS, wpComp, wCompS, wComp, compTex, wbuf;
 uint8_t prep_compute_shader() {
-  PR_CHECK(shader_get("shaders/worley_compute.glsl", GL_COMPUTE_SHADER, &compShader))
-  PR_CHECK(program_get(1, &compShader, &compProg))
+  PR_CHECK(shader_get("shaders/worley_points_compute.glsl", GL_COMPUTE_SHADER, &wpCompS))
+  PR_CHECK(program_get(1, &wpCompS, &wpComp))
+  PR_CHECK(shader_get("shaders/worley_compute.glsl", GL_COMPUTE_SHADER, &wCompS))
+  PR_CHECK(program_get(1, &wCompS, &wComp))
+  glGenBuffers(1, &wbuf);
+  glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, wbuf);
+  glBufferData(GL_SHADER_STORAGE_BUFFER, 130 * 130 * 2 * 4, NULL, GL_STATIC_READ);
+
   compTex = create_image24(128, 128);
   return 0;
 }
-
+float cccx = 2, cccy = 2;
+float scale = 30.0;
+float KMSKMS = 0.2;
 void compute_shader() {
-  glUseProgram(compProg);
-  glActiveTexture(GL_TEXTURE0);
-  glBindTexture(GL_TEXTURE_2D, compTex);
-  glDispatchCompute(128, 128, 1);
-  glMemoryBarrier(GL_SHADER_IMAGE_ACCESS_BARRIER_BIT);
+  glUseProgram(wpComp);
+  uint32_t w = 128;
+  uint32_t h = 128;
+  uint32_t udx = (uint32_t)(w / scale) + 2;
+  uint32_t udy = (uint32_t)(h / scale) + 2;
+  program_set_uint1(wpComp, "dimensions", 2);
+  //program_set_float1(wpComp, "seed",((float)rand() / (float)RAND_MAX) * 255.0f);
+  program_set_float1(wpComp, "seed", 1.0);
+  program_set_uint1(wpComp, "udx", udx);
+  program_set_float1(wpComp, "scale", scale);
+  glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, wbuf);
+  glDispatchCompute(udx, udy, 1);
+  glMemoryBarrier(0);
+  
+
+  fprintf(stdout, "%u %u\n", udx, udy); float kmskmsm[129 * 129 * 2] = {0.0}; glGetBufferSubData(GL_SHADER_STORAGE_BUFFER, 0, 128 * 128 * 2, kmskmsm); { int32_t i, j; for (i = 0; i < 6; ++i) { for (j = 0; j < 6; ++j) { fprintf(stdout, "%.2fx%.2f ", kmskmsm[(i * udx + j) * 2], kmskmsm[(i * udx + j) * 2 + 1]); } fputc('\n', stdout);} fputc('\n', stdout); fputc('\n', stdout); fputc('\n', stdout); }
+
+  glUseProgram(wComp);
+  program_set_uint1(wComp, "udx", udx);
+  program_set_uint1(wComp, "ccx", (uint32_t)cccx);
+  program_set_uint1(wComp, "ccy", (uint32_t)cccy);
+  program_set_uint1(wComp, "dimensions", 2);
+  program_set_uint1(wComp, "h", 128);
+  program_set_uint1(wComp, "w", 128);
+  program_set_uint1(wComp, "KMSKMS", (uint32_t)KMSKMS);
+  program_set_float1(wComp, "scale", scale);
+  glBindImageTexture(0, compTex, 0, GL_FALSE, 0, GL_READ_WRITE, GL_RGBA32F);
+  glDispatchCompute(w, h, 1);
+  glMemoryBarrier(0);
+
+  draw_squaret((windowW - 500) / 2, (windowH - 500) / 2, 500, 500, compTex, 10);
 }
 
 uint8_t run_suijin() {
@@ -1678,7 +1712,7 @@ uint8_t run_suijin() {
     c.t2scale = 26.556;
     c.t2persistence = 0.583;
     c.t2octaves = 4.8;
-    update_clouds(&c);
+    //update_clouds(&c);
   }
 
   { /// Asset loading
@@ -1751,7 +1785,9 @@ uint8_t run_suijin() {
       glDeleteShader(shaders[i * 2]);
       glDeleteShader(shaders[i * 2 + 1]);
     }
-    prep_compute_shader();
+    if (prep_compute_shader()) {
+      exit(1);
+    }
   }
 
 
@@ -1824,6 +1860,10 @@ uint8_t run_suijin() {
       mchvi(&nodes[1].children);
       add_title(&nodes[1], "#Clouds", 25, 8);
       //add_tslider(&nodes[1], "#Clouds", 15, &c.t31pscale, 0.001, 200.0f, 8, NULL, NULL);
+      add_tslider(&nodes[1], "cccx", 15, &cccx, 0.001, 5.1f, 8, NULL, NULL);
+      add_tslider(&nodes[1], "cccy", 15, &cccy, 0.001, 5.1f, 8, NULL, NULL);
+      add_tslider(&nodes[1], "KMSKMS", 15, &KMSKMS, 0.1, 2.1f, 8, NULL, NULL);
+      add_tslider(&nodes[1], "cccscale", 15, &scale, 1.0, 60.0f, 8, NULL, NULL);
       add_tslider(&nodes[1], "pscale", 15, &c.t31pscale, 0.001, 200.0f, 8, NULL, NULL);
       add_tslider(&nodes[1], "pwscale", 15, &c.t31pwscale, 0.001, 200.0f, 8, NULL, NULL);
       add_tslider(&nodes[1], "persistence", 15, &c.t31persistence, 0.0, 4.0f, 8, NULL, NULL);
@@ -2000,7 +2040,7 @@ uint8_t run_suijin() {
       draw_squaret((windowW - 500) / 2, (windowH - 500) / 2 + 275, 500, 500, c.t2, 9);
     } else {
       compute_shader();
-      draw_squaret((windowW - 500) / 2, (windowH - 500) / 2, 500, 500, compTex, 10);
+      //draw_squaret((windowW - 500) / 2, (windowH - 500) / 2, 500, 500, compTex, 10);
     }
 
 
