@@ -585,6 +585,7 @@ void noise_curl3(uint32_t h, uint32_t w, uint32_t octaves, float persistence, fl
   glBindImageTexture(0, texture, 0, GL_FALSE, 0, GL_READ_WRITE, B ##32F); \
   return texture;
 
+
 uint32_t create_image24(uint32_t w, uint32_t h) { CIMG(2D, GL_RGBA, w, h); }
 uint32_t create_image34(uint32_t w, uint32_t h, uint32_t d) { CIMG(3D, GL_RGBA, w, h, d) }
 uint32_t create_image33(uint32_t w, uint32_t h, uint32_t d) { CIMG(3D, GL_RGB, w, h, d) }

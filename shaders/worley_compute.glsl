@@ -48,34 +48,6 @@ float gnoise(vec2 xy) { return fract(sin(distance(vec2(xy.x * PHI + 9.124 * seed
 
 uniform uint KMSKMS = 0;
 
-float gnear2(uint x, uint y, uint udx, uint udy) {
-  uint ux = uint(x / scale);
-  uint uy = uint(y / scale);
-  float md = 99999999999999.9;
-
-  if (KMSKMS == 1) { return gnoise(vec2(ux + 10, uy + 1241)); }
-  else if (KMSKMS == 2) { 
-    //vec2 p = vec2(D(pts.a, ux + ccx, uy, udx, 0), 
-                  //D(pts.a, ux + ccx, uy, udx, 1));
-    vec2 p = vec2(D(pts.a, ccx, ccy, udx, 0), 
-                  D(pts.a, ccx, ccy, udx, 1));
-    return sqrt(dist2(x, y, p)) / 40;
-  }
-  // vec2 p = vec2(D(pts.a, 0, 0, udx, 0), D(pts.a, 0, 0, udx, 1)); return 1 - sqrt(dist2(x, y, p)) * 0.01;
-
-  int i, j;
-  for (j = 0; j <= 2; ++j) {
-    for (i = 0; i <= 2; ++i) {
-      vec2 p = vec2(D(pts.a, ux + i - 1, uy + j - 1, udx, 0), 
-                    D(pts.a, ux + i - 1, uy + j - 1, udx, 1));
-      //uint cx = ccx; uint cy = ccy; vec2 p = vec2(D(pts.a, cx, cy, udx, 0), D(pts.a, cx, cy, udx, 1));
-      md = min(md, dist2(x + 1, y + 1, p));
-    }
-  }
-
-  return 1 - clamp(sqrt(md) / scale * 0.7, 0.0f, 1.0f);
-}
-
 #define GI gl_GlobalInvocationID
 void tmkw3d() { 
   float dx = w / scale;
@@ -89,6 +61,37 @@ void tmkw3d() {
   imageStore(img3d, texelCoord, vec4(vec3(gnear3(GI.x, GI.y, GI.z, udx, udy, udz)), 0.0));
 }
 
+float gnear2(uint x, uint y, uint udx, uint udy) {
+  uint ux = uint(x / scale);
+  uint uy = uint(y / scale);
+  float md = 99999999999999.9;
+
+  if (KMSKMS == 1) { return gnoise(vec2(ux + 10, uy + 1241)); }
+  else if (KMSKMS == 2) { 
+    //vec2 p = vec2(D(pts.a, ux + ccx, uy, udx, 0), 
+                  //D(pts.a, ux + ccx, uy, udx, 1));
+    vec2 p = vec2(D(pts.a, ccx, ccy, udx, 0), 
+                  D(pts.a, ccx, ccy, udx, 1));
+    return sqrt(dist2(x, y, p)) / 40;
+  } else if (KMSKMS == 3) {
+      vec2 p = vec2(D(pts.a, ux - 1, uy - 1, udx, 0), 
+                    D(pts.a, ux - 1, uy - 1, udx, 1));
+      return 1 - clamp(sqrt(dist2(x, y, p)) / scale * 0.7, 0.0f, 1.0f);
+  }
+
+  int i, j;
+  for (j = 0; j <= 2; ++j) {
+    for (i = 0; i <= 2; ++i) {
+      vec2 p = vec2(D(pts.a, ux + i - 1, uy + j - 1, udx, 0), 
+                    D(pts.a, ux + i - 1, uy + j - 1, udx, 1));
+      //uint cx = ccx; uint cy = ccy; vec2 p = vec2(D(pts.a, cx, cy, udx, 0), D(pts.a, cx, cy, udx, 1));
+      md = min(md, dist2(x, y, p));
+    }
+  }
+
+  return 1 - clamp(sqrt(md) / scale * 0.7, 0.0f, 1.0f);
+}
+
 void tmkw2d() { 
   float dx = w / scale;
   float dy = h / scale;
@@ -96,7 +99,7 @@ void tmkw2d() {
   uint udy = uint(dy + 2);
   ivec2 texelCoord = ivec2(GI.xy);
 
-  imageStore(img2d, texelCoord, vec4(vec3(gnear2(uint(GI.x + scale), uint(GI.y + scale), udx, udy)), 0.0));
+  imageStore(img2d, texelCoord, vec4(vec3(gnear2(uint(GI.x + scale + 1), uint(GI.y + scale + 1), udx, udy)), 0.0));
 }
 
 void main() {
