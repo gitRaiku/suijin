@@ -1627,17 +1627,25 @@ void messageCallback(GLenum source, GLenum type, GLuint id, GLenum severity, GLs
 
 uint32_t wpCompS, wpComp, wCompS, wComp, compTex, wbuf;
 struct ccomp {
-  uint32_t w, h;
-  uint32_t udx, udy;
+  uint32_t w, h, d;
+  uint32_t udx, udy, udz;
 };
 struct ccomp cco;
 float scale = 10.0;
+uint32_t dimensions = 3;
 
 uint8_t prep_compute_shader() {
   cco.w = 128;
   cco.h = 128;
-  cco.udx = (uint32_t)(cco.w / scale) + 2;
-  cco.udy = (uint32_t)(cco.h / scale) + 2;
+  cco.udx = (uint32_t)(cco.w / scale) + 3;
+  cco.udy = (uint32_t)(cco.h / scale) + 3;
+  if (dimensions == 2) {
+    cco.d = 1;
+    cco.udz = 1;
+  } else {
+    cco.d = 128;
+    cco.udz = (uint32_t)(cco.h / scale) + 3;
+  }
 
   if (!wpCompS) {
     PR_CHECK(shader_get("shaders/worley_points_compute.glsl", GL_COMPUTE_SHADER, &wpCompS))
@@ -1646,26 +1654,32 @@ uint8_t prep_compute_shader() {
     PR_CHECK(program_get(1, &wCompS, &wComp))
     glGenBuffers(1, &wbuf);
     glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, wbuf);
-    compTex = create_image24(cco.w, cco.h);
+    if (dimensions == 2) {
+      compTex = create_image24(cco.w, cco.h);
+    } else {
+      compTex = create_image34(cco.w, cco.h, cco.d);
+    }
   }
 
-  glBufferData(GL_SHADER_STORAGE_BUFFER, cco.udx * cco.udy * 2 * 4, NULL, GL_STATIC_READ);
+  glBufferData(GL_SHADER_STORAGE_BUFFER, cco.udx * cco.udy * cco.udz * dimensions * 4, NULL, GL_STATIC_READ);
   return 0;
 }
 
 float cccx = 2, cccy = 2;
 float KMSKMS = 0.2;
+float curslcs = 0.5;
 void compute_shader() {
   glUseProgram(wpComp);
-  program_set_uint1(wpComp, "dimensions", 2);
+  program_set_uint1(wpComp, "dimensions", dimensions);
   //program_set_float1(wpComp, "seed",((float)rand() / (float)RAND_MAX) * 255.0f);
   program_set_float1(wpComp, "seed", 1.0);
   program_set_uint1(wpComp, "udx", cco.udx);
+  program_set_uint1(wpComp, "udy", cco.udy);
   program_set_float1(wpComp, "scale", scale);
   glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, wbuf);
-  glDispatchCompute(cco.udx, cco.udy, 1);
+  //fprintf(stdout, "%u %u %u\n", cco.udx, cco.udy, cco.udz);
+  glDispatchCompute(cco.udx, cco.udy, cco.udz);
   glMemoryBarrier(0);
-  
 
   //fprintf(stdout, "%u %u\n", cco.udx, cco.udy); float kmskmsm[129 * 129 * 2] = {0.0}; glGetBufferSubData(GL_SHADER_STORAGE_BUFFER, 0, cco.udx * cco.udy * 2 * 4, kmskmsm); { int32_t i, j; for (i = 0; i < 6; ++i) { for (j = 0; j < 6; ++j) { fprintf(stdout, "%.2fx%.2f ", kmskmsm[(i * cco.udx + j) * 2], kmskmsm[(i * cco.udx + j) * 2 + 1]); } fputc('\n', stdout);} fputc('\n', stdout); fputc('\n', stdout); fputc('\n', stdout); }
 
@@ -1673,16 +1687,26 @@ void compute_shader() {
   program_set_uint1(wComp, "udx", cco.udx);
   program_set_uint1(wComp, "ccx", (uint32_t)cccx);
   program_set_uint1(wComp, "ccy", (uint32_t)cccy);
-  program_set_uint1(wComp, "dimensions", 2);
+  program_set_uint1(wComp, "dimensions", dimensions);
   program_set_uint1(wComp, "h", cco.h);
   program_set_uint1(wComp, "w", cco.w);
+  program_set_uint1(wComp, "d", cco.d);
   program_set_uint1(wComp, "KMSKMS", (uint32_t)KMSKMS);
   program_set_float1(wComp, "scale", scale);
-  glBindImageTexture(0, compTex, 0, GL_FALSE, 0, GL_READ_WRITE, GL_RGBA32F);
-  glDispatchCompute(cco.w, cco.h, 1);
+  if (dimensions == 2) {
+    glBindImageTexture(0, compTex, 0, GL_FALSE, 0, GL_READ_WRITE, GL_RGBA32F);
+  } else {
+    glBindImageTexture(2, compTex, 0, GL_FALSE, 0, GL_READ_WRITE, GL_RGBA32F);
+  }
+  //fprintf(stdout, "%u %u %u\n", cco.w, cco.h, cco.d);
+  glDispatchCompute(cco.w, cco.h, cco.d);
   glMemoryBarrier(0);
 
-  draw_squaret((windowW - 500) / 2, (windowH - 500) / 2, 500, 500, compTex, 10);
+  if (dimensions == 2) {
+    draw_squaret((windowW - 500) / 2, (windowH - 500) / 2, 500, 500, compTex, 10);
+  } else {
+    draw_squaret3((windowW - 500) / 2, (windowH - 500) / 2, 500, 500, compTex, 8, curslcs);
+  }
 }
 
 uint8_t run_suijin() {
@@ -1873,7 +1897,8 @@ uint8_t run_suijin() {
       add_tslider(&nodes[1], "cccx", 15, &cccx, 0.001, 5.1f, 8, NULL, NULL);
       add_tslider(&nodes[1], "cccy", 15, &cccy, 0.001, 5.1f, 8, NULL, NULL);
       add_tslider(&nodes[1], "KMSKMS", 15, &KMSKMS, 0.1, 2.1f, 8, NULL, NULL);
-      add_tslider(&nodes[1], "cccscale", 15, &scale, 1.0, 60.0f, 8, prep_compute_shader, NULL);
+      add_tslider(&nodes[1], "cccscale", 15, &scale, 1.0, 60.0f, 8, (void (*)(void*))prep_compute_shader, NULL);
+      add_tslider(&nodes[1], "ccccurscls", 15, &curslcs, 0.0, 1.0f, 8, NULL, NULL);
       add_tslider(&nodes[1], "pscale", 15, &c.t31pscale, 0.001, 200.0f, 8, NULL, NULL);
       add_tslider(&nodes[1], "pwscale", 15, &c.t31pwscale, 0.001, 200.0f, 8, NULL, NULL);
       add_tslider(&nodes[1], "persistence", 15, &c.t31persistence, 0.0, 4.0f, 8, NULL, NULL);
@@ -1887,6 +1912,7 @@ uint8_t run_suijin() {
       add_tslider(&nodes[1], "t2persistence", 15, &c.t2persistence, 0.0, 4.0f, 8, update_clouds, &c);
       add_tslider(&nodes[1], "t2octaves", 15, &c.t2octaves, 0.0, 5.0f, 8, update_clouds, &c);
       add_button(&nodes[1], "Update", 0xFF0000FF, 20, 10, update_clouds, &c);
+      add_button(&nodes[1], "Update2", 0xFF0000FF, 20, 10, compute_shader, NULL);
       nodes[1].px = 400.0f;
       nodes[1].py = 50.0f;
       nodes[1].sx = 400.0f;
@@ -2049,7 +2075,8 @@ uint8_t run_suijin() {
       draw_squaret3((windowW - 500) / 2 + 275, (windowH - 500) / 2 - 275, 500, 500, c.t32, 8, c.t31curslice);
       draw_squaret((windowW - 500) / 2, (windowH - 500) / 2 + 275, 500, 500, c.t2, 9);
     } else {
-      compute_shader();
+      //compute_shader();
+      draw_squaret3((windowW - 500) / 2, (windowH - 500) / 2, 500, 500, compTex, 8, curslcs);
       //draw_squaret((windowW - 500) / 2, (windowH - 500) / 2, 500, 500, compTex, 10);
     }
 
