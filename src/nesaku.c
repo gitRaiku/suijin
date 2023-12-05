@@ -2,9 +2,7 @@
 
 struct rthread threads[THREAD_COUNT];
 
-float rf() {
-  return (float)rand() / (float)RAND_MAX;
-}
+float rf() { return (float)rand() / (float)RAND_MAX; }
 
 void dump_image_to_file(char *__restrict fname, struct i2d *__restrict im) {
    FILE *__restrict fp;
@@ -83,25 +81,6 @@ void dump_image_to_file(char *__restrict fname, struct i2d *__restrict im) {
 
    fprintf(stdout, "Dumped current image to %s!\n", fname);
 }
-
-struct fcol f2c(float v) {
-  struct fcol res;
-  res.r = v;
-  res.g = v;
-  res.b = v;
-
-  return res;
-}
-
-struct fcol inv(struct fcol o) {
-  struct fcol res;
-  res.r = 1.0f - o.r;
-  res.g = 1.0f - o.g;
-  res.b = 1.0f - o.b;
-
-  return res;
-}
-
 void update_texture(struct i2d *__restrict im, struct texture *__restrict tex) {
   tex->w = im->w;
   tex->h = im->h;
@@ -130,184 +109,52 @@ void update_texture_ub(struct i2du *__restrict im, struct texture *__restrict te
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
 }
 
-float dist3(float x, float y, float z, v3 v) {
-#define P2(x) ((x)*(x))
-  return P2(v.x - x) + P2(v.y - y) + P2(v.z - z);
+uint32_t wpCompS, wpComp, wCompS, wComp, wbuf;
+uint8_t prep_compute_shaders() {
+  PR_CHECK(shader_get("shaders/worley_points_compute.glsl", GL_COMPUTE_SHADER, &wpCompS))
+  PR_CHECK(program_get(1, &wpCompS, &wpComp))
+  PR_CHECK(shader_get("shaders/worley_compute.glsl", GL_COMPUTE_SHADER, &wCompS))
+  PR_CHECK(program_get(1, &wCompS, &wComp))
+  glGenBuffers(1, &wbuf);
+  glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, wbuf);
+  glBufferData(GL_SHADER_STORAGE_BUFFER, 128 * 128 * 128 * 3 * 4, NULL, GL_STATIC_READ);
+  return 0;
 }
 
-float gnear3(uint32_t x, uint32_t y, uint32_t z, float scale, v3 *__restrict pts, uint32_t udx, uint32_t udy, uint32_t udz) {
-  uint32_t ux = (uint32_t) x / scale;
-  uint32_t uy = (uint32_t) y / scale;
-  uint32_t uz = (uint32_t) z / scale;
-  float md = INFINITY;
-
-#define CHCK(a,b,c) {if ((a) == 0 && (b) == 0) { continue; } if ((a) == 2 && (b) == (c) - 1) { continue; }}
-  {
-    int32_t i, j, k;
-    for (k = 0; k <= 2; ++k) {
-      CHCK(k, uz, udz)
-      for (j = 0; j <= 2; ++j) {
-        CHCK(j, uy, udy)
-        for (i = 0; i <= 2; ++i) {
-          CHCK(i, ux, udx)
-          //fprintf(stdout, " - %u/2 %u/2 %u/2\n", i, j, k);
-          //fprintf(stdout, " - - %u %u %u\n", ux + i - 1, uy + j - 1, uz + k - 1);
-          md = min(md, dist3(x, y, z, D(pts, ux + i - 1, uy + j - 1, uz + k - 1, udx, udy)));
-        }
-      }
-    }
+void noise_w(uint32_t w, uint32_t h, uint32_t d, float scale, struct img *__restrict i) {
+  if (i == NULL || (i->h != h || i->w != w || i->d != d)) {
+    if (i->t) { glDeleteTextures(1, &i->t); }
+    if (d == 1) { *i = create_image24(w, h   ); } 
+           else { *i = create_image34(w, h, d); }
   }
-#undef CHCK
+  uint32_t udx = (uint32_t)(w / scale + 3);
+  uint32_t udy = (uint32_t)(h / scale + 3);
+  uint32_t udz = (uint32_t)(d / scale + 3);
 
-  return 1 - clamp(sqrtf(md * 0.5) / scale, 0.0f, 1.0f);
+  uint32_t dimensions = (d == 1) ? 2 : 3;
+
+  glUseProgram(wpComp);
+  program_set_uint1 (wpComp, "dimensions", dimensions);
+  program_set_float1(wpComp, "seed", 1.0);
+  program_set_uint1 (wpComp, "udx", udx);
+  program_set_uint1 (wpComp, "udy", udy);
+  program_set_float1(wpComp, "scale", scale);
+  glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, wbuf);
+  glDispatchCompute(udx, udy, udz);
+  glMemoryBarrier(0);
+
+  glUseProgram(wComp);
+  program_set_uint1 (wComp, "dimensions", dimensions);
+  program_set_uint1 (wComp, "w", w);
+  program_set_uint1 (wComp, "h", h);
+  program_set_uint1 (wComp, "d", d);
+  program_set_float1(wComp, "scale", scale);
+  if (dimensions == 2) { glBindImageTexture(0, i->t, 0, GL_FALSE, 0, GL_READ_WRITE, GL_RGBA32F); } 
+                  else { glBindImageTexture(2, i->t, 0, GL_FALSE, 0, GL_READ_WRITE, GL_RGBA32F); }
+  glDispatchCompute(w, h, d);
+  glMemoryBarrier(0);
 }
 
-#define FFF(o1, o2, o3, o4, o5, o6, c) {int32_t x, y, z; for (z = o1; z < o2; ++z) { for (y = o3; y < o4; ++y) { for (x = o5; x < o6; ++x) { c } } } }
-#define GA(n, t) t n; n = va_arg(v->ap, t);
-void *tmkpoints(void *vp) { struct rthread *v = (struct rthread*)vp; uint32_t sz = v->sz; uint32_t ez = v->ez; GA(sx, uint32_t); GA(ex, uint32_t); GA(sy, uint32_t); GA(ey, uint32_t); GA(pts, v3*__restrict); GA(scale, double); FFF(sz, ez, sy, ey, sx, ex, D(pts, x, y, z, ex, ey).x = (x + rf()) * scale; D(pts, x, y, z, ex, ey).y = (y + rf()) * scale; D(pts, x, y, z, ex, ey).z = (z + rf()) * scale;); return NULL; }
-
-void *tmkw3d(void *vp) { struct rthread *v = (struct rthread*)vp;  uint32_t d = v->ez; GA(h, uint32_t); GA(w, uint32_t); GA(imv, float*); GA(pts, v3*__restrict); GA(udx, uint32_t); GA(udy, uint32_t); GA(udz, uint32_t); GA(scale, double); FFF(v->sz, d, 0, h, 0, w, D(imv, x, y, z, h, w) = gnear3(x, y, z, scale, pts, udx, udy, udz);); return NULL;}
-
-uint8_t AAAAAAAAAA = 0;
-void init_threads(void *(*callback)(void *), uint32_t sz, uint32_t ez, ...) {
-  if (AAAAAAAAAA) { fprintf(stdout, "STARTING THREADS EZ\n"); }
-  int32_t i;
-  pthread_attr_t attr;
-  PCH(pthread_attr_init(&attr));
-  uint32_t dif = (ez - sz + THREAD_COUNT - 1) / THREAD_COUNT;
-  for(i = 0; i < THREAD_COUNT; ++i) {
-    if (i < THREAD_COUNT - 1) {
-      threads[i].sz = sz + dif * i;
-      threads[i].ez = sz + dif * (i + 1);
-    } else {
-      threads[i].sz = sz + dif * i;
-      threads[i].ez = ez;
-    }
-    if (threads[i].sz >= ez) { threads[i].id = 0; continue; }
-    if (threads[i].ez > ez) { threads[i].ez = ez; }
-    if (threads[i].sz == threads[i].ez) { threads[i].id = 0; continue; }
-
-    va_start(threads[i].ap, ez);
-    PCH(pthread_create(&threads[i].id, &attr, callback, threads + i));
-    if (AAAAAAAAAA) {fprintf(stdout, "Create thread %lu %u->%u/%u\n", threads[i].id, threads[i].sz, threads[i].ez, ez);}
-  }
-  PCH(pthread_attr_destroy(&attr));
-  for(i = 0; i < THREAD_COUNT; ++i) {
-    if (threads[i].id) {
-      PCH(pthread_join(threads[i].id, NULL));
-      va_end(threads[i].ap);
-    }
-  }
-}
-
-void noise_w3d(uint32_t h, uint32_t w, uint32_t d, float scale, struct i3df *__restrict im) {
-  if (im == NULL) {
-    im = calloc(sizeof(*im), 1);
-  }
-
-  im->h = h;
-  im->w = w;
-  im->d = d;
-  if (im->v == NULL) {
-    im->v = calloc(sizeof(im->v[0]), h * w * d);
-  }
-
-  float dx = w / scale;
-  float dy = h / scale;
-  float dz = d / scale;
-  uint32_t udx = (uint32_t)dx + 1;
-  uint32_t udy = (uint32_t)dy + 1;
-  uint32_t udz = (uint32_t)dz + 1;
-
-  v3 *__restrict pts = calloc(sizeof(v3), udx * udy * udz);
-
-  init_threads(tmkpoints, 0, udz, 0, udx, 0, udy, pts, (double)scale);
-  init_threads(tmkw3d, 0, w, h, d, im->v, pts, udx, udy, udz, (double)scale);
-}
-
-float dist2(float x, float y, v2 v) {
-  return P2(v.x - x) + P2(v.y - y);
-}
-
-float gnear2(uint32_t x, uint32_t y, float scale, v2 *__restrict pts, uint32_t udx, uint32_t udy) {
-  uint32_t ux = (uint32_t) x / scale;
-  uint32_t uy = (uint32_t) y / scale;
-  float md = INFINITY;
-
-  if (ux != 0) {
-    if (uy != 0) {
-      md = min(md, dist2(x, y, G(pts, ux - 1, uy - 1, udx)));
-    }
-
-      md = min(md, dist2(x, y, G(pts, ux - 1, uy    , udx)));
-
-    if (uy != udy - 1) {
-      md = min(md, dist2(x, y, G(pts, ux - 1, uy + 1, udx)));
-    }
-  }
-
-  if (uy != 0) {
-      md = min(md, dist2(x, y, G(pts, ux    , uy - 1, udx)));
-  }
-
-      md = min(md, dist2(x, y, G(pts, ux    , uy    , udx)));
-
-  if (uy != udy - 1) {
-      md = min(md, dist2(x, y, G(pts, ux    , uy + 1, udx)));
-  }
-  
-  if (ux != udx - 1) {
-    if (uy != 0) {
-      md = min(md, dist2(x, y, G(pts, ux + 1, uy - 1, udx)));
-    }
-
-      md = min(md, dist2(x, y, G(pts, ux + 1, uy    , udx)));
-
-    if (uy != udy - 1) {
-      md = min(md, dist2(x, y, G(pts, ux + 1, uy + 1, udx)));
-    }
-  }
-
-  float pscale = 0.002f;
-  return 1 - clamp(scale * pscale * sqrtf(md), 0.0f, 1.0f);
-}
-
-void noise_w2d(uint32_t h, uint32_t w, float scale, struct i2df *__restrict im) {
-  if (im == NULL) {
-    im = calloc(sizeof(*im), 1);
-  }
-
-  im->h = h;
-  im->w = w;
-  if (im->v == NULL) {
-    im->v = calloc(sizeof(im->v[0]), h * w);
-  }
-
-  float dx = w / scale;
-  float dy = h / scale;
-  uint32_t udx = (uint32_t)dx + 1;
-  uint32_t udy = (uint32_t)dy + 1;
-
-  v2 *__restrict pts = calloc(sizeof(v2), udx * udy);
-  
-  {
-    int32_t i, j;
-    for (i = 0; i < udx; ++i) {
-      for (j = 0; j < udy; ++j) {
-        G(pts, i, j, udx).x = (i + rf()) * scale;
-        G(pts, i, j, udx).y = (j + rf()) * scale;
-      }
-    }
-
-    for (i = 0; i < h; ++i) {
-      for (j = 0; j < w; ++j) {
-        G(im->v, i, j, w) = gnear2(i, j, scale, pts, udx, udy);
-      }
-    }
-  }
-
-  free(pts);
-}
 
 #define PRLINP 151, 160, 137, 91, 90, 15, 131, 13, 201, 95, 96, 53, \
                194, 233, 7, 225, 140, 36, 103, 30, 69, 142, 8, 99, \
@@ -476,14 +323,15 @@ float pwb(float p, float w) { /// TODO: Make nicer
   //return w * p;
 }
 
-void *tmkpw3d(void *vp) {  struct rthread *v = (struct rthread*)vp; uint32_t d = v->ez; GA(h, uint32_t); GA(w, uint32_t); GA(imv, float*); GA(pscale, double); GA(octaves, uint32_t); GA(persistence, double); FFF(v->sz, d, 0, h, 0, w, D(imv, x, y, z, w, h) = pwb(octave_perlin(x / pscale, y / pscale, z / pscale, octaves, persistence), D(imv, x, y, z, w, h));); return NULL; }
+void *tmkpw3d(void *vp) {  /*struct rthread *v = (struct rthread*)vp; uint32_t d = v->ez; GA(h, uint32_t); GA(w, uint32_t); GA(imv, float*); GA(pscale, double); GA(octaves, uint32_t); GA(persistence, double); FFF(v->sz, d, 0, h, 0, w, D(imv, x, y, z, w, h) = pwb(octave_perlin(x / pscale, y / pscale, z / pscale, octaves, persistence), D(imv, x, y, z, w, h)););*/ return NULL; }
 
 void noise_pw3d(uint32_t h, uint32_t w, uint32_t d, uint32_t octaves, float persistence, float pscale, float wscale, struct i3df *__restrict im) {
-  noise_w3d(h, w, d, wscale, im);
-  init_threads(tmkpw3d, 0, d, h, w, im->v, (double)pscale, octaves, (double)persistence);
+  //noise_w3d(h, w, d, wscale, im);
+  //init_threads(tmkpw3d, 0, d, h, w, im->v, (double)pscale, octaves, (double)persistence);
 }
 
 void *tmkcloud3(void *vp) { 
+  /*
   struct rthread *v = (struct rthread*)vp; 
   uint32_t d = v->ez; 
   GA(h, uint32_t); 
@@ -500,7 +348,7 @@ void *tmkcloud3(void *vp) {
           D(imv, x, y, z, h, w).b = D(w2, x, y, z, h, w);
           D(imv, x, y, z, h, w).a = D(w3, x, y, z, h, w);
      );
-
+*/
   return NULL;
 }
 
@@ -512,16 +360,18 @@ void noise_cloud3(uint32_t h, uint32_t w, uint32_t d, uint32_t octaves, float pe
 
   struct i3df pw = {0}, w1 = {0}, w2 = {0}, w3 = {0} ;
   TIME(noise_pw3d(h, w, d, octaves, persistence, pscale, pwscale, &pw);,"pw")
+    /*
   TIME(noise_w3d(h, w, d, wscale / 1.0, &w1);,"w1") 
   TIME(noise_w3d(h, w, d, wscale / 1.6, &w2);,"w2") 
   TIME(noise_w3d(h, w, d, wscale / 2.2, &w3);,"w3")
   AAAAAAAAAA = 1;
   TIME(init_threads(tmkcloud3, 0, d, h, w, im->v, pw.v, w1.v, w2.v, w3.v);,"IT")
-  AAAAAAAAAA = 0;
+  AAAAAAAAAA = 0;*/
   free(pw.v); free(w1.v); free(w2.v); free(w3.v);
 }
 
 void *tmkworl3(void *vp) { 
+  /*
   struct rthread *v = (struct rthread*)vp; 
   uint32_t d = v->ez; 
   GA(h, uint32_t); 
@@ -536,7 +386,7 @@ void *tmkworl3(void *vp) {
           D(imv, x, y, z, h, w).g = D(w2, x, y, z, h, w);
           D(imv, x, y, z, h, w).b = D(w3, x, y, z, h, w);
      );
-
+*/
   return NULL;
 }
 
@@ -547,9 +397,9 @@ void noise_worl3(uint32_t h, uint32_t w, uint32_t d, float scale, struct i3d *__
   if (im->v == NULL) { im->v = calloc(sizeof(im->v[0]), h * w * d); }
 
   struct i3df w1 = {0}, w2 = {0}, w3 = {0};
-  noise_w3d(h, w, d, scale / 1.0, &w1); noise_w3d(h, w, d, scale / 2.0, &w2); noise_w3d(h, w, d, scale / 3.0, &w3);
+  //noise_w3d(h, w, d, scale / 1.0, &w1); noise_w3d(h, w, d, scale / 2.0, &w2); noise_w3d(h, w, d, scale / 3.0, &w3);
 
-  init_threads(tmkworl3, 0, d, h, w, im->v, w1.v, w2.v, w3.v);
+  //init_threads(tmkworl3, 0, d, h, w, im->v, w1.v, w2.v, w3.v);
   free(w1.v); free(w2.v); free(w3.v);
 }
 
@@ -572,20 +422,23 @@ void noise_curl3(uint32_t h, uint32_t w, uint32_t octaves, float persistence, fl
     }
   }
 }
-#define CIMG(A, B, ...) \
-  uint32_t texture; \
-  glGenTextures(1, &texture); \
+
+#define CIMG(A, B, W, H, D, ...) \
+  struct img ci = {0}; \
+  glGenTextures(1, &ci.t); \
   glActiveTexture(GL_TEXTURE0); \
-  glBindTexture(GL_TEXTURE_ ##A, texture); \
+  glBindTexture(GL_TEXTURE_ ##A, ci.t); \
   glTexParameteri(GL_TEXTURE_ ##A, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE); \
   glTexParameteri(GL_TEXTURE_ ##A, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE); \
   glTexParameteri(GL_TEXTURE_ ##A, GL_TEXTURE_MAG_FILTER, GL_LINEAR); \
   glTexParameteri(GL_TEXTURE_ ##A, GL_TEXTURE_MIN_FILTER, GL_LINEAR); \
   glTexImage ##A(GL_TEXTURE_ ##A, 0, B ##32F, __VA_ARGS__, 0, B, GL_FLOAT, NULL); \
-  glBindImageTexture(0, texture, 0, GL_FALSE, 0, GL_READ_WRITE, B ##32F); \
-  return texture;
+  glBindImageTexture(0, ci.t, 0, GL_FALSE, 0, GL_READ_WRITE, B ##32F); \
+  ci.w = W; ci.h = H; ci.d = D; \
+  return ci;
 
+struct img create_image24(uint32_t w, uint32_t h)             { CIMG(2D, GL_RGBA, w, h, 1, w, h); }
+struct img create_image34(uint32_t w, uint32_t h, uint32_t d) { CIMG(3D, GL_RGBA, w, h, d, w, h, d); }
 
-uint32_t create_image24(uint32_t w, uint32_t h) { CIMG(2D, GL_RGBA, w, h); }
-uint32_t create_image34(uint32_t w, uint32_t h, uint32_t d) { CIMG(3D, GL_RGBA, w, h, d) }
-uint32_t create_image33(uint32_t w, uint32_t h, uint32_t d) { CIMG(3D, GL_RGB, w, h, d) }
+//struct img create_image23(uint32_t w, uint32_t h)             { CIMG(2D, GL_RGB, w, h, 1, w, h); }
+//struct img create_image33(uint32_t w, uint32_t h, uint32_t d) { CIMG(3D, GL_RGB, w, h, d, w, h, d); }

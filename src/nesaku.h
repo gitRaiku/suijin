@@ -13,6 +13,7 @@
 
 #include "util.h"
 #include "izanagi.h"
+#include "shaders.h"
 
 #define THREAD_COUNT 8
 //#define THREAD_COUNT 1
@@ -34,6 +35,11 @@ struct rthread {
 
 extern float pscale;
 extern uint8_t updp;
+
+struct img {
+  uint32_t w, h, d;
+  uint32_t t;
+};
 
 struct fcol {
   float r;
@@ -104,9 +110,10 @@ void dump_image_to_file(char *__restrict fname, struct i2d *__restrict im);
 
 void update_texture(struct i2d *__restrict im, struct texture *__restrict tex);
 
+uint8_t prep_compute_shaders();
 void update_texture_ub(struct i2du *__restrict im, struct texture *__restrict tex);
 
-void noise_w2d(uint32_t h, uint32_t w, float scale, struct i2df *__restrict im);
+void noise_w(uint32_t w, uint32_t h, uint32_t d, float scale, struct img *__restrict i);
 
 void new_perlin_perms();
 
@@ -120,8 +127,8 @@ void noise_worl3(uint32_t h, uint32_t w, uint32_t d, float scale, struct i3d *__
 
 void noise_curl3(uint32_t h, uint32_t w, uint32_t octaves, float persistence, float scale, struct i2d *__restrict im);
 
-uint32_t create_image24(uint32_t w, uint32_t h);
-uint32_t create_image34(uint32_t w, uint32_t h, uint32_t d);
-uint32_t create_image33(uint32_t w, uint32_t h, uint32_t d);
-
+struct img create_image24(uint32_t w, uint32_t h);
+struct img create_image34(uint32_t w, uint32_t h, uint32_t d);
+struct img create_image23(uint32_t w, uint32_t h);
+struct img create_image33(uint32_t w, uint32_t h, uint32_t d);
 #endif

@@ -12,6 +12,17 @@
 #include <unistd.h>
 #include <fcntl.h>
 
+#define PR_CHECK(call) if (call) { return 1; }
+#define GL_CHECK(call, message) if (!(call)) { fputs(message "! Aborting...\n", stderr); glfwTerminate(); exit(1); }
+#define FT_CHECK(command, errtext) { uint32_t err = command; if (err) { fprintf(stderr, "%s: %u:[%s]!\n", errtext, err, FT_Error_String(err)); exit(1); } }
+#define KEY_PRESSED(key) (glfwGetKey(window, key) == GLFW_PRESS)
+
+#define FPC(v) ((float *__restrict)(v))
+#define V3C(v) ((v3 *__restrict)(v))
+#define V4C(v) ((v4 *__restrict)(v))
+
+#define EPS 0.0000000001
+
 struct fbuf {
   char fb[2048];
   uint32_t fd;

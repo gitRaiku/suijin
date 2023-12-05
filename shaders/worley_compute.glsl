@@ -6,7 +6,6 @@ uniform uint w;
 uniform uint h;
 uniform uint d;
 uniform float scale;
-uniform uint ccx, ccy;
 
 layout(rgba32f, binding = 0) uniform image2D img2d;
 layout(rgba32f, binding = 2) uniform image3D img3d;
@@ -42,8 +41,6 @@ float PHI = 1.61803398874989484820459;
 float seed = 123.1;
 float gnoise(vec2 xy) { return fract(sin(distance(vec2(xy.x * PHI + 9.124 * seed, xy.y * 8.5141261 + 2.145 * seed),xy.yx)*seed)*xy.x); }
 
-uniform uint KMSKMS = 0;
-
 #define GI gl_GlobalInvocationID
 void tmkw3d() { 
   float dx = w / scale;
@@ -67,25 +64,11 @@ float gnear2(uint x, uint y, uint udx, uint udy) {
   uint uy = uint(y / scale);
   float md = 99999999999999.9;
 
-  if (KMSKMS == 1) { return gnoise(vec2(ux + 10, uy + 1241)); }
-  else if (KMSKMS == 2) { 
-    //vec2 p = vec2(D(pts.a, ux + ccx, uy, udx, 0), 
-                  //D(pts.a, ux + ccx, uy, udx, 1));
-    vec2 p = vec2(D(pts.a, ccx, ccy, udx, 0), 
-                  D(pts.a, ccx, ccy, udx, 1));
-    return sqrt(dist2(x, y, p)) / 40;
-  } else if (KMSKMS == 3) {
-      vec2 p = vec2(D(pts.a, ux - 1, uy - 1, udx, 0), 
-                    D(pts.a, ux - 1, uy - 1, udx, 1));
-      return 1 - clamp(sqrt(dist2(x, y, p)) / scale * 0.7, 0.0f, 1.0f);
-  }
-
   int i, j;
   for (j = 0; j <= 2; ++j) {
     for (i = 0; i <= 2; ++i) {
       vec2 p = vec2(D(pts.a, ux + i - 1, uy + j - 1, udx, 0), 
                     D(pts.a, ux + i - 1, uy + j - 1, udx, 1));
-      //uint cx = ccx; uint cy = ccy; vec2 p = vec2(D(pts.a, cx, cy, udx, 0), D(pts.a, cx, cy, udx, 1));
       md = min(md, dist2(x, y, p));
     }
   }
