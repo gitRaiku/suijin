@@ -21,10 +21,17 @@ float __attribute((pure)) max(float o1, float o2) { // INLINE
 }
 
 void swap(uint8_t *__restrict o1, uint8_t *__restrict o2) { // INLINE
-  float t = *o1;
+  uint8_t t = *o1;
   *o1 = *o2;
   *o2 = t;
 }
+
+void uswap(uint32_t *__restrict o1, uint32_t *__restrict o2) { // INLINE
+  uint32_t t = *o1;
+  *o1 = *o2;
+  *o2 = t;
+}
+
 
 void pswap(void **o1, void **o2) { // INLINE
   void *t = *o1;

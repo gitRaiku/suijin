@@ -115,6 +115,8 @@ void update_texture_ub(struct i2du *__restrict im, struct texture *__restrict te
 
 void noise_w(uint32_t w, uint32_t h, uint32_t d, float scale, struct img *__restrict i);
 
+void noise_p(uint32_t h, uint32_t w, uint32_t d, uint32_t octaves, float persistence, float scale, struct img *__restrict i);
+
 void new_perlin_perms();
 
 void noise_p2d(uint32_t h, uint32_t w, uint32_t octaves, float persistence, float scale, struct i2df *__restrict im);
