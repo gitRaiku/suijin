@@ -8,11 +8,10 @@ uniform float scale;
 uniform uint octaves;
 uniform float persistence;
 
-layout(rgba32f, binding = 0) uniform image2D img2d;
-layout(rgba32f, binding = 2) uniform image3D img3d;
+layout(r8, binding = 0) uniform image2D img2d;
+layout(r8, binding = 2) uniform image3D img3d;
 layout (std430, binding = 1) buffer Pos { uint p[]; } p;
 
-#define P2(x) ((x)*(x))
 #define GI gl_GlobalInvocationID
 
 float grad(uint hash, float x, float y, float z) {
@@ -91,7 +90,7 @@ void tmkp3d() {
   float dz = GI.z / scale;
   ivec3 texelCoord = ivec3(GI.xyz);
 
-  imageStore(img3d, texelCoord, vec4(vec3(octave_perlin(dx, dy, dz, octaves, persistence)), 0.0));
+  imageStore(img3d, texelCoord, vec4(octave_perlin(dx, dy, dz, octaves, persistence)));
 }
 
 void tmkp2d() { 
@@ -99,7 +98,7 @@ void tmkp2d() {
   float dy = GI.y / scale;
   ivec2 texelCoord = ivec2(GI.xy);
 
-  imageStore(img2d, texelCoord, vec4(vec3(octave_perlin(dx, dy, 0.0, octaves, persistence)), 0.0));
+  imageStore(img2d, texelCoord, vec4(octave_perlin(dx, dy, 0.0, octaves, persistence)));
 }
 
 void main() {

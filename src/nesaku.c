@@ -111,6 +111,7 @@ void update_texture_ub(struct i2du *__restrict im, struct texture *__restrict te
 
 uint32_t wpCompS, wpComp, wCompS, wComp, wbuf;
 uint32_t pCompS, pComp, pbuf;
+uint32_t pwCompS, pwComp;
 uint8_t prep_compute_shaders() {
   PR_CHECK(shader_get("shaders/worley_points_compute.glsl", GL_COMPUTE_SHADER, &wpCompS))
   PR_CHECK(program_get(1, &wpCompS, &wpComp))
@@ -124,14 +125,17 @@ uint8_t prep_compute_shaders() {
   PR_CHECK(program_get(1, &pCompS, &pComp))
   glGenBuffers(1, &pbuf);
 
+  PR_CHECK(shader_get("shaders/perlinworley_compute.glsl", GL_COMPUTE_SHADER, &pwCompS))
+  PR_CHECK(program_get(1, &pwCompS, &pwComp))
+
   return 0;
 }
 
 void noise_w(uint32_t w, uint32_t h, uint32_t d, float scale, struct img *__restrict i) {
   if (i == NULL || (i->h != h || i->w != w || i->d != d)) {
     if (i->t) { glDeleteTextures(1, &i->t); }
-    if (d == 1) { *i = create_image24(w, h   ); } 
-           else { *i = create_image34(w, h, d); }
+    if (d == 1) { *i = create_image21(w, h   ); } 
+           else { *i = create_image31(w, h, d); }
   }
   uint32_t udx = (uint32_t)(w / scale + 3);
   uint32_t udy = (uint32_t)(h / scale + 3);
@@ -139,7 +143,7 @@ void noise_w(uint32_t w, uint32_t h, uint32_t d, float scale, struct img *__rest
 
   glUseProgram(wpComp);
   program_set_uint1 (wpComp, "dimensions", (d == 1) ? 2 : 3);
-  program_set_float1(wpComp, "seed", 1.0);
+  program_set_float1(wpComp, "seed", 1.0); /// TODO: MAKE RANDOM
   program_set_uint1 (wpComp, "udx", udx);
   program_set_uint1 (wpComp, "udy", udy);
   program_set_float1(wpComp, "scale", scale);
@@ -152,8 +156,8 @@ void noise_w(uint32_t w, uint32_t h, uint32_t d, float scale, struct img *__rest
   program_set_uint1 (wComp, "h", h);
   program_set_uint1 (wComp, "d", d);
   program_set_float1(wComp, "scale", scale);
-  if (d == 1) { glBindImageTexture(0, i->t, 0, GL_FALSE, 0, GL_READ_WRITE, GL_RGBA32F); } 
-                  else { glBindImageTexture(2, i->t, 0, GL_FALSE, 0, GL_READ_WRITE, GL_RGBA32F); }
+  if (d == 1) { glBindImageTexture(0, i->t, 0, GL_FALSE, 0, GL_WRITE_ONLY, GL_R8); } 
+         else { glBindImageTexture(2, i->t, 0, GL_FALSE, 0, GL_WRITE_ONLY, GL_R8); }
   glDispatchCompute(w, h, d);
   glMemoryBarrier(0);
 }
@@ -194,8 +198,8 @@ void new_perlin_perms() {
 void noise_p(uint32_t h, uint32_t w, uint32_t d, uint32_t octaves, float persistence, float scale, struct img *__restrict i) {
   if (i == NULL || (i->h != h || i->w != w || i->d != d)) {
     if (i->t) { glDeleteTextures(1, &i->t); }
-    if (d == 1) { *i = create_image24(w, h   ); } 
-           else { *i = create_image34(w, h, d); }
+    if (d == 1) { *i = create_image21(w, h   ); } 
+           else { *i = create_image31(w, h, d); }
   }
 
   glUseProgram(pComp);
@@ -205,20 +209,38 @@ void noise_p(uint32_t h, uint32_t w, uint32_t d, uint32_t octaves, float persist
   program_set_float1(pComp, "scale", scale);
   program_set_float1(pComp, "persistence", persistence);
   program_set_uint1 (pComp, "octaves", octaves);
-  if (d == 1) { glBindImageTexture(0, i->t, 0, GL_FALSE, 0, GL_READ_WRITE, GL_RGBA32F); } 
-         else { glBindImageTexture(2, i->t, 0, GL_FALSE, 0, GL_READ_WRITE, GL_RGBA32F); }
+  if (d == 1) { glBindImageTexture(0, i->t, 0, GL_FALSE, 0, GL_WRITE_ONLY, GL_R8); } 
+         else { glBindImageTexture(2, i->t, 0, GL_FALSE, 0, GL_WRITE_ONLY, GL_R8); }
+  glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, pbuf);
   glDispatchCompute(w, h, d);
   glMemoryBarrier(0);
 }
 
-float pwb(float p, float w) { /// TODO: Make nicer
-  return w - w * p;
-  //return w * p;
-}
+void noise_pw(uint32_t w, uint32_t h, uint32_t d, uint32_t octaves, float persistence, float pscale, float wscale, struct img *__restrict i) {
+  if (i == NULL || (i->h != h || i->w != w || i->d != d)) {
+    if (i->t) { glDeleteTextures(1, &i->t); }
+    *i = create_image34(w, h, d);
+  }
 
-void *tmkpw3d(void *vp) {  /*struct rthread *v = (struct rthread*)vp; uint32_t d = v->ez; GA(h, uint32_t); GA(w, uint32_t); GA(imv, float*); GA(pscale, double); GA(octaves, uint32_t); GA(persistence, double); FFF(v->sz, d, 0, h, 0, w, D(imv, x, y, z, w, h) = pwb(octave_perlin(x / pscale, y / pscale, z / pscale, octaves, persistence), D(imv, x, y, z, w, h)););*/ return NULL; }
+  static struct img w1, w2, w3, w4, p;
+  noise_w(w, h, d, wscale, &w1);
+  noise_w(w, h, d, wscale / 2, &w2);
+  noise_w(w, h, d, wscale / 3, &w3);
+  noise_w(w, h, d, pscale, &w4);
+  noise_p(w, h, d, octaves, persistence, pscale, &p);
+  //i->t = p.t;
+  //return;
 
-void noise_pw3d(uint32_t h, uint32_t w, uint32_t d, uint32_t octaves, float persistence, float pscale, float wscale, struct i3df *__restrict im) {
+  glUseProgram(pwComp);
+  glBindImageTexture(0, w1.t, 0, GL_FALSE, 0, GL_READ_ONLY, GL_R8);
+  glBindImageTexture(1, w2.t, 0, GL_FALSE, 0, GL_READ_ONLY, GL_R8);
+  glBindImageTexture(2, w3.t, 0, GL_FALSE, 0, GL_READ_ONLY, GL_R8);
+  glBindImageTexture(3, w4.t, 0, GL_FALSE, 0, GL_READ_ONLY, GL_R8);
+  glBindImageTexture(4, p.t, 0, GL_FALSE, 0, GL_READ_ONLY, GL_R8);
+  glBindImageTexture(5, i->t, 0, GL_FALSE, 0, GL_WRITE_ONLY, GL_RGBA32F);
+  glDispatchCompute(w, h, d);
+  glMemoryBarrier(0);
+
   //noise_w3d(h, w, d, wscale, im);
   //init_threads(tmkpw3d, 0, d, h, w, im->v, (double)pscale, octaves, (double)persistence);
 }
@@ -252,7 +274,7 @@ void noise_cloud3(uint32_t h, uint32_t w, uint32_t d, uint32_t octaves, float pe
   if (im->v == NULL) { im->v = calloc(sizeof(im->v[0]), h * w * d); }
 
   struct i3df pw = {0}, w1 = {0}, w2 = {0}, w3 = {0} ;
-  TIME(noise_pw3d(h, w, d, octaves, persistence, pscale, pwscale, &pw);,"pw")
+  //TIME(noise_pw3d(h, w, d, octaves, persistence, pscale, pwscale, &pw);,"pw")
     /*
   TIME(noise_w3d(h, w, d, wscale / 1.0, &w1);,"w1") 
   TIME(noise_w3d(h, w, d, wscale / 1.6, &w2);,"w2") 
@@ -317,7 +339,7 @@ void noise_curl3(uint32_t h, uint32_t w, uint32_t octaves, float persistence, fl
   }*/
 }
 
-#define CIMG(A, B, W, H, D, ...) \
+#define CIMG(A, B, C, X, W, H, D, ...) \
   struct img ci = {0}; \
   glGenTextures(1, &ci.t); \
   glActiveTexture(GL_TEXTURE0); \
@@ -326,13 +348,16 @@ void noise_curl3(uint32_t h, uint32_t w, uint32_t octaves, float persistence, fl
   glTexParameteri(GL_TEXTURE_ ##A, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE); \
   glTexParameteri(GL_TEXTURE_ ##A, GL_TEXTURE_MAG_FILTER, GL_LINEAR); \
   glTexParameteri(GL_TEXTURE_ ##A, GL_TEXTURE_MIN_FILTER, GL_LINEAR); \
-  glTexImage ##A(GL_TEXTURE_ ##A, 0, B ##32F, __VA_ARGS__, 0, B, GL_FLOAT, NULL); \
-  glBindImageTexture(0, ci.t, 0, GL_FALSE, 0, GL_READ_WRITE, B ##32F); \
+  glTexImage ##A(GL_TEXTURE_ ##A, 0, B, __VA_ARGS__, 0, C, GL_FLOAT, NULL); \
+  glBindImageTexture(0, ci.t, 0, GL_FALSE, 0, GL_READ_WRITE, X); \
   ci.w = W; ci.h = H; ci.d = D; \
   return ci;
 
-struct img create_image24(uint32_t w, uint32_t h)             { CIMG(2D, GL_RGBA, w, h, 1, w, h); }
-struct img create_image34(uint32_t w, uint32_t h, uint32_t d) { CIMG(3D, GL_RGBA, w, h, d, w, h, d); }
+struct img create_image24(uint32_t w, uint32_t h)             { CIMG(2D, GL_RGBA32F, GL_RGBA, GL_RGBA32F, w, h, 1, w, h); }
+struct img create_image34(uint32_t w, uint32_t h, uint32_t d) { CIMG(3D, GL_RGBA32F, GL_RGBA, GL_RGBA32F, w, h, d, w, h, d); }
+
+struct img create_image21(uint32_t w, uint32_t h)             { CIMG(2D, GL_RED, GL_RED, GL_R8, w, h, 1, w, h); }
+struct img create_image31(uint32_t w, uint32_t h, uint32_t d) { CIMG(3D, GL_RED, GL_RED, GL_R8, w, h, d, w, h, d); }
 
 //struct img create_image23(uint32_t w, uint32_t h)             { CIMG(2D, GL_RGB, w, h, 1, w, h); }
 //struct img create_image33(uint32_t w, uint32_t h, uint32_t d) { CIMG(3D, GL_RGB, w, h, d, w, h, d); }
