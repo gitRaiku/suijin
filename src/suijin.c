@@ -704,7 +704,12 @@ void draw_squaret3(float px, float py, float sx, float sy, uint32_t tex, int32_t
   glActiveTexture(GL_TEXTURE1);
   glBindTexture(GL_TEXTURE_3D, tex);
   program_set_int1(uprog, "tex3", 1);
-  program_set_int1(uprog, "type", type);
+  if (type >= 80 && type <= 83) {
+    program_set_int1(uprog, "type", 8);
+    program_set_int1(uprog, "ch", type - 80);
+  } else {
+    program_set_int1(uprog, "type", type);
+  }
   program_set_float1(uprog, "z", z);
 
   glDrawArrays(GL_TRIANGLE_FAN, 0, 4);
@@ -1384,7 +1389,7 @@ void init_therm(void *ignored) {
   per.oct = (uint32_t)per.foct;
 
   if ((uint32_t)per.style == 0) {
-    noise_p2d((uint32_t)per.h, (uint32_t)per.w, per.oct, per.per, per.sc, per.m);
+    //noise_p2d((uint32_t)per.h, (uint32_t)per.w, per.oct, per.per, per.sc, per.m);
   } else {
     //noise_w2d((uint32_t)per.h, (uint32_t)per.w, per.sc, per.m);
   }
@@ -1617,18 +1622,16 @@ void messageCallback(GLenum source, GLenum type, GLuint id, GLenum severity, GLs
 }
 
 float scale = 10.0;
-uint32_t dimensions = 3;
-
+float pscale = 7.73;
 float curslcs = 0.5;
 struct img i;
+float kmsper = 0.53;
+float kmsoct = 3.1;
+float curch = 80.1;
 void compute_shader() {
-  noise_w(128, 128, 128, scale, &i);
-
-  /*if (3 == 2) {
-    draw_squaret((windowW - 500) / 2, (windowH - 500) / 2, 500, 500, i.t, 10);
-  } else {
-    draw_squaret3((windowW - 500) / 2, (windowH - 500) / 2, 500, 500, i.t, 8, curslcs);
-  }*/
+  //noise_w(128, 128, 128, scale, &i);
+  //noise_p(128, 128, 128, (uint32_t)kmsoct, kmsper, scale, &i);
+  noise_pw(128, 128, 128, (uint32_t)kmsoct, kmsper, pscale, scale, &i);
 }
 
 uint8_t run_suijin() {
@@ -1742,6 +1745,7 @@ uint8_t run_suijin() {
       glDeleteShader(shaders[i * 2 + 1]);
     }
     if (prep_compute_shaders()) { exit(1); }
+    new_perlin_perms();
     compute_shader();
   }
 
@@ -1815,7 +1819,11 @@ uint8_t run_suijin() {
       mchvi(&nodes[1].children);
       add_title(&nodes[1], "#Clouds", 25, 8);
       //add_tslider(&nodes[1], "#Clouds", 15, &c.t31pscale, 0.001, 200.0f, 8, NULL, NULL);
-      add_tslider(&nodes[1], "cccscale", 15, &scale, 1.0, 60.0f, 8, (void (*)(void*))prep_compute_shaders, NULL);
+      add_tslider(&nodes[1], "Scale", 15, &scale, 1.1, 20.0f, 8, compute_shader, NULL);
+      add_tslider(&nodes[1], "PScale", 15, &pscale, 1.1, 20.0f, 8, compute_shader, NULL);
+      add_tslider(&nodes[1], "Persist", 15, &kmsper, 0.0, 2.0f, 8, compute_shader, NULL);
+      add_tslider(&nodes[1], "Octaves", 15, &kmsoct, 1.0, 20.0f, 8, compute_shader, NULL);
+      add_tslider(&nodes[1], "Channel", 15, &curch, 80.1, 83.1f, 8, NULL, NULL);
       add_tslider(&nodes[1], "ccccurscls", 15, &curslcs, 0.0, 1.0f, 8, NULL, NULL);
       add_tslider(&nodes[1], "pscale", 15, &c.t31pscale, 0.001, 200.0f, 8, NULL, NULL);
       add_tslider(&nodes[1], "pwscale", 15, &c.t31pwscale, 0.001, 200.0f, 8, NULL, NULL);
@@ -1994,8 +2002,7 @@ uint8_t run_suijin() {
       draw_squaret((windowW - 500) / 2, (windowH - 500) / 2 + 275, 500, 500, c.t2, 9);
     } else {
       if (i.t) {
-        //fprintf(stdout, "AAAAAAA\n");
-        draw_squaret3((windowW - 500) / 2, (windowH - 500) / 2, 500, 500, i.t, 8, curslcs);
+        draw_squaret3((windowW - 500) / 2, (windowH - 500) / 2, 500, 500, i.t, curch, curslcs);
       }
     }
 

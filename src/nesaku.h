@@ -115,9 +115,11 @@ void update_texture_ub(struct i2du *__restrict im, struct texture *__restrict te
 
 void noise_w(uint32_t w, uint32_t h, uint32_t d, float scale, struct img *__restrict i);
 
-void new_perlin_perms();
+void noise_p(uint32_t h, uint32_t w, uint32_t d, uint32_t octaves, float persistence, float scale, struct img *__restrict i);
 
-void noise_p2d(uint32_t h, uint32_t w, uint32_t octaves, float persistence, float scale, struct i2df *__restrict im);
+void noise_pw(uint32_t w, uint32_t h, uint32_t d, uint32_t octaves, float persistence, float pscale, float wscale, struct img *__restrict i);
+
+void new_perlin_perms();
 
 void noise_pw3d(uint32_t h, uint32_t w, uint32_t d, uint32_t octaves, float persistence, float pscale, float wscale, struct i3df *__restrict im);
 
@@ -129,6 +131,6 @@ void noise_curl3(uint32_t h, uint32_t w, uint32_t octaves, float persistence, fl
 
 struct img create_image24(uint32_t w, uint32_t h);
 struct img create_image34(uint32_t w, uint32_t h, uint32_t d);
-struct img create_image23(uint32_t w, uint32_t h);
-struct img create_image33(uint32_t w, uint32_t h, uint32_t d);
+struct img create_image21(uint32_t w, uint32_t h);
+struct img create_image31(uint32_t w, uint32_t h, uint32_t d);
 #endif
