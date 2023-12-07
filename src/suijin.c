@@ -1994,6 +1994,7 @@ uint8_t run_suijin() {
       draw_squaret((windowW - 500) / 2, (windowH - 500) / 2 + 275, 500, 500, c.t2, 9);
     } else {
       if (i.t) {
+        //fprintf(stdout, "AAAAAAA\n");
         draw_squaret3((windowW - 500) / 2, (windowH - 500) / 2, 500, 500, i.t, 8, curslcs);
       }
     }
