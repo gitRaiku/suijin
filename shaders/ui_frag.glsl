@@ -36,6 +36,7 @@ void main() {
   } else if (type == 2) {
     FragColor = vec4(get_heat(texture(tex, texCoords).r), 1.0f);
   } else if (type == 8) {
+    //FragColor = vec4(1.0f); return;
     vec4 c = texture(tex3, vec3(texCoords.x, texCoords.y, z));
     double v;
     if (ch == 0) { v = c.r; } else

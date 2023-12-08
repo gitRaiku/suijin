@@ -8,14 +8,14 @@ uniform float scale;
 uniform uint octaves;
 uniform float persistence;
 
-layout(r8, binding = 0) uniform image2D img2d;
-layout(r8, binding = 2) uniform image3D img3d;
+layout(rgba32f, binding = 0) uniform image2D img2d;
+layout(rgba32f, binding = 2) uniform image3D img3d;
 layout (std430, binding = 1) buffer Pos { uint p[]; } p;
 
 #define GI gl_GlobalInvocationID
 
 float grad(uint hash, float x, float y, float z) {
-  uint h = hash & 15;
+  uint h = uint(int(hash) & 15);
   float u = h < 8 ? x : y;
   float v;
 
@@ -23,15 +23,15 @@ float grad(uint hash, float x, float y, float z) {
   else if (h == 12 || h == 14) { v = x; } 
   else { v = z; }
 
-  return ((h & 1) == 0 ? u : -u) + ((h & 2) == 0 ? v : -v);
+  return ((uint(int(h) & 1)) == 0 ? u : -u) + ((uint(int(h) & 2)) == 0 ? v : -v);
 }
 
 float fade(float t) { return t * t * t * (t * (t * 6.0 - 15.0) + 10.0); }
 
 float perlin(float x, float y, float z) {
-  uint xi = uint(x) & 0xFF;
-  uint yi = uint(y) & 0xFF;
-  uint zi = uint(z) & 0xFF;
+  uint xi = uint(int(x) & 0xFF);
+  uint yi = uint(int(y) & 0xFF);
+  uint zi = uint(int(z) & 0xFF);
   float xf = x - uint(x);
   float yf = y - uint(y);
   float zf = z - uint(z);
@@ -102,9 +102,6 @@ void tmkp2d() {
 }
 
 void main() {
-  if (d == 1) {
-    tmkp2d();
-  } else {
-    tmkp3d();
-  }
+  if (d == 1) { tmkp2d(); } 
+         else { tmkp3d(); }
 }

@@ -701,6 +701,7 @@ void draw_squaret3(float px, float py, float sx, float sy, uint32_t tex, int32_t
   create_affine_matrix(aff, sx, sy, 1.0f, cpx, -cpy, 0.0f);
   program_set_mat4(uprog, "affine", aff);
 
+  program_set_int1(uprog, "tex", 0);
   glActiveTexture(GL_TEXTURE1);
   glBindTexture(GL_TEXTURE_3D, tex);
   program_set_int1(uprog, "tex3", 1);
@@ -719,14 +720,14 @@ void draw_squarec(float px, float py, float sx, float sy, uint32_t col) {
   mat4 aff;
   glUseProgram(uprog);
   glBindVertexArray(uvao);
-  glActiveTexture(GL_TEXTURE0);
-  glBindTexture(GL_TEXTURE_3D, 0);
+
   float cpx = ((px + sx / 2) * iwinw) * 2 - 1;
   float cpy = ((py + sy / 2) * iwinh) * 2 - 1;
   create_affine_matrix(aff, sx, sy, 1.0f, cpx, -cpy, 0.0f);
   program_set_mat4(uprog, "affine", aff);
   program_set_int1(uprog, "type", 0);
   program_set_int1(uprog, "tex3", 0);
+  program_set_int1(uprog, "tex", 1);
   v4 c = h2c4(col);
   program_set_float4(uprog, "col", c.x, c.y, c.z, c.w);
 
@@ -1535,6 +1536,7 @@ struct cloud {
 
 #define DRAW_CLOUDS 0b111
 void update_clouds(void *__restrict cp) {
+  /*
   TIME(
   struct cloud *__restrict c = cp;
   if (DRAW_CLOUDS & 0b001) { // Perlin-worley
@@ -1588,7 +1590,7 @@ void update_clouds(void *__restrict cp) {
   }
   , "Clouds");
   //fprintf(stdout, "Time: %li\n", (ed.tv_sec - st.tv_sec) * 1000 + (ed.tv_usec - st.tv_usec) / 1000);
-  fprintf(stdout, "Finish updating\n");
+  fprintf(stdout, "Finish updating\n");*/
 }
 
 uint8_t rayHit(v3 s, v3 d, float dist, uint32_t mask) {
@@ -1627,11 +1629,26 @@ float curslcs = 0.5;
 struct img i;
 float kmsper = 0.53;
 float kmsoct = 3.1;
-float curch = 80.1;
+float curch = 79.1;
+float KMS = 2.1;
 void compute_shader() {
-  //noise_w(128, 128, 128, scale, &i);
-  //noise_p(128, 128, 128, (uint32_t)kmsoct, kmsper, scale, &i);
-  noise_pw(128, 128, 128, (uint32_t)kmsoct, kmsper, pscale, scale, &i);
+  switch ((uint32_t)(KMS)) {
+    case 0:
+      noise_w(128, 128, 128, scale, &i);
+      break;
+
+    case 1:
+      noise_p(128, 128, 128, (uint32_t)kmsoct, kmsper, scale, &i);
+      break;
+
+    case 2:
+      noise_c(128, 128, 128, (uint32_t)kmsoct, kmsper, scale, &i);
+      break;
+
+    case 3:
+      noise_pw(128, 128, 128, (uint32_t)kmsoct, kmsper, pscale, scale, &i);
+      break;
+  }
 }
 
 uint8_t run_suijin() {
@@ -1717,7 +1734,7 @@ uint8_t run_suijin() {
     clines(&lvao, &lvbo);
   }
 
-#define PROGC 6 /// Shaders
+#define PROGC 6 /// Shadercurslcs
   uint32_t nprog;
   uint32_t shaders[PROGC * 2];
   {
@@ -1819,11 +1836,12 @@ uint8_t run_suijin() {
       mchvi(&nodes[1].children);
       add_title(&nodes[1], "#Clouds", 25, 8);
       //add_tslider(&nodes[1], "#Clouds", 15, &c.t31pscale, 0.001, 200.0f, 8, NULL, NULL);
-      add_tslider(&nodes[1], "Scale", 15, &scale, 1.1, 20.0f, 8, compute_shader, NULL);
-      add_tslider(&nodes[1], "PScale", 15, &pscale, 1.1, 20.0f, 8, compute_shader, NULL);
-      add_tslider(&nodes[1], "Persist", 15, &kmsper, 0.0, 2.0f, 8, compute_shader, NULL);
-      add_tslider(&nodes[1], "Octaves", 15, &kmsoct, 1.0, 20.0f, 8, compute_shader, NULL);
-      add_tslider(&nodes[1], "Channel", 15, &curch, 80.1, 83.1f, 8, NULL, NULL);
+      add_tslider(&nodes[1], "Scale", 15, &scale, 1.1, 20.0f, 8, NULL, NULL);
+      add_tslider(&nodes[1], "PScale", 15, &pscale, 1.1, 20.0f, 8, NULL, NULL);
+      add_tslider(&nodes[1], "Persist", 15, &kmsper, 0.0, 2.0f, 8, NULL, NULL);
+      add_tslider(&nodes[1], "Octaves", 15, &kmsoct, 1.0, 20.0f, 8, NULL, NULL);
+      add_tslider(&nodes[1], "Channel", 15, &curch, 79.1, 83.1f, 8, NULL, NULL);
+      add_tslider(&nodes[1], "TYeeeeeeep", 15, &KMS, 0.1, 3.1f, 8, NULL, NULL);
       add_tslider(&nodes[1], "ccccurscls", 15, &curslcs, 0.0, 1.0f, 8, NULL, NULL);
       add_tslider(&nodes[1], "pscale", 15, &c.t31pscale, 0.001, 200.0f, 8, NULL, NULL);
       add_tslider(&nodes[1], "pwscale", 15, &c.t31pwscale, 0.001, 200.0f, 8, NULL, NULL);
@@ -1839,6 +1857,7 @@ uint8_t run_suijin() {
       add_tslider(&nodes[1], "t2octaves", 15, &c.t2octaves, 0.0, 5.0f, 8, update_clouds, &c);
       add_button(&nodes[1], "Update", 0xFF0000FF, 20, 10, update_clouds, &c);
       add_button(&nodes[1], "Update2", 0xFF0000FF, 20, 10, compute_shader, NULL);
+      add_button(&nodes[1], "suika", 0xFF0000FF, 20, 10, NULL, NULL);
       nodes[1].px = 400.0f;
       nodes[1].py = 50.0f;
       nodes[1].sx = 400.0f;
@@ -2002,10 +2021,14 @@ uint8_t run_suijin() {
       draw_squaret((windowW - 500) / 2, (windowH - 500) / 2 + 275, 500, 500, c.t2, 9);
     } else {
       if (i.t) {
-        draw_squaret3((windowW - 500) / 2, (windowH - 500) / 2, 500, 500, i.t, curch, curslcs);
+        //draw_squaret((windowW - 500) / 2, (windowH - 500) / 2, 500, 500, i.t, 10);
+       if (curch > 80.0) {
+         draw_squaret3((windowW - 500) / 2, (windowH - 500) / 2, 500, 500, i.t, curch, curslcs);
+       } else {
+         draw_squaret3((windowW - 500) / 2, (windowH - 500) / 2, 500, 500, i.t, 11, curslcs);
+       }
       }
     }
-
 
     if (drawUi) { // UPROG
       glUseProgram(uprog);

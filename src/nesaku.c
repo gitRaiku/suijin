@@ -2,6 +2,13 @@
 
 struct rthread threads[THREAD_COUNT];
 
+#define thefunny4 \
+  if (i == NULL || (i->h != h || i->w != w || i->d != d)) { \
+    if (i->t) { glDeleteTextures(1, &i->t); } \
+    if (d == 1) { *i = create_image24(w, h   ); }  \
+           else { *i = create_image34(w, h, d); } \
+  }
+
 float rf() { return (float)rand() / (float)RAND_MAX; }
 
 void dump_image_to_file(char *__restrict fname, struct i2d *__restrict im) {
@@ -112,6 +119,7 @@ void update_texture_ub(struct i2du *__restrict im, struct texture *__restrict te
 uint32_t wpCompS, wpComp, wCompS, wComp, wbuf;
 uint32_t pCompS, pComp, pbuf;
 uint32_t pwCompS, pwComp;
+uint32_t cCompS, cComp;
 uint8_t prep_compute_shaders() {
   PR_CHECK(shader_get("shaders/worley_points_compute.glsl", GL_COMPUTE_SHADER, &wpCompS))
   PR_CHECK(program_get(1, &wpCompS, &wpComp))
@@ -128,15 +136,14 @@ uint8_t prep_compute_shaders() {
   PR_CHECK(shader_get("shaders/perlinworley_compute.glsl", GL_COMPUTE_SHADER, &pwCompS))
   PR_CHECK(program_get(1, &pwCompS, &pwComp))
 
+  PR_CHECK(shader_get("shaders/curl_compute.glsl", GL_COMPUTE_SHADER, &cCompS))
+  PR_CHECK(program_get(1, &cCompS, &cComp))
+
   return 0;
 }
 
 void noise_w(uint32_t w, uint32_t h, uint32_t d, float scale, struct img *__restrict i) {
-  if (i == NULL || (i->h != h || i->w != w || i->d != d)) {
-    if (i->t) { glDeleteTextures(1, &i->t); }
-    if (d == 1) { *i = create_image21(w, h   ); } 
-           else { *i = create_image31(w, h, d); }
-  }
+  thefunny4;
   uint32_t udx = (uint32_t)(w / scale + 3);
   uint32_t udy = (uint32_t)(h / scale + 3);
   uint32_t udz = (uint32_t)(d / scale + 3);
@@ -156,8 +163,8 @@ void noise_w(uint32_t w, uint32_t h, uint32_t d, float scale, struct img *__rest
   program_set_uint1 (wComp, "h", h);
   program_set_uint1 (wComp, "d", d);
   program_set_float1(wComp, "scale", scale);
-  if (d == 1) { glBindImageTexture(0, i->t, 0, GL_FALSE, 0, GL_WRITE_ONLY, GL_R8); } 
-         else { glBindImageTexture(2, i->t, 0, GL_FALSE, 0, GL_WRITE_ONLY, GL_R8); }
+  if (d == 1) { glBindImageTexture(0, i->t, 0, GL_FALSE, 0, GL_WRITE_ONLY, GL_RGBA32F); } 
+         else { glBindImageTexture(2, i->t, 0, GL_FALSE, 0, GL_WRITE_ONLY, GL_RGBA32F); }
   glDispatchCompute(w, h, d);
   glMemoryBarrier(0);
 }
@@ -195,32 +202,39 @@ void new_perlin_perms() {
   glBufferData(GL_SHADER_STORAGE_BUFFER, sizeof(p), p, GL_STATIC_DRAW);
 }
 
+
 void noise_p(uint32_t h, uint32_t w, uint32_t d, uint32_t octaves, float persistence, float scale, struct img *__restrict i) {
-  if (i == NULL || (i->h != h || i->w != w || i->d != d)) {
-    if (i->t) { glDeleteTextures(1, &i->t); }
-    if (d == 1) { *i = create_image21(w, h   ); } 
-           else { *i = create_image31(w, h, d); }
-  }
+  thefunny4;
 
   glUseProgram(pComp);
   program_set_uint1 (pComp, "w", w);
   program_set_uint1 (pComp, "h", h);
-  program_set_uint1 (pComp, "d", d);
   program_set_float1(pComp, "scale", scale);
   program_set_float1(pComp, "persistence", persistence);
   program_set_uint1 (pComp, "octaves", octaves);
-  if (d == 1) { glBindImageTexture(0, i->t, 0, GL_FALSE, 0, GL_WRITE_ONLY, GL_R8); } 
-         else { glBindImageTexture(2, i->t, 0, GL_FALSE, 0, GL_WRITE_ONLY, GL_R8); }
+  if (d == 1) { glBindImageTexture(0, i->t, 0, GL_FALSE, 0, GL_WRITE_ONLY, GL_RGBA32F); } 
+         else { glBindImageTexture(2, i->t, 0, GL_FALSE, 0, GL_WRITE_ONLY, GL_RGBA32F); }
   glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, pbuf);
   glDispatchCompute(w, h, d);
   glMemoryBarrier(0);
 }
 
+void noise_c(uint32_t h, uint32_t w, uint32_t d, uint32_t octaves, float persistence, float scale, struct img *__restrict i) {
+  thefunny4;
+  static struct img pi;
+  noise_p(h + 2, w + 2, d + 2, octaves, persistence, scale, &pi);
+
+  glUseProgram(cComp);
+  if (d == 1) { glBindImageTexture(0, pi.t, 0, GL_FALSE, 0, GL_READ_ONLY, GL_RGBA32F); } 
+         else { glBindImageTexture(1, pi.t, 0, GL_FALSE, 0, GL_READ_ONLY, GL_RGBA32F); }
+  if (d == 1) { glBindImageTexture(2, i->t, 0, GL_FALSE, 0, GL_WRITE_ONLY, GL_RGBA32F); } 
+         else { glBindImageTexture(3, i->t, 0, GL_FALSE, 0, GL_WRITE_ONLY, GL_RGBA32F); }
+  glDispatchCompute(w, h, d);
+  glMemoryBarrier(0);
+}
+
 void noise_pw(uint32_t w, uint32_t h, uint32_t d, uint32_t octaves, float persistence, float pscale, float wscale, struct img *__restrict i) {
-  if (i == NULL || (i->h != h || i->w != w || i->d != d)) {
-    if (i->t) { glDeleteTextures(1, &i->t); }
-    *i = create_image34(w, h, d);
-  }
+  thefunny4;
 
   static struct img w1, w2, w3, w4, p;
   noise_w(w, h, d, wscale, &w1);
@@ -228,115 +242,18 @@ void noise_pw(uint32_t w, uint32_t h, uint32_t d, uint32_t octaves, float persis
   noise_w(w, h, d, wscale / 3, &w3);
   noise_w(w, h, d, pscale, &w4);
   noise_p(w, h, d, octaves, persistence, pscale, &p);
-  //i->t = p.t;
-  //return;
+
+  //i->t = p.t; return;
 
   glUseProgram(pwComp);
-  glBindImageTexture(0, w1.t, 0, GL_FALSE, 0, GL_READ_ONLY, GL_R8);
-  glBindImageTexture(1, w2.t, 0, GL_FALSE, 0, GL_READ_ONLY, GL_R8);
-  glBindImageTexture(2, w3.t, 0, GL_FALSE, 0, GL_READ_ONLY, GL_R8);
-  glBindImageTexture(3, w4.t, 0, GL_FALSE, 0, GL_READ_ONLY, GL_R8);
-  glBindImageTexture(4, p.t, 0, GL_FALSE, 0, GL_READ_ONLY, GL_R8);
+  glBindImageTexture(0, w1.t, 0, GL_FALSE, 0, GL_READ_ONLY, GL_RGBA32F);
+  glBindImageTexture(1, w2.t, 0, GL_FALSE, 0, GL_READ_ONLY, GL_RGBA32F);
+  glBindImageTexture(2, w3.t, 0, GL_FALSE, 0, GL_READ_ONLY, GL_RGBA32F);
+  glBindImageTexture(3, w4.t, 0, GL_FALSE, 0, GL_READ_ONLY, GL_RGBA32F);
+  glBindImageTexture(4, p.t, 0, GL_FALSE, 0, GL_READ_ONLY, GL_RGBA32F);
   glBindImageTexture(5, i->t, 0, GL_FALSE, 0, GL_WRITE_ONLY, GL_RGBA32F);
   glDispatchCompute(w, h, d);
   glMemoryBarrier(0);
-
-  //noise_w3d(h, w, d, wscale, im);
-  //init_threads(tmkpw3d, 0, d, h, w, im->v, (double)pscale, octaves, (double)persistence);
-}
-
-void *tmkcloud3(void *vp) { 
-  /*
-  struct rthread *v = (struct rthread*)vp; 
-  uint32_t d = v->ez; 
-  GA(h, uint32_t); 
-  GA(w, uint32_t); 
-  GA(imv, struct rgba*); 
-  GA(pw, float*); 
-  GA(w1, float*); 
-  GA(w2, float*); 
-  GA(w3, float*); 
-
-  FFF(v->sz, d, 0, h, 0, w, 
-          D(imv, x, y, z, h, w).r = D(pw, x, y, z, h, w);
-          D(imv, x, y, z, h, w).g = D(w1, x, y, z, h, w);
-          D(imv, x, y, z, h, w).b = D(w2, x, y, z, h, w);
-          D(imv, x, y, z, h, w).a = D(w3, x, y, z, h, w);
-     );
-*/
-  return NULL;
-}
-
-void noise_cloud3(uint32_t h, uint32_t w, uint32_t d, uint32_t octaves, float persistence, float pscale, float pwscale, float wscale, struct i3da *__restrict im) {
-  if (im == NULL) { im = calloc(sizeof(*im), 1); }
-
-  im->h = h; im->w = w; im->d = d;
-  if (im->v == NULL) { im->v = calloc(sizeof(im->v[0]), h * w * d); }
-
-  struct i3df pw = {0}, w1 = {0}, w2 = {0}, w3 = {0} ;
-  //TIME(noise_pw3d(h, w, d, octaves, persistence, pscale, pwscale, &pw);,"pw")
-    /*
-  TIME(noise_w3d(h, w, d, wscale / 1.0, &w1);,"w1") 
-  TIME(noise_w3d(h, w, d, wscale / 1.6, &w2);,"w2") 
-  TIME(noise_w3d(h, w, d, wscale / 2.2, &w3);,"w3")
-  AAAAAAAAAA = 1;
-  TIME(init_threads(tmkcloud3, 0, d, h, w, im->v, pw.v, w1.v, w2.v, w3.v);,"IT")
-  AAAAAAAAAA = 0;*/
-  free(pw.v); free(w1.v); free(w2.v); free(w3.v);
-}
-
-void *tmkworl3(void *vp) { 
-  /*
-  struct rthread *v = (struct rthread*)vp; 
-  uint32_t d = v->ez; 
-  GA(h, uint32_t); 
-  GA(w, uint32_t); 
-  GA(imv, struct fcol*); 
-  GA(w1, float*); 
-  GA(w2, float*); 
-  GA(w3, float*); 
-
-  FFF(v->sz, d, 0, h, 0, w, 
-          D(imv, x, y, z, h, w).r = D(w1, x, y, z, h, w);
-          D(imv, x, y, z, h, w).g = D(w2, x, y, z, h, w);
-          D(imv, x, y, z, h, w).b = D(w3, x, y, z, h, w);
-     );
-*/
-  return NULL;
-}
-
-void noise_worl3(uint32_t h, uint32_t w, uint32_t d, float scale, struct i3d *__restrict im) {
-  if (im == NULL) { im = calloc(sizeof(*im), 1); }
-
-  im->h = h; im->w = w; im->d = d;
-  if (im->v == NULL) { im->v = calloc(sizeof(im->v[0]), h * w * d); }
-
-  struct i3df w1 = {0}, w2 = {0}, w3 = {0};
-  //noise_w3d(h, w, d, scale / 1.0, &w1); noise_w3d(h, w, d, scale / 2.0, &w2); noise_w3d(h, w, d, scale / 3.0, &w3);
-
-  //init_threads(tmkworl3, 0, d, h, w, im->v, w1.v, w2.v, w3.v);
-  free(w1.v); free(w2.v); free(w3.v);
-}
-
-void noise_curl3(uint32_t h, uint32_t w, uint32_t octaves, float persistence, float scale, struct i2d *__restrict im) { /// TODO: Be more efficient
-  /*
-  if (im == NULL) { im = calloc(sizeof(*im), 1); }
-  im->h = h; im->w = w;
-  if (im->v == NULL) { im->v = calloc(sizeof(im->v[0]), h * w); }
-
-  {
-    int32_t i, j;
-    float eps = 0.01;
-#define CURLA 3
-#define CURLB 0.5
-    for (i = 0; i < h; ++i) {
-      for (j = 0; j < w; ++j) {
-        G(im->v, i, j, w).r = (octave_perlin(i / scale, (j + eps) / scale, 0.0f, octaves, persistence) - octave_perlin(i / scale, (j - eps) / scale, 0.0f, octaves, persistence)) / (2 * eps) * CURLA + CURLB;
-        G(im->v, i, j, w).g = (octave_perlin((i + eps) / scale, j / scale, 0.0f, octaves, persistence) - octave_perlin((i - eps) / scale, j / scale, 0.0f, octaves, persistence)) / (2 * eps) * CURLA + CURLB;
-        G(im->v, i, j, w).b = (octave_perlin(0.0f, i / scale, (j + eps) / scale, octaves, persistence) - octave_perlin(0.0f, i / scale, j / scale, octaves, persistence)) / (2 * eps) * CURLA + CURLB;
-      }
-    }
-  }*/
 }
 
 #define CIMG(A, B, C, X, W, H, D, ...) \
@@ -356,8 +273,8 @@ void noise_curl3(uint32_t h, uint32_t w, uint32_t octaves, float persistence, fl
 struct img create_image24(uint32_t w, uint32_t h)             { CIMG(2D, GL_RGBA32F, GL_RGBA, GL_RGBA32F, w, h, 1, w, h); }
 struct img create_image34(uint32_t w, uint32_t h, uint32_t d) { CIMG(3D, GL_RGBA32F, GL_RGBA, GL_RGBA32F, w, h, d, w, h, d); }
 
-struct img create_image21(uint32_t w, uint32_t h)             { CIMG(2D, GL_RED, GL_RED, GL_R8, w, h, 1, w, h); }
-struct img create_image31(uint32_t w, uint32_t h, uint32_t d) { CIMG(3D, GL_RED, GL_RED, GL_R8, w, h, d, w, h, d); }
+//struct img create_image21(uint32_t w, uint32_t h)             { CIMG(2D, GL_RED, GL_RED, GL_R8, w, h, 1, w, h); }
+//struct img create_image31(uint32_t w, uint32_t h, uint32_t d) { CIMG(3D, GL_RED, GL_RED, GL_R8, w, h, d, w, h, d); }
 
 //struct img create_image23(uint32_t w, uint32_t h)             { CIMG(2D, GL_RGB, w, h, 1, w, h); }
 //struct img create_image33(uint32_t w, uint32_t h, uint32_t d) { CIMG(3D, GL_RGB, w, h, d, w, h, d); }

@@ -7,8 +7,8 @@ uniform uint h;
 uniform uint d;
 uniform float scale;
 
-layout(r8, binding = 0) uniform image2D img2d;
-layout(r8, binding = 2) uniform image3D img3d;
+layout(rgba32f, binding = 0) uniform image2D img2d;
+layout(rgba32f, binding = 2) uniform image3D img3d;
 layout (std430, binding = 1) buffer Pos { float a[]; } pts;
 
 #define T(A, a, b, c, w, h, o) A[o + ((a) + (b) * (w) + (c) * (w * h)) * 3]
