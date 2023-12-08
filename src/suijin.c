@@ -1651,6 +1651,13 @@ void compute_shader() {
   }
 }
 
+float kkautoupda = 0.2;
+void autoupda() {
+  if (kkautoupda >= 1.0) {
+    compute_shader();
+  }
+}
+
 uint8_t run_suijin() {
   init_random();
   reset_ft();
@@ -1836,14 +1843,20 @@ uint8_t run_suijin() {
       mchvi(&nodes[1].children);
       add_title(&nodes[1], "#Clouds", 25, 8);
       //add_tslider(&nodes[1], "#Clouds", 15, &c.t31pscale, 0.001, 200.0f, 8, NULL, NULL);
-      add_tslider(&nodes[1], "Scale", 15, &scale, 1.1, 20.0f, 8, NULL, NULL);
-      add_tslider(&nodes[1], "PScale", 15, &pscale, 1.1, 20.0f, 8, NULL, NULL);
-      add_tslider(&nodes[1], "Persist", 15, &kmsper, 0.0, 2.0f, 8, NULL, NULL);
-      add_tslider(&nodes[1], "Octaves", 15, &kmsoct, 1.0, 20.0f, 8, NULL, NULL);
+      add_tslider(&nodes[1], "Scale", 15, &scale, 1.1, 20.0f, 8, autoupda, NULL);
+      add_tslider(&nodes[1], "PScale", 15, &pscale, 1.1, 20.0f, 8, autoupda, NULL);
+      add_tslider(&nodes[1], "Persist", 15, &kmsper, 0.0, 2.0f, 8, autoupda, NULL);
+      add_tslider(&nodes[1], "Octaves", 15, &kmsoct, 1.0, 20.0f, 8, autoupda, NULL);
       add_tslider(&nodes[1], "Channel", 15, &curch, 79.1, 83.1f, 8, NULL, NULL);
-      add_tslider(&nodes[1], "TYeeeeeeep", 15, &KMS, 0.1, 3.1f, 8, NULL, NULL);
-      add_tslider(&nodes[1], "ccccurscls", 15, &curslcs, 0.0, 1.0f, 8, NULL, NULL);
-      add_tslider(&nodes[1], "pscale", 15, &c.t31pscale, 0.001, 200.0f, 8, NULL, NULL);
+      add_title(&nodes[1], "0 = all; 1-3 = r-b", 15, 8);
+      add_tslider(&nodes[1], "Type", 15, &KMS, 0.1, 3.1f, 8, autoupda, NULL);
+      add_title(&nodes[1], "0 = worley", 15, 8);
+      add_title(&nodes[1], "1 = perlin", 15, 8);
+      add_title(&nodes[1], "2 = curl", 15, 8);
+      add_title(&nodes[1], "3 = perlin-worley", 15, 8);
+      noise_pw(128, 128, 128, (uint32_t)kmsoct, kmsper, pscale, scale, &i);
+      add_tslider(&nodes[1], "Curslice", 15, &curslcs, 0.0, 1.0f, 8, NULL, NULL);
+      /*add_tslider(&nodes[1], "pscale", 15, &c.t31pscale, 0.001, 200.0f, 8, NULL, NULL);
       add_tslider(&nodes[1], "pwscale", 15, &c.t31pwscale, 0.001, 200.0f, 8, NULL, NULL);
       add_tslider(&nodes[1], "persistence", 15, &c.t31persistence, 0.0, 4.0f, 8, NULL, NULL);
       add_tslider(&nodes[1], "octaves", 15, &c.t31octaves, 0.0, 5.0f, 8, NULL, NULL);
@@ -1854,10 +1867,12 @@ uint8_t run_suijin() {
       add_tslider(&nodes[1], "colch", 15, &c.t31colCh, 0.0, 3.9f, 8, NULL, NULL);
       add_tslider(&nodes[1], "t2scale", 15, &c.t2scale, 0.001, 30.0f, 8, update_clouds, &c);
       add_tslider(&nodes[1], "t2persistence", 15, &c.t2persistence, 0.0, 4.0f, 8, update_clouds, &c);
-      add_tslider(&nodes[1], "t2octaves", 15, &c.t2octaves, 0.0, 5.0f, 8, update_clouds, &c);
-      add_button(&nodes[1], "Update", 0xFF0000FF, 20, 10, update_clouds, &c);
+      add_tslider(&nodes[1], "t2octaves", 15, &c.t2octaves, 0.0, 5.0f, 8, update_clouds, &c);*/
+      //add_button(&nodes[1], "Update", 0xFF0000FF, 20, 10, update_clouds, &c);
       add_button(&nodes[1], "Update2", 0xFF0000FF, 20, 10, compute_shader, NULL);
-      add_button(&nodes[1], "suika", 0xFF0000FF, 20, 10, NULL, NULL);
+      add_tslider(&nodes[1], "Autoupdate", 15, &kkautoupda, 0.1, 1.9f, 8, NULL, NULL);
+      add_title(&nodes[1], "0 = no; 1 = yes", 15, 8);
+      //add_button(&nodes[1], "suika", 0xFF0000FF, 20, 10, NULL, NULL);
       nodes[1].px = 400.0f;
       nodes[1].py = 50.0f;
       nodes[1].sx = 400.0f;
