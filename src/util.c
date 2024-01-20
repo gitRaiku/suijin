@@ -139,6 +139,11 @@ vec3 __attribute((pure)) *__restrict qv(quat *__restrict q) { // INLINE
   return (v3 *__restrict) q;
 }
 
+/*
+vec3 __attribute((pure)) qdir(quat *__restrict q) { // INLINE
+  return (v3) { q.y, y.z, q.w };
+}*/
+
 void print_keypress(char *__restrict ch, struct keypress kp) {
   fprintf(stdout, "%s%u %u %u %u\n", ch, kp.key, kp.scancode, kp.action, kp.mod);
 }

@@ -1,7 +1,5 @@
 #include "nesaku.h"
 
-struct rthread threads[THREAD_COUNT];
-
 #define thefunny4 \
   if (i == NULL || (i->h != h || i->w != w || i->d != d)) { \
     if (i->t) { glDeleteTextures(1, &i->t); } \
@@ -225,8 +223,7 @@ void noise_c(uint32_t h, uint32_t w, uint32_t d, uint32_t octaves, float persist
   noise_p(h + 2, w + 2, d + 2, octaves, persistence, scale, &pi);
 
   glUseProgram(cComp);
-  if (d == 1) { glBindImageTexture(0, pi.t, 0, GL_FALSE, 0, GL_READ_ONLY, GL_RGBA32F); } 
-         else { glBindImageTexture(1, pi.t, 0, GL_FALSE, 0, GL_READ_ONLY, GL_RGBA32F); }
+  glBindImageTexture(1, pi.t, 0, GL_FALSE, 0, GL_READ_ONLY, GL_RGBA32F);
   if (d == 1) { glBindImageTexture(2, i->t, 0, GL_FALSE, 0, GL_WRITE_ONLY, GL_RGBA32F); } 
          else { glBindImageTexture(3, i->t, 0, GL_FALSE, 0, GL_WRITE_ONLY, GL_RGBA32F); }
   glDispatchCompute(w, h, d);
@@ -246,11 +243,30 @@ void noise_pw(uint32_t w, uint32_t h, uint32_t d, uint32_t octaves, float persis
   //i->t = p.t; return;
 
   glUseProgram(pwComp);
+  program_set_int1(pwComp, "type", 0);
   glBindImageTexture(0, w1.t, 0, GL_FALSE, 0, GL_READ_ONLY, GL_RGBA32F);
   glBindImageTexture(1, w2.t, 0, GL_FALSE, 0, GL_READ_ONLY, GL_RGBA32F);
   glBindImageTexture(2, w3.t, 0, GL_FALSE, 0, GL_READ_ONLY, GL_RGBA32F);
   glBindImageTexture(3, w4.t, 0, GL_FALSE, 0, GL_READ_ONLY, GL_RGBA32F);
   glBindImageTexture(4, p.t, 0, GL_FALSE, 0, GL_READ_ONLY, GL_RGBA32F);
+  glBindImageTexture(5, i->t, 0, GL_FALSE, 0, GL_WRITE_ONLY, GL_RGBA32F);
+  glDispatchCompute(w, h, d);
+  glMemoryBarrier(0);
+}
+
+void noise_ww(uint32_t w, uint32_t h, uint32_t d, float scale, struct img *__restrict i) {
+  thefunny4;
+
+  static struct img w1, w2, w3;
+  noise_w(w, h, d, scale, &w1);
+  noise_w(w, h, d, scale / 2, &w2);
+  noise_w(w, h, d, scale / 3, &w3);
+
+  glUseProgram(pwComp);
+  program_set_int1(pwComp, "type", 1);
+  glBindImageTexture(0, w1.t, 0, GL_FALSE, 0, GL_READ_ONLY, GL_RGBA32F);
+  glBindImageTexture(1, w2.t, 0, GL_FALSE, 0, GL_READ_ONLY, GL_RGBA32F);
+  glBindImageTexture(2, w3.t, 0, GL_FALSE, 0, GL_READ_ONLY, GL_RGBA32F);
   glBindImageTexture(5, i->t, 0, GL_FALSE, 0, GL_WRITE_ONLY, GL_RGBA32F);
   glDispatchCompute(w, h, d);
   glMemoryBarrier(0);

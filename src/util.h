@@ -131,6 +131,7 @@ float __attribute((pure)) clamp(float val, float lb, float ub);
 pos matmul(mat3 mat, pos p);
 
 vec3 __attribute((pure)) *__restrict qv(quat *__restrict q); // INLINE
+vec3 __attribute((pure)) qdir(quat *__restrict q);
 
 void print_keypress(char *__restrict ch, struct keypress kp);
 

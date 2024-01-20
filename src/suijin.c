@@ -26,7 +26,7 @@ double deltaTime;
 
 uint8_t drawObjs = 1;
 uint8_t drawTerm = 0;
-uint8_t drawClouds = 0;
+uint8_t drawClouds = 1;
 uint8_t drawUi = 0;
 uint8_t drawBb = 0;
 
@@ -57,7 +57,7 @@ double oldMouseX, oldMouseY;
 struct camera initCam;
 struct camera cam;
 
-#define FRAG_PATH "shaders/skybox_frag.glsl"
+#define FRAG_PATH "shaders/cloud_frag.glsl"
 
 struct matv mats;
 struct modv mods;
@@ -110,13 +110,8 @@ mat4 fn;
 int windowW, windowH;
 float iwinw, iwinh;
 
-void callback_error(int error, const char *desc) {
-    fprintf(stderr, "GLFW error, no %i, desc %s\n", error, desc);
-}
-
-void callback_window_should_close(GLFWwindow *window) {
-}
-
+void callback_error(int error, const char *desc) { fprintf(stderr, "GLFW error, no %i, desc %s\n", error, desc); }
+void callback_window_should_close(GLFWwindow *window) { }
 void callback_window_resize(GLFWwindow *window, int width, int height) {
     glViewport(0, 0, width, height);
     initCam.ratio = cam.ratio = (float) width / (float) height;
@@ -671,9 +666,7 @@ void draw_squaret(float px, float py, float sx, float sy, uint32_t tex, int32_t 
   glDrawArrays(GL_TRIANGLE_FAN, 0, 4);
 }
 
-v4 gcor(v4 in, float gamma) {
-  return (v4) { pow(in.x, gamma), pow(in.y, gamma), pow(in.z, gamma), in.w };
-}
+v4 gcor(v4 in, float gamma) { return (v4) { pow(in.x, gamma), pow(in.y, gamma), pow(in.z, gamma), in.w }; }
 
 uint32_t textprog; // Draw text
 void draw_squaretext(float px, float py, float sx, float sy, uint32_t tex, uint64_t bgcol, uint64_t fgcol) {
@@ -1092,44 +1085,14 @@ void addbb(struct bbox *__restrict cb, struct linv *__restrict v) {
   struct line cl;
   int32_t i;
   cl.c = (v4) { 0.2f, 0.5f, 0.5f, 1.0f };
-
-  cl.s = cb->i;
-  for(i = 0; i < 3; ++i) {
-    cl.e = cb->i;
-    FPC(&cl.e)[i] = FPC(&cb->a)[i];
-    linvp(&lins, cl);
-  }
-
-  cl.s = cb->a;
-  for(i = 0; i < 3; ++i) {
-    cl.e = cb->a;
-    FPC(&cl.e)[i] = FPC(&cb->i)[i];
-    linvp(&lins, cl);
-  }
-
-  cl.s = cl.e = cb->i;
-  CHSA(0); CHEA(0); CHEA(1);
-  linvp(&lins, cl);
-
-  cl.s = cl.e = cb->i;
-  CHSA(0); CHEA(0); CHEA(2);
-  linvp(&lins, cl);
-
-  cl.s = cl.e = cb->i;
-  CHSA(1); CHEA(1); CHEA(0);
-  linvp(&lins, cl);
-
-  cl.s = cl.e = cb->i;
-  CHSA(1); CHEA(1); CHEA(2);
-  linvp(&lins, cl);
-
-  cl.s = cl.e = cb->i;
-  CHSA(2); CHEA(2); CHEA(0);
-  linvp(&lins, cl);
-
-  cl.s = cl.e = cb->i;
-  CHSA(2); CHEA(2); CHEA(1);
-  linvp(&lins, cl);
+  cl.s = cb->i; for(i = 0; i < 3; ++i) { cl.e = cb->i; FPC(&cl.e)[i] = FPC(&cb->a)[i]; linvp(&lins, cl); }
+  cl.s = cb->a; for(i = 0; i < 3; ++i) { cl.e = cb->a; FPC(&cl.e)[i] = FPC(&cb->i)[i]; linvp(&lins, cl); }
+  cl.s = cl.e = cb->i; CHSA(0); CHEA(0); CHEA(1); linvp(&lins, cl);
+  cl.s = cl.e = cb->i; CHSA(0); CHEA(0); CHEA(2); linvp(&lins, cl);
+  cl.s = cl.e = cb->i; CHSA(1); CHEA(1); CHEA(0); linvp(&lins, cl);
+  cl.s = cl.e = cb->i; CHSA(1); CHEA(1); CHEA(2); linvp(&lins, cl);
+  cl.s = cl.e = cb->i; CHSA(2); CHEA(2); CHEA(0); linvp(&lins, cl);
+  cl.s = cl.e = cb->i; CHSA(2); CHEA(2); CHEA(1); linvp(&lins, cl);
 #undef CHEA
 #undef CHSA
 }
@@ -1371,6 +1334,55 @@ void init_skybox(struct skybox *__restrict sb) {
   glEnableVertexAttribArray(1);
 }
 
+struct cloud {
+  struct minf m;
+  struct img worl;
+  struct img pwor;
+  struct img curl;
+  v3 pos;
+};
+struct cloud cl;
+
+uint32_t cloudvao, cloudvbo, cloudprog, cbvl;
+void init_clouds(struct cloud *__restrict c) {
+  if (!cloudvao) { glGenVertexArrays(1, &cloudvao); }
+  if (!cloudvbo) { glGenBuffers(1, &cloudvbo); }
+
+  memset(c, 0, sizeof(*c));
+  c->m.scale.x = c->m.scale.y = c->m.scale.z = 10.0f;
+  c->m.pos.y = 60.0f;
+  c->m.pos.x = -20.0f;
+  c->m.pos.z = -16.0f;
+  quat qr = gen_quat((vec3) { 1.0f, 0.0f, 0.0f }, M_PI / 4);
+  c->m.rot = qnorm(qmul(qmul(qr, (quat) {0.0f, 1.0f, 0.0f, 0.0f} ), qconj(qr)));
+  c->m.mask = MSKYBOX;
+  maff(&c->m);
+
+  float cbv[] = {
+    -1.0f, -1.0f, -1.0f, -1.0f,  1.0f,  1.0f, -1.0f, -1.0f,  1.0f,
+    -1.0f, -1.0f, -1.0f, -1.0f,  1.0f, -1.0f, -1.0f,  1.0f,  1.0f,
+    -1.0f, -1.0f,  1.0f, -1.0f,  1.0f,  1.0f,  1.0f, -1.0f,  1.0f,
+    -1.0f,  1.0f,  1.0f,  1.0f,  1.0f,  1.0f,  1.0f, -1.0f,  1.0f,
+    -1.0f, -1.0f, -1.0f, -1.0f, -1.0f,  1.0f,  1.0f, -1.0f,  1.0f,
+    -1.0f, -1.0f, -1.0f,  1.0f, -1.0f,  1.0f,  1.0f, -1.0f, -1.0f,
+    -1.0f, -1.0f, -1.0f,  1.0f, -1.0f, -1.0f, -1.0f,  1.0f, -1.0f,
+    -1.0f,  1.0f, -1.0f,  1.0f, -1.0f, -1.0f,  1.0f,  1.0f, -1.0f,
+    -1.0f,  1.0f,  1.0f, -1.0f,  1.0f, -1.0f,  1.0f,  1.0f,  1.0f,
+    -1.0f,  1.0f, -1.0f,  1.0f,  1.0f, -1.0f,  1.0f,  1.0f,  1.0f,
+     1.0f,  1.0f, -1.0f,  1.0f, -1.0f,  1.0f,  1.0f,  1.0f,  1.0f,
+     1.0f,  1.0f, -1.0f,  1.0f, -1.0f, -1.0f,  1.0f, -1.0f,  1.0f,
+  };
+
+  cbvl = sizeof(cbv) / sizeof(float) / 3;
+
+  glBindVertexArray(cloudvao);
+  glBindBuffer(GL_ARRAY_BUFFER, cloudvbo);
+  glBufferData(GL_ARRAY_BUFFER, sizeof(cbv), cbv, GL_STATIC_DRAW);
+
+  glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void *)0);
+  glEnableVertexAttribArray(0);
+}
+
 uint32_t ttex = 0;
 void init_therm(void *ignored) {
   if (ttex == 0) {
@@ -1412,11 +1424,7 @@ void init_therm(void *ignored) {
 }
 
 void upd_therm() {
-  if (perlinR == 1) {
-    perlinR = 0;
-    init_therm(NULL);
-    return;
-  }
+  if (perlinR == 1) { perlinR = 0; init_therm(NULL); return; }
   uint32_t h, w;
   h = per.m->h;
   w = per.m->w;
@@ -1482,115 +1490,11 @@ void upd_therm() {
   G(per.s->v, 0, h - 1, w) += G(per.m->v, 0, h - 1, w) - x * 2;
   G(per.s->v, 0, h - 2, w) += x;
   G(per.s->v, 1, h - 1, w) += x;
-
-  /*
-  double mean = 0;
-  double rms = 0;
-  double ma = -9999999;
-  double mi = 9999999;
-  for (i = 0; i < w; ++i) {
-    for (j = 0; j < h; ++j) {
-      mean += G(per.s->v, i, j, w);
-      rms += G(per.s->v, i, j, w);
-      ma = max(ma, G(per.s->v, i, j, w));
-      mi = min(ma, G(per.s->v, i, j, w));
-    }
-  }
-  mean /= (double)(w * h);
-  rms = sqrtf(rms / (double)(w * h));
-
-  fprintf(stdout, "%f %f %f %f\r", mean, rms, ma, mi);
-  */
   
   pswap((void **)&per.s, (void **)&per.m);
   glBindTexture(GL_TEXTURE_2D, ttex);
   glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, (uint32_t)per.w, (uint32_t)per.h, GL_RED, GL_FLOAT,  per.m->v);
   glBindTexture(GL_TEXTURE_2D, 0);
-}
-
-struct cloud {
-  uint32_t prog;
-  uint32_t vao;
-  uint32_t vbo;
-
-  float t31colCh;
-
-  float t31wscale;
-  float t31pscale;
-  float t31pwscale;
-  float t31persistence;
-  float t31octaves;
-  float t31curslice;
-  uint32_t t31; // 128^3 Perlin-worley + Worley (inc freq) * 3
-  struct i3da v31;
-  //struct i3df v31;
-  float t32scale;
-  uint32_t t32; //  32^2 Worley (inc freq) * 3
-  struct i3d v32;
-  float t2scale;
-  float t2persistence;
-  float t2octaves;
-  uint32_t t2;  // 128^2 Curl noise * 3
-  struct i2d v2;
-};
-
-#define DRAW_CLOUDS 0b111
-void update_clouds(void *__restrict cp) {
-  /*
-  TIME(
-  struct cloud *__restrict c = cp;
-  if (DRAW_CLOUDS & 0b001) { // Perlin-worley
-    if (!c->t31) {
-      glGenTextures(1, &c->t31);
-    }
-    glBindTexture(GL_TEXTURE_3D, c->t31);
-    noise_cloud3(128, 128, 128, c->t31octaves, c->t31persistence, c->t31pscale, c->t31pwscale, c->t31wscale, &c->v31);
-    glTexImage3D(GL_TEXTURE_3D, 0, GL_RGBA, 128, 128, 128, 0, GL_RGBA, GL_FLOAT, c->v31.v);
-    //noise_pw3d(128, 128, 128, c->t31octaves, c->t31persistence, c->t31pscale, c->t31pwscale, &c->v31);
-    //glTexImage3D(GL_TEXTURE_3D, 0, GL_RED, 128, 128, 128, 0, GL_RED, GL_FLOAT, c->v31.v);
-    glGenerateMipmap(GL_TEXTURE_3D);
-    glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-    glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-    glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_EDGE);
-    glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_MIN_FILTER, GL_NEAREST_MIPMAP_NEAREST);
-    glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-    glBindTexture(GL_TEXTURE_3D, 0);
-  }
-
-  if (DRAW_CLOUDS & 0b010) { // Worley
-    if (!c->t32) {
-      glGenTextures(1, &c->t32);
-    }
-    glBindTexture(GL_TEXTURE_3D, c->t32);
-    noise_worl3(32, 32, 32, c->t32scale, &c->v32);
-    glTexImage3D(GL_TEXTURE_3D, 0, GL_RGB, 32, 32, 32, 0, GL_RGB, GL_FLOAT, c->v32.v);
-    glGenerateMipmap(GL_TEXTURE_3D);
-    glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-    glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-    glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_EDGE);
-    glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_MIN_FILTER, GL_NEAREST_MIPMAP_NEAREST);
-    glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-    glBindTexture(GL_TEXTURE_3D, 0);
-  }
-
-  if (DRAW_CLOUDS & 0b100) { // Curl
-    if (!c->t2) {
-      glGenTextures(1, &c->t2);
-    }
-    glBindTexture(GL_TEXTURE_2D, c->t2);
-    noise_curl3(128, 128, c->t2octaves, c->t2persistence, c->t2scale, &c->v2);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, 128, 128, 0, GL_RGB, GL_FLOAT, c->v2.v);
-    glGenerateMipmap(GL_TEXTURE_2D);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_EDGE);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST_MIPMAP_NEAREST);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-    glBindTexture(GL_TEXTURE_2D, 0);
-  }
-  , "Clouds");
-  //fprintf(stdout, "Time: %li\n", (ed.tv_sec - st.tv_sec) * 1000 + (ed.tv_usec - st.tv_usec) / 1000);
-  fprintf(stdout, "Finish updating\n");*/
 }
 
 uint8_t rayHit(v3 s, v3 d, float dist, uint32_t mask) {
@@ -1626,37 +1530,19 @@ void messageCallback(GLenum source, GLenum type, GLuint id, GLenum severity, GLs
 float scale = 10.0;
 float pscale = 7.73;
 float curslcs = 0.5;
-struct img i;
 float kmsper = 0.53;
 float kmsoct = 3.1;
-float curch = 79.1;
-float KMS = 2.1;
+float curch = 80.1;
+float KMS = 2.2;
 void compute_shader() {
-  switch ((uint32_t)(KMS)) {
-    case 0:
-      noise_w(128, 128, 128, scale, &i);
-      break;
-
-    case 1:
-      noise_p(128, 128, 128, (uint32_t)kmsoct, kmsper, scale, &i);
-      break;
-
-    case 2:
-      noise_c(128, 128, 128, (uint32_t)kmsoct, kmsper, scale, &i);
-      break;
-
-    case 3:
-      noise_pw(128, 128, 128, (uint32_t)kmsoct, kmsper, pscale, scale, &i);
-      break;
-  }
+  noise_pw(128, 128, 128, (uint32_t)kmsoct, kmsper, pscale, scale, &cl.pwor);
+  noise_ww(32, 32, 32, scale, &cl.worl);
+  //noise_p(128, 128, 128, (uint32_t)kmsoct, kmsper, scale, &cp.perl);
+  noise_c(128, 128, 128, (uint32_t)kmsoct, kmsper, scale, &cl.curl);
 }
 
 float kkautoupda = 0.2;
-void autoupda() {
-  if (kkautoupda >= 1.0) {
-    compute_shader();
-  }
-}
+void autoupda() { if (kkautoupda >= 1.0) { compute_shader(); } }
 
 uint8_t run_suijin() {
   init_random();
@@ -1683,21 +1569,6 @@ uint8_t run_suijin() {
 
   identity_matrix(identity);
 
-  struct cloud c = {0}; /// Clouds
-  {
-    c.t31pscale = 82.8;
-    c.t31pwscale = 13.34;
-    c.t31persistence = 3.46;
-    c.t31octaves = 2.1;
-    c.t31curslice = 0.0;
-    c.t31wscale = 10.0;
-    c.t32scale = 8.64;
-    c.t2scale = 26.556;
-    c.t2persistence = 0.583;
-    c.t2octaves = 4.8;
-    //update_clouds(&c);
-  }
-
   { /// Asset loading
     modvi(&mods);
     matvi(&mats);
@@ -1705,8 +1576,6 @@ uint8_t run_suijin() {
 
     parse_folder(&mods, &mats, "Resources/Items/Mountain");
     parse_folder(&mods, &mats, "Resources/Items/Dough");
-    //parse_folder(&mods, &mats, "Resources/Items/Plant");
-    //parse_folder(&mods, &uim, "Resources/Items/Plane");
     
     matvt(&mats);
     modvt(&mods);
@@ -1721,31 +1590,21 @@ uint8_t run_suijin() {
     init_object(&cb, "MIAN");
     aobj(0, (v3) {10.0f, 10.0f, 10.0f} , (v3) {0.0f, 0.0f, 0.0f}, &cb, MGEOMETRY);
     objvp(&objs, cb);
-
     
     init_object(&cb, "DOUGH");
     aobj(1, (v3) {10.0f, 10.0f, 10.0f}, (v3) {-60.0f, 40.0f, -30.0f}, &cb, MPROP);
     aobj(2, (v3) {10.0f, 10.0f, 10.0f}, (v3) {-60.0f, 40.0f, -30.0f}, &cb, MPROP);
     objvp(&objs, cb);
-    /*
-
-    init_object(&cb, "PLANT");
-    aobj(3, 10.0f, (v3) {30.0f, 10.0f, -30.0f}, &cb);
-    aobj(4, 10.0f, (v3) {30.0f, 10.0f, -30.0f}, &cb);
-    aobj(5, 10.0f, (v3) {30.0f, 10.0f, -30.0f}, &cb);
-    objvp(&objs, cb);
-    */
 
     objvt(&objs);
-
     clines(&lvao, &lvbo);
   }
 
-#define PROGC 6 /// Shadercurslcs
+#define PROGC 7 /// Shadercurslcs
   uint32_t nprog;
   uint32_t shaders[PROGC * 2];
   {
-    char *snames[PROGC] = { "obj", "ui", "line", "point", "skybox", "text"}; //, "cloud" };
+    char *snames[PROGC] = { "obj", "ui", "line", "point", "skybox", "text", "cloud"};
     char tmpn[128];
 
     uint32_t i;
@@ -1762,15 +1621,16 @@ uint8_t run_suijin() {
     PR_CHECK(program_get(2, shaders +   6, &pprog));
     PR_CHECK(program_get(2, shaders +   8, &skyprog));
     PR_CHECK(program_get(2, shaders +  10, &textprog));
+    PR_CHECK(program_get(2, shaders +  12, &cloudprog));
     //PR_CHECK(program_get(2, shaders + 10, &c.prog));
 
+    /*
     for (i = 0; i < PROGC; ++i) {
       glDeleteShader(shaders[i * 2]);
       glDeleteShader(shaders[i * 2 + 1]);
-    }
+    }*/
     if (prep_compute_shaders()) { exit(1); }
     new_perlin_perms();
-    compute_shader();
   }
 
 
@@ -1817,70 +1677,22 @@ uint8_t run_suijin() {
       add_slider(node, var, mi, ma, 5, fun, funp)
 #define UI_GET_HEIGHT(res, node) { uint32_t _ch = 0; int32_t _i; for(_i = 0; _i < (node).children.l; ++_i) { _ch += (node).children.v[_i].height + (node).children.v[_i].pad; } res = _ch + 10; }
     prep_ui(window, &uvao);
-    /*{
-      mchvi(&nodes[0].children);
-
-      add_title(&nodes[0], "スプーク・プーク", 25, 0);
-      TSL(&nodes[0], "H", 0.20f, &per.h, 0.0, 1000.0, init_therm, NULL);
-      TSL(&nodes[0], "W", 0.20f, &per.w, 0.0, 1000.0, init_therm, NULL);
-      TSL(&nodes[0], "Oct", 0.20f, &per.foct, 0.0f, 5.0f, init_therm, NULL);
-      TSL(&nodes[0], "Scale", 0.20f, &per.sc, 0.0f, 200.0f, init_therm, NULL);
-      TSL(&nodes[0], "Persistance", 0.20f, &per.per, 0.0f, 4.0f, init_therm, NULL);
-      TSL(&nodes[0], "Diffusion", 0.20f, &DIFF_COEF, 0.0f, 0.2f, init_therm, NULL);
-      TSL(&nodes[0], "Style", 0.20f, &per.style, 0.0f, 1.9f, init_therm, NULL);
-      nodes[0].px = 400.0f;
-      nodes[0].py = 50.0f;
-      nodes[0].sx = 300.0f;
-      nodes[0].sy = 500.0f;
-      nodes[0].bp = 20;
-      nodes[0].tp = 20;
-      nodes[0].lp = 20;
-      nodes[0].rp = 20;
-      mchvt(&nodes[0].children);
-    }*/
-
+    // add_title(&nodes[0], "スプーク・プーク", 25, 0);
     {
       mchvi(&nodes[1].children);
       add_title(&nodes[1], "#Clouds", 25, 8);
-      //add_tslider(&nodes[1], "#Clouds", 15, &c.t31pscale, 0.001, 200.0f, 8, NULL, NULL);
       add_tslider(&nodes[1], "Scale", 15, &scale, 1.1, 20.0f, 8, autoupda, NULL);
       add_tslider(&nodes[1], "PScale", 15, &pscale, 1.1, 20.0f, 8, autoupda, NULL);
       add_tslider(&nodes[1], "Persist", 15, &kmsper, 0.0, 2.0f, 8, autoupda, NULL);
       add_tslider(&nodes[1], "Octaves", 15, &kmsoct, 1.0, 20.0f, 8, autoupda, NULL);
-      add_tslider(&nodes[1], "Channel", 15, &curch, 79.1, 83.1f, 8, NULL, NULL);
-      add_title(&nodes[1], "0 = all; 1-3 = r-b", 15, 8);
+      add_tslider(&nodes[1], "Channel", 15, &curch, 80.1, 83.1f, 8, NULL, NULL);
       add_tslider(&nodes[1], "Type", 15, &KMS, 0.1, 3.1f, 8, autoupda, NULL);
-      add_title(&nodes[1], "0 = worley", 15, 8);
-      add_title(&nodes[1], "1 = perlin", 15, 8);
-      add_title(&nodes[1], "2 = curl", 15, 8);
-      add_title(&nodes[1], "3 = perlin-worley", 15, 8);
-      noise_pw(128, 128, 128, (uint32_t)kmsoct, kmsper, pscale, scale, &i);
       add_tslider(&nodes[1], "Curslice", 15, &curslcs, 0.0, 1.0f, 8, NULL, NULL);
-      /*add_tslider(&nodes[1], "pscale", 15, &c.t31pscale, 0.001, 200.0f, 8, NULL, NULL);
-      add_tslider(&nodes[1], "pwscale", 15, &c.t31pwscale, 0.001, 200.0f, 8, NULL, NULL);
-      add_tslider(&nodes[1], "persistence", 15, &c.t31persistence, 0.0, 4.0f, 8, NULL, NULL);
-      add_tslider(&nodes[1], "octaves", 15, &c.t31octaves, 0.0, 5.0f, 8, NULL, NULL);
-      add_tslider(&nodes[1], "curslice", 15, &c.t31curslice, 0.0, 1.0f, 8, NULL, NULL);
-      add_tslider(&nodes[1], "wscale", 15, &c.t31wscale, 0.001, 10.0f, 8, NULL, NULL);
-      add_tslider(&nodes[1], "scale", 15, &c.t32scale, 0.0, 200.0f, 8, NULL, NULL);
-      add_tslider(&nodes[1], "TEXT_SIZE", 15, &TEXT_SIZE, 0.0, 60.0f, 8, NULL, NULL);
-      add_tslider(&nodes[1], "colch", 15, &c.t31colCh, 0.0, 3.9f, 8, NULL, NULL);
-      add_tslider(&nodes[1], "t2scale", 15, &c.t2scale, 0.001, 30.0f, 8, update_clouds, &c);
-      add_tslider(&nodes[1], "t2persistence", 15, &c.t2persistence, 0.0, 4.0f, 8, update_clouds, &c);
-      add_tslider(&nodes[1], "t2octaves", 15, &c.t2octaves, 0.0, 5.0f, 8, update_clouds, &c);*/
-      //add_button(&nodes[1], "Update", 0xFF0000FF, 20, 10, update_clouds, &c);
-      add_button(&nodes[1], "Update2", 0xFF0000FF, 20, 10, compute_shader, NULL);
+      add_button(&nodes[1], "Update", 0xFF0000FF, 20, 10, compute_shader, NULL);
       add_tslider(&nodes[1], "Autoupdate", 15, &kkautoupda, 0.1, 1.9f, 8, NULL, NULL);
-      add_title(&nodes[1], "0 = no; 1 = yes", 15, 8);
-      //add_button(&nodes[1], "suika", 0xFF0000FF, 20, 10, NULL, NULL);
-      nodes[1].px = 400.0f;
-      nodes[1].py = 50.0f;
-      nodes[1].sx = 400.0f;
+      nodes[1].px = 400.0f; nodes[1].py = 50.0f; nodes[1].sx = 400.0f;
       UI_GET_HEIGHT(nodes[1].sy, nodes[1]);
-      nodes[1].bp = 0;
-      nodes[1].tp = 0;
-      nodes[1].lp = 8;
-      nodes[1].rp = 0;
+      nodes[1].bp = nodes[1].tp = nodes[1].rp = 0; nodes[1].lp = 8;
       mchvt(&nodes[1].children);
     }
   }
@@ -1895,6 +1707,9 @@ uint8_t run_suijin() {
     update_rgb_tex(&sbt, sbh, sbw, buf);
     free(buf);
   }
+
+  init_clouds(&cl);
+  compute_shader();
 
   { /// Init therm
     per.w    = per.h    = 500;
@@ -2023,26 +1838,27 @@ uint8_t run_suijin() {
       }
     }
 
-    if (drawTerm) {
-      draw_squaret((windowW - 500) / 2, (windowH - 500) / 2, 500, 500, ttex, 2);
-      upd_therm();
-    }
+    if (drawTerm) { draw_squaret((windowW - 500) / 2, (windowH - 500) / 2, 500, 500, ttex, 2); upd_therm(); }
 
     if (drawClouds) {
-      glUseProgram(uprog);
-      program_set_int1(uprog, "ch", floor(c.t31colCh));
-      draw_squaret3((windowW - 500) / 2 - 275, (windowH - 500) / 2 - 275, 500, 500, c.t31, 8, c.t31curslice);
-      draw_squaret3((windowW - 500) / 2 + 275, (windowH - 500) / 2 - 275, 500, 500, c.t32, 8, c.t31curslice);
-      draw_squaret((windowW - 500) / 2, (windowH - 500) / 2 + 275, 500, 500, c.t2, 9);
-    } else {
-      if (i.t) {
-        //draw_squaret((windowW - 500) / 2, (windowH - 500) / 2, 500, 500, i.t, 10);
-       if (curch > 80.0) {
-         draw_squaret3((windowW - 500) / 2, (windowH - 500) / 2, 500, 500, i.t, curch, curslcs);
-       } else {
-         draw_squaret3((windowW - 500) / 2, (windowH - 500) / 2, 500, 500, i.t, 11, curslcs);
-       }
-      }
+      glEnable(GL_DEPTH_TEST);
+      //cl.m.pos = (v3){sin(_ctime * 4) * 30, cos(_ctime * 4) * 30, 30.0};
+      //maff(&cl.m);
+
+      glUseProgram(cloudprog);
+      program_set_mat4(cloudprog, "fn", fn);
+      program_set_mat4(cloudprog, "affine", cl.m.aff);
+      program_set_float3v(cloudprog, "scale", cl.m.scale);
+      program_set_float3v(cloudprog, "offs", cl.m.pos);
+      program_set_float3v(cloudprog, "camPos", cam.pos);
+
+      glActiveTexture(GL_TEXTURE0);
+      glBindTexture(GL_TEXTURE_3D, cl.worl.t);
+      program_set_int1(cloudprog, "tex", 0);
+
+      glBindVertexArray(cloudvao);
+      //fprintf(stdout, "%u\n", cbvl);
+      glDrawArrays(GL_TRIANGLES, 0, cbvl);
     }
 
     if (drawUi) { // UPROG
@@ -2050,15 +1866,14 @@ uint8_t run_suijin() {
       glDisable(GL_DEPTH_TEST);
 
       int32_t i;
-      for(i = 0; i < MC; ++i) {
-        draw_node(i);
-      }
+      for(i = 0; i < MC; ++i) { draw_node(i); }
+      draw_squaret3((windowW - 500) / 2 - 275, (windowH - 500) / 2 - 275, 500, 500, cl.curl.t, curch, curslcs);
       // if (selui.t == UIT_CAN) { selui.t = UIT_CANNOT; }
     }
 
     if (frame % 30 == 0) { /// Frag update
       while (!glfwWindowShouldClose(window)) {
-        uint8_t r = check_frag_update(&skyprog, 9);
+        uint8_t r = check_frag_update(&cloudprog, shaders[12]);
         if (r < 2) {
           break;
         } else {

@@ -7,7 +7,6 @@
 #include <math.h>
 #include <string.h>
 #include <glad/glad.h>
-#include <pthread.h>
 #include <stdarg.h>
 #include <sys/time.h>
 
@@ -15,20 +14,11 @@
 #include "izanagi.h"
 #include "shaders.h"
 
-#define THREAD_COUNT 8
-//#define THREAD_COUNT 1
-
 #define TIME(c, s) {struct timeval _st, _ed; gettimeofday(&_st, NULL); c; gettimeofday(&_ed, NULL); fprintf(stdout, "Time " s ": %li\n", (_ed.tv_sec - _st.tv_sec) * 1000 + (_ed.tv_usec - _st.tv_usec) / 1000);}
 
 #define TOSTR(x) #x
 #define TOSTR1(x) TOSTR(X)
 #define PCH(c) {if(c){fprintf(stderr, "Error executing %s at %s:%u\n", TOSTR(c), __FILE__, __LINE__);}}
-
-struct rthread {
-  pthread_t id;
-  uint32_t sz, ez;
-  va_list ap;
-};
 
 #define G(v, x, y, w) ((v)[(x) + (y) * (w)])
 #define D(v, x, y, z, w, h) ((v)[(x) + (y) * (w) + (z) * (w * h)])
@@ -118,6 +108,8 @@ void noise_w(uint32_t w, uint32_t h, uint32_t d, float scale, struct img *__rest
 void noise_p(uint32_t h, uint32_t w, uint32_t d, uint32_t octaves, float persistence, float scale, struct img *__restrict i);
 
 void noise_pw(uint32_t w, uint32_t h, uint32_t d, uint32_t octaves, float persistence, float pscale, float wscale, struct img *__restrict i);
+
+void noise_ww(uint32_t w, uint32_t h, uint32_t d, float scale, struct img *__restrict i);
 
 void noise_c(uint32_t h, uint32_t w, uint32_t d, uint32_t octaves, float persistence, float scale, struct img *__restrict i);
 

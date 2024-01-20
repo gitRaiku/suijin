@@ -8,19 +8,33 @@ layout(rgba32f, binding = 3) uniform image3D w4;
 layout(rgba32f, binding = 4) uniform image3D p;
 layout(rgba32f, binding = 5) uniform image3D res;
 
+uniform int type;
+
 float combine(float p, float w) { return w - w * p; } /// TODO: Make nicer
 void main() { 
   ivec3 cp = ivec3(gl_GlobalInvocationID.xyz);
   //imageStore(res, cp, vec4(imageLoad(p, cp).r));
   //return;
-  imageStore(res, 
-      cp, 
-      vec4(
-        combine(
-          imageLoad(p, cp).r, 
-          imageLoad(w4, cp).r
-          ), 
-        imageLoad(w1, cp).r, 
-        imageLoad(w2, cp).r, 
-        imageLoad(w3, cp).r
-        )); }
+  if (type == 0) {
+    imageStore(res, 
+        cp, 
+        vec4(
+          combine(
+            imageLoad(p, cp).r, 
+            imageLoad(w4, cp).r
+            ), 
+          imageLoad(w1, cp).r, 
+          imageLoad(w2, cp).r, 
+          imageLoad(w3, cp).r
+          )); 
+  } else {
+    imageStore(res, 
+        cp, 
+        vec4(
+          imageLoad(w1, cp).r, 
+          imageLoad(w2, cp).r, 
+          imageLoad(w3, cp).r,
+          1.0
+          )); 
+  }
+}

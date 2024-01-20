@@ -15,23 +15,24 @@ layout(rgba32f, binding = 3) uniform image3D img3d;
 
 #define CURLA 3.0
 #define CURLB 0.5
-vec3 gn3(ivec3 kms) {
+vec4 gn3(ivec3 kms) {
   float p1r = imageLoad(in3d, ivec3(kms.r + 1 + 1, kms.g + 1, kms.b + 1)).r;
   float p2r = imageLoad(in3d, ivec3(kms.r + 1 - 1, kms.g + 1, kms.b + 1)).r;
   float p1g = imageLoad(in3d, ivec3(kms.r + 1, kms.g + 1 + 1, kms.b + 1)).r;
   float p2g = imageLoad(in3d, ivec3(kms.r + 1, kms.g + 1 - 1, kms.b + 1)).r;
   float p1b = imageLoad(in3d, ivec3(kms.r + 1, kms.g + 1, kms.b + 1 + 1)).r;
   float p2b = imageLoad(in3d, ivec3(kms.r + 1, kms.g + 1, kms.b + 1 - 1)).r;
-  return vec3((p1r - p2r) * CURLA + CURLB, 
+  return vec4((p1r - p2r) * CURLA + CURLB, 
               (p1g - p2g) * CURLA + CURLB, 
-              (p1b - p2b) * CURLA + CURLB);
+              (p1b - p2b) * CURLA + CURLB,
+              1.0);
 }
 
 void tmkp3c() { 
   ivec3 texelCoord = ivec3(GI.xyz);
 
   //imageStore(img3d, texelCoord, vec4(1.0)); return;
-  imageStore(img3d, texelCoord, vec4(gn3(texelCoord), 1.0));
+  imageStore(img3d, texelCoord, vec4(gn3(texelCoord)));
 }
         ///G(im->v, i, j, w).b = (octave_perlin(0.0f, i / scale, (j + eps) / scale, octaves, persistence) - octave_perlin(0.0f, i / scale, j / scale, octaves, persistence)) / (2 * eps) * CURLA + CURLB;
 
@@ -42,7 +43,7 @@ void tmkp2c() {
 }
 
 void main() {
-  if (d == 1) { tmkp2c(); } 
+  if (d == 1) { tmkp2c(); }
          else { tmkp3c(); }
 }
 
