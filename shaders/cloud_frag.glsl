@@ -4,9 +4,9 @@ out vec4 FragColor;
 
 in vec3 pp;
 in vec3 lp;
+uniform vec3 centerPos;
+uniform vec3 centerScale;
 uniform vec3 camPos;
-uniform vec3 scale;
-uniform vec3 offs;
 
 uniform sampler3D tex;
 
@@ -15,6 +15,30 @@ vec3 fix(vec3 p) { return vec3(p + vec3(1.0)) / 2.0; }
 float p2(float x) { return x * x; }
 
 #define PI 3.1415
+
+vec3 dist(vec3 p) {
+  return abs(p - centerPos) / centerScale;
+}
+
+float stepLen = 0.01;
+int maxSteps = 200;
+vec4 start_march(vec3 spos, vec3 dir) {
+  vec3 cd = dist(spos);
+  float cm = max(max(cd.z, cd.y), cd.x);
+  vec3 cpos = spos;
+  int cstep = 0;
+  while (cm > 2.0 && cstep < maxSteps) {
+    ++cstep;
+    cpos += dir * stepLen;
+    cd = dist(cpos);
+    cm = max(max(cd.z, cd.y), cd.x);
+    if (cm < 1.0) {
+      return vec4(1.0);
+    }
+  }
+  //float cm = max(max(cd.x, cd.y), cd.z);
+  return vec4(vec3(0.0), 0.6);
+}
 
 void main() {
   float px = abs(pp.x - camPos.x);
@@ -30,11 +54,7 @@ void main() {
               (((quad & 1)!=0) ? -1 : 1) * ha;
 
   vec3 orientVec = normalize(vec3(cos(vertAngle) * cos(horiAngle), sin(vertAngle), cos(vertAngle) * sin(horiAngle)));
-  FragColor = vec4(orientVec, 1.0);
-  //FragColor = vec4(texture(tex, vec3(pp.x / 10, pp.y / 10, pp.z / 10 )).xyz, 1.0);
-  vec3 p = fix(lp);
-  FragColor = vec4(vec3(texture(tex, p).x, 0.0, 0.0), 1.0);
-
+  FragColor = start_march(pp, orientVec);
   return;
   /*
   vec3 p = fix(pp);

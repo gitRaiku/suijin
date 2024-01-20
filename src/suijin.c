@@ -1350,6 +1350,7 @@ void init_clouds(struct cloud *__restrict c) {
 
   memset(c, 0, sizeof(*c));
   c->m.scale.x = c->m.scale.y = c->m.scale.z = 10.0f;
+  c->m.scale.z = 20.0f;
   c->m.pos.y = 60.0f;
   c->m.pos.x = -20.0f;
   c->m.pos.z = -16.0f;
@@ -1841,15 +1842,13 @@ uint8_t run_suijin() {
     if (drawTerm) { draw_squaret((windowW - 500) / 2, (windowH - 500) / 2, 500, 500, ttex, 2); upd_therm(); }
 
     if (drawClouds) {
-      glEnable(GL_DEPTH_TEST);
-      //cl.m.pos = (v3){sin(_ctime * 4) * 30, cos(_ctime * 4) * 30, 30.0};
-      //maff(&cl.m);
+      //glEnable(GL_DEPTH_TEST);
 
       glUseProgram(cloudprog);
       program_set_mat4(cloudprog, "fn", fn);
       program_set_mat4(cloudprog, "affine", cl.m.aff);
-      program_set_float3v(cloudprog, "scale", cl.m.scale);
-      program_set_float3v(cloudprog, "offs", cl.m.pos);
+      program_set_float3v(cloudprog, "centerScale", cl.m.scale);
+      program_set_float3v(cloudprog, "centerPos", cl.m.pos);
       program_set_float3v(cloudprog, "camPos", cam.pos);
 
       glActiveTexture(GL_TEXTURE0);
