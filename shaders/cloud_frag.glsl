@@ -17,27 +17,33 @@ float p2(float x) { return x * x; }
 #define PI 3.1415
 
 vec3 dist(vec3 p) {
-  return abs(p - centerPos) / centerScale;
+  return (centerPos - p) / centerScale;
 }
 
-float stepLen = 0.01;
-int maxSteps = 200;
+float stepLen = 1.0;
+float okdist = 0.2;
+int maxSteps = 1000;
 vec4 start_march(vec3 spos, vec3 dir) {
   vec3 cd = dist(spos);
   float cm = max(max(cd.z, cd.y), cd.x);
-  vec3 cpos = spos;
   int cstep = 0;
-  while (cm > 2.0 && cstep < maxSteps) {
+
+  while (cm > okdist && cstep < maxSteps) {
     ++cstep;
-    cpos += dir * stepLen;
-    cd = dist(cpos);
-    cm = max(max(cd.z, cd.y), cd.x);
-    if (cm < 1.0) {
+    cd += dir * stepLen;
+    vec3 acd = abs(cd);
+    cm = max(max(acd.z, acd.y), acd.x);
+    if (cm < okdist) {
       return vec4(1.0);
     }
   }
+  if (cstep == maxSteps) {
+    return vec4(0.0);
+  } else {
+    return vec4(1.0);
+  }
   //float cm = max(max(cd.x, cd.y), cd.z);
-  return vec4(vec3(0.0), 0.6);
+  return vec4(vec3(cstep / maxSteps), 0.6);
 }
 
 void main() {
@@ -53,7 +59,7 @@ void main() {
   horiAngle = (((quad & 2)!=0) ?  1 : 3) * PI / 2 + 
               (((quad & 1)!=0) ? -1 : 1) * ha;
 
-  vec3 orientVec = normalize(vec3(cos(vertAngle) * cos(horiAngle), sin(vertAngle), cos(vertAngle) * sin(horiAngle)));
+  vec3 orientVec = normalize(vec3(cos(vertAngle) * cos(horiAngle), -sin(vertAngle), cos(vertAngle) * sin(horiAngle)));
   FragColor = start_march(pp, orientVec);
   return;
   /*

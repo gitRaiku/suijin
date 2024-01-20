@@ -1842,7 +1842,7 @@ uint8_t run_suijin() {
     if (drawTerm) { draw_squaret((windowW - 500) / 2, (windowH - 500) / 2, 500, 500, ttex, 2); upd_therm(); }
 
     if (drawClouds) {
-      //glEnable(GL_DEPTH_TEST);
+      glEnable(GL_DEPTH_TEST);
 
       glUseProgram(cloudprog);
       program_set_mat4(cloudprog, "fn", fn);
