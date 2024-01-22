@@ -18,31 +18,44 @@ vec3 dist(vec3 p) {
   return (centerPos - p) / centerScale;
 }
 
-float stepLen = 0.05;
-float okdist = 0.5;
-int maxSteps = 20;
+float stepLen = 0.10;
+float okdist = 1.01;
+int maxSteps = 10000;
 vec4 gcol(float x) { return vec4(vec3(x), 1.0); }
 
 //float cm = max(max(cd.z, cd.y), cd.x);
-vec4 start_march(vec3 spos, vec3 dir) {
-  vec3 cd = dist(spos);
-  float cm = length(cd);
-  int cstep = 0;
 
-  while (cm > okdist && cstep < maxSteps) {
+float gm(vec3 p) {
+  vec3 pp = abs(p);
+  return max(max(pp.x, pp.y), pp.z);
+}
+
+vec4 start_march(vec3 spos, vec3 dir) {
+  vec3 cp = spos;
+  float cm = gm(dist(cp));
+  int cstep = 0;
+  float ccol = 0.0;
+
+  while (cm <= okdist && cstep < maxSteps) {
     ++cstep;
-    cm = length(dist(spos + -dir * cstep));
-    if (cm < okdist) {
-      return vec4(fix(dir), 1.0);
-    }
+    cp -= dir * stepLen;
+    cm = gm(dist(cp));
+    float c = texture(tex, abs(fix(dist(cp)))).x; 
+    ccol += c;
   }
-  if (cstep == maxSteps) {
-    return vec4(vec3(0.1), 0.0);
+  /*
+  if (cstep < maxSteps) {
+    return vec4(vec3(1.0), 1.0);
   } else {
-    return vec4(fix(dir), 1.0);
-  }
-  //float cm = max(max(cd.x, cd.y), cd.z);
-  return vec4(vec3(cstep / maxSteps), 0.6);
+    return vec4(vec3(0.1), 0.1);
+  }*/
+  //return vec4(vec3(exp(-ccol)), 0.1);
+  float ldir = 1.0;//dot(dir, normalize(vec3(0.5, -1.0, 0.0)));
+  //return vec4(vec3(ldir), 1.0);
+  ccol = (ccol / cstep) * (cstep * stepLen) * 0.07;
+  return vec4(vec3(ccol), 1.0);
+  float ccp = exp(-(ccol * 0.3)) * ldir;
+  return vec4(vec3(ccp), 1.0);
 }
 
 void main() {

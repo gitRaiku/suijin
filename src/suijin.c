@@ -1866,7 +1866,7 @@ uint8_t run_suijin() {
 
       int32_t i;
       for(i = 0; i < MC; ++i) { draw_node(i); }
-      draw_squaret3((windowW - 500) / 2 - 275, (windowH - 500) / 2 - 275, 500, 500, cl.curl.t, curch, curslcs);
+      draw_squaret3((windowW - 500) / 2 - 275, (windowH - 500) / 2 - 275, 500, 500, cl.worl.t, curch, curslcs);
       // if (selui.t == UIT_CAN) { selui.t = UIT_CANNOT; }
     }
 
