@@ -18,9 +18,9 @@ vec3 dist(vec3 p) {
   return (centerPos - p) / centerScale;
 }
 
-float stepLen = 0.01;
+float stepLen = 0.05;
 float okdist = 0.5;
-int maxSteps = 100;
+int maxSteps = 20;
 vec4 gcol(float x) { return vec4(vec3(x), 1.0); }
 
 //float cm = max(max(cd.z, cd.y), cd.x);
@@ -31,16 +31,15 @@ vec4 start_march(vec3 spos, vec3 dir) {
 
   while (cm > okdist && cstep < maxSteps) {
     ++cstep;
-    cd += dir * stepLen;
-    cm = length(cd);
+    cm = length(dist(spos + -dir * cstep));
     if (cm < okdist) {
-      return vec4(dir, 1.0);
+      return vec4(fix(dir), 1.0);
     }
   }
   if (cstep == maxSteps) {
-    return vec4(vec3(0.1), 0.2);
+    return vec4(vec3(0.1), 0.0);
   } else {
-    return vec4(dir, 1.0);
+    return vec4(fix(dir), 1.0);
   }
   //float cm = max(max(cd.x, cd.y), cd.z);
   return vec4(vec3(cstep / maxSteps), 0.6);
