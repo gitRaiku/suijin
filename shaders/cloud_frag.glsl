@@ -10,20 +10,13 @@ uniform vec3 camPos;
 
 uniform sampler3D tex;
 
-vec3 fix(vec3 p) { return vec3(p + vec3(1.0)) / 2.0; }
-
 #define PI 3.1415
+vec3 fix(vec3 p) { return vec3(p + vec3(1.0)) / 2.0; }
+vec3 dist(vec3 p) { return (centerPos - p) / centerScale; }
 
-vec3 dist(vec3 p) {
-  return (centerPos - p) / centerScale;
-}
-
-float stepLen = 0.10;
+int maxSteps = 10000000;
+float stepLen = centerScale.y * 1.01;
 float okdist = 1.01;
-int maxSteps = 10000;
-vec4 gcol(float x) { return vec4(vec3(x), 1.0); }
-
-//float cm = max(max(cd.z, cd.y), cd.x);
 
 float gm(vec3 p) {
   vec3 pp = abs(p);
@@ -31,6 +24,7 @@ float gm(vec3 p) {
 }
 
 vec4 start_march(vec3 spos, vec3 dir) {
+  dir = vec3(dir.x, -dir.y, dir.z);
   vec3 cp = spos;
   float cm = gm(dist(cp));
   int cstep = 0;
@@ -38,24 +32,16 @@ vec4 start_march(vec3 spos, vec3 dir) {
 
   while (cm <= okdist && cstep < maxSteps) {
     ++cstep;
-    cp -= dir * stepLen;
+    cp += dir * stepLen;
     cm = gm(dist(cp));
     float c = texture(tex, abs(fix(dist(cp)))).x; 
     ccol += c;
   }
-  /*
-  if (cstep < maxSteps) {
-    return vec4(vec3(1.0), 1.0);
-  } else {
-    return vec4(vec3(0.1), 0.1);
-  }*/
-  //return vec4(vec3(exp(-ccol)), 0.1);
-  float ldir = 1.0;//dot(dir, normalize(vec3(0.5, -1.0, 0.0)));
-  //return vec4(vec3(ldir), 1.0);
-  ccol = (ccol / cstep) * (cstep * stepLen) * 0.07;
-  return vec4(vec3(ccol), 1.0);
-  float ccp = exp(-(ccol * 0.3)) * ldir;
-  return vec4(vec3(ccp), 1.0);
+
+  float ldir = dot(dir, normalize(vec3(1.5, -1.0, 0.0)));
+  ccol = (ccol / cstep) * (cstep * stepLen) * 0.08;
+  float ccp = 1 - exp(-ccol) * ldir;
+  return vec4(vec3(ccp) * vec3(253 / 255.0, 134 / 255.0, 149 / 255.0), ccp * 2);
 }
 
 void main() {
@@ -72,6 +58,8 @@ void main() {
               (((quad & 1)!=0) ? -1 : 1) * ha;
 
   vec3 orientVec = normalize(vec3(cos(vertAngle) * cos(horiAngle), -sin(vertAngle), cos(vertAngle) * sin(horiAngle)));
+  //FragColor = start_march(pp, orientVec);
+  //return;
   FragColor = start_march(pp, orientVec);
   return;
   /*

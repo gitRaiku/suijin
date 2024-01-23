@@ -41,6 +41,14 @@ float PHI = 1.61803398874989484820459;
 float seed = 123.1;
 float gnoise(vec2 xy) { return fract(sin(distance(vec2(xy.x * PHI + 9.124 * seed, xy.y * 8.5141261 + 2.145 * seed),xy.yx)*seed)*xy.x); }
 
+float igud(ivec3 x) {
+  if (x.x > 15) {
+    return 1.0;
+  } else {
+    return 0.0;
+  }
+}
+
 #define GI gl_GlobalInvocationID
 void tmkw3d() { 
   float dx = w / scale;
@@ -50,6 +58,8 @@ void tmkw3d() {
   uint udy = uint(dy + 3);
   uint udz = uint(dz + 3);
   ivec3 texelCoord = ivec3(GI.xyz);
+  imageStore(img3d, texelCoord, vec4(vec3(igud(texelCoord)), 1.0));
+  return;
 
   imageStore(img3d, texelCoord, vec4(vec3(
           gnear3(uint(GI.x + scale + 1), 

@@ -279,12 +279,14 @@ void noise_ww(uint32_t w, uint32_t h, uint32_t d, float scale, struct img *__res
   glBindTexture(GL_TEXTURE_ ##A, ci.t); \
   glTexParameteri(GL_TEXTURE_ ##A, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE); \
   glTexParameteri(GL_TEXTURE_ ##A, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE); \
-  glTexParameteri(GL_TEXTURE_ ##A, GL_TEXTURE_MAG_FILTER, GL_LINEAR); \
-  glTexParameteri(GL_TEXTURE_ ##A, GL_TEXTURE_MIN_FILTER, GL_LINEAR); \
+  glTexParameteri(GL_TEXTURE_ ##A, GL_TEXTURE_MAG_FILTER, GL_NEAREST); \
+  glTexParameteri(GL_TEXTURE_ ##A, GL_TEXTURE_MIN_FILTER, GL_NEAREST); \
   glTexImage ##A(GL_TEXTURE_ ##A, 0, B, __VA_ARGS__, 0, C, GL_FLOAT, NULL); \
   glBindImageTexture(0, ci.t, 0, GL_FALSE, 0, GL_READ_WRITE, X); \
   ci.w = W; ci.h = H; ci.d = D; \
   return ci;
+  //glTexParameteri(GL_TEXTURE_ ##A, GL_TEXTURE_MAG_FILTER, GL_LINEAR); \
+  //glTexParameteri(GL_TEXTURE_ ##A, GL_TEXTURE_MIN_FILTER, GL_LINEAR); \
 
 struct img create_image24(uint32_t w, uint32_t h)             { CIMG(2D, GL_RGBA32F, GL_RGBA, GL_RGBA32F, w, h, 1, w, h); }
 struct img create_image34(uint32_t w, uint32_t h, uint32_t d) { CIMG(3D, GL_RGBA32F, GL_RGBA, GL_RGBA32F, w, h, d, w, h, d); }

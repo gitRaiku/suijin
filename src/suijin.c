@@ -801,6 +801,26 @@ uint64_t invc(uint64_t c) {
 }
 
 float TEXT_SIZE = 20.0;
+void get_textbox_size(struct tbox *__restrict t) {
+  uint32_t cl;
+  FT_UInt gi;
+  char *__restrict ct = t->text;
+  FT_ULong cchar;
+  int32_t px = 0;
+  while (*ct) {
+    cl = runel(ct);
+    cchar = utf8_to_unicode(ct, cl);
+    gi = FT_Get_Char_Index(ftface, cchar);
+
+    FT_CHECK(FT_Load_Glyph(ftface, gi, FT_LOAD_DEFAULT | FT_LOAD_COLOR | FT_LOAD_FORCE_AUTOHINT), "Could not load glyph");
+    FT_Render_Glyph(ftface->glyph, FT_RENDER_MODE_NORMAL);
+
+    px += ftface->glyph->metrics.horiAdvance >> 6;
+    ct += cl;
+  }
+  t->tlen = px;
+}
+
 uint32_t draw_textbox(float x, uint32_t y, struct mchild *__restrict mc, struct tbox *__restrict t) { /// MAKE EFFICIENT
   uint32_t px = 0;
   FT_UInt gi;
@@ -819,21 +839,7 @@ uint32_t draw_textbox(float x, uint32_t y, struct mchild *__restrict mc, struct 
       glGenTextures(1, &t->tex);
     }
 
-    px = 0;
-    if (!t->tlen) {
-      while (*ct) {
-        cl = runel(ct);
-        cchar = utf8_to_unicode(ct, cl);
-        gi = FT_Get_Char_Index(ftface, cchar);
-
-        FT_CHECK(FT_Load_Glyph(ftface, gi, FT_LOAD_DEFAULT | FT_LOAD_COLOR | FT_LOAD_FORCE_AUTOHINT), "Could not load glyph");
-        FT_Render_Glyph(ftface->glyph, FT_RENDER_MODE_NORMAL);
-
-        px += ftface->glyph->metrics.horiAdvance >> 6;
-        ct += cl;
-      }
-      t->tlen = px;
-    }
+    if (!t->tlen) { get_textbox_size(t); }
 
     uint64_t curbg = mc->bg;
     if (mc->flags & UI_CLICKABLE) {
@@ -854,9 +860,9 @@ uint32_t draw_textbox(float x, uint32_t y, struct mchild *__restrict mc, struct 
 
     if (mc->bg) {
       draw_squarec(x, y + mc->pad / 1.4, t->tlen, mc->height + mc->pad, curbg);
-      glUseProgram(textprog);
     }
 
+    glUseProgram(textprog);
     ct = t->text;
     px = 0;
     while (*ct) {
@@ -873,7 +879,7 @@ uint32_t draw_textbox(float x, uint32_t y, struct mchild *__restrict mc, struct 
       int32_t xoff = ftface->glyph->metrics.horiBearingX >> 6;
       int32_t yoff = (-ftface->glyph->metrics.horiBearingY >> 6) + mc->height;
 
-      draw_squaretext(x + px + xoff, y + mc->pad + yoff, fw, fh, t->tex, curbg ? curbg : UI_COL_BG1, mc->fg ? mc->fg : UI_COL_FG3);
+      draw_squaretext(x + px + xoff, y + mc->pad + yoff, fw, fh, t->tex, curbg ? (curbg & ~0xFF) : UI_COL_BG1, mc->fg ? mc->fg : UI_COL_FG3);
 
       px += ftface->glyph->metrics.horiAdvance >> 6;
 
@@ -1349,9 +1355,10 @@ void init_clouds(struct cloud *__restrict c) {
   if (!cloudvbo) { glGenBuffers(1, &cloudvbo); }
 
   memset(c, 0, sizeof(*c));
-  c->m.scale.x = c->m.scale.y = c->m.scale.z = 10.0f;
-  c->m.scale.z = 20.0f;
-  c->m.pos.y = 60.0f;
+  c->m.scale.x = 100.0f;
+  c->m.scale.y = 10.0f;
+  c->m.scale.z = 100.0f;
+  c->m.pos.y = 200.0f;
   c->m.pos.x = -20.0f;
   c->m.pos.z = -16.0f;
   quat qr = gen_quat((vec3) { 1.0f, 0.0f, 0.0f }, M_PI / 4);
@@ -1679,6 +1686,8 @@ uint8_t run_suijin() {
 #define UI_GET_HEIGHT(res, node) { uint32_t _ch = 0; int32_t _i; for(_i = 0; _i < (node).children.l; ++_i) { _ch += (node).children.v[_i].height + (node).children.v[_i].pad; } res = _ch + 10; }
     prep_ui(window, &uvao);
     // add_title(&nodes[0], "スプーク・プーク", 25, 0);
+      //mchvi(&nodes[1].children);
+
     {
       mchvi(&nodes[1].children);
       add_title(&nodes[1], "#Clouds", 25, 8);
@@ -1696,7 +1705,16 @@ uint8_t run_suijin() {
       nodes[1].bp = nodes[1].tp = nodes[1].rp = 0; nodes[1].lp = 8;
       mchvt(&nodes[1].children);
     }
+
+    {
+      mchvi(&nodes[2].children);
+      add_title(&nodes[2], "10.0", 25, 8);
+      nodes[2].children.v[0].fg = 0x10FF00FF;
+      nodes[2].children.v[0].bg = 0xF0000000;
+      mchvt(&nodes[2].children);
+    }
   }
+
 
   struct skybox sb; /// Skybox
   uint32_t sbt;
@@ -1733,8 +1751,11 @@ uint8_t run_suijin() {
     _ctime = glfwGetTime();
     deltaTime = _ctime - _ltime;
     dt += deltaTime;
-    if (frame % 60 == 0) {
-      fprintf(stdout, "Frametime %f       \r", 60 / dt);
+#define FRAME_UPDATE 10
+    if (frame % FRAME_UPDATE == 0) {
+      snprintf(((struct tbox*__restrict)nodes[2].children.v[0].c)->text, 10, "%.2f", FRAME_UPDATE / dt);
+      get_textbox_size(nodes[2].children.v[0].c);
+      fprintf(stdout, "Frametime %f       \r", FRAME_UPDATE / dt);
       dt = 0;
     }
 
@@ -1856,19 +1877,20 @@ uint8_t run_suijin() {
       program_set_int1(cloudprog, "tex", 0);
 
       glBindVertexArray(cloudvao);
-      //fprintf(stdout, "%u\n", cbvl);
       glDrawArrays(GL_TRIANGLES, 0, cbvl);
     }
 
+    glDisable(GL_DEPTH_TEST);
     if (drawUi) { // UPROG
       glUseProgram(uprog);
-      glDisable(GL_DEPTH_TEST);
 
       int32_t i;
       for(i = 0; i < MC; ++i) { draw_node(i); }
       draw_squaret3((windowW - 500) / 2 - 275, (windowH - 500) / 2 - 275, 500, 500, cl.worl.t, curch, curslcs);
       // if (selui.t == UIT_CAN) { selui.t = UIT_CANNOT; }
     }
+
+    draw_textbox(windowW - ((struct tbox*__restrict)nodes[2].children.v[0].c)->tlen, 10, nodes[2].children.v + 0, nodes[2].children.v[0].c);
 
     if (frame % 30 == 0) { /// Frag update
       while (!glfwWindowShouldClose(window)) {
