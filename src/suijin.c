@@ -28,7 +28,9 @@ uint8_t drawObjs = 1;
 uint8_t drawTerm = 0;
 uint8_t drawClouds = 1;
 uint8_t drawUi = 0;
+uint8_t drawFps = 0;
 uint8_t drawBb = 0;
+uint8_t drawTexture = 0;
 
 struct objv objs;
 
@@ -63,7 +65,7 @@ struct matv mats;
 struct modv mods;
 
 enum UIT {
-  UIT_CANNOT, UIT_CAN, UIT_NODE, UIT_SLIDERK, UIT_TEXT
+  UIT_CANNOT, UIT_CAN, UIT_NODE, UIT_SLIDERK, UIT_TEXT, UIT_CHECK
 };
 
 union KMS {
@@ -419,23 +421,25 @@ void handle_input(GLFWwindow *__restrict window) {
   }
 }
 
-time_t la; // check_frag_update
-uint8_t check_frag_update(uint32_t *__restrict program, uint32_t vert) {
+void check_shader_update(uint32_t *__restrict program, char *__restrict path, uint32_t type, uint32_t vert, time_t *__restrict la) {
   struct stat s;
-  stat(FRAG_PATH, &s);
-  if (s.st_ctim.tv_sec != la) {
-    uint32_t shaders[2];
-    shaders[0] = vert;
-    if (shader_get(FRAG_PATH, GL_FRAGMENT_SHADER, shaders + 1)) {
-      return 2;
-    } else {
-      program_get(2, shaders, program);
-      glDeleteShader(shaders[1]);
+  stat(path, &s);
+  if (s.st_ctim.tv_sec != *la) {
+    fprintf(stdout, "UPDATED %lu\n", *la);
+    *la = s.st_ctim.tv_sec;
+    if (type == GL_FRAGMENT_SHADER) {
+      uint32_t shaders[2];
+      shaders[0] = vert;
+      if (!shader_get(path, type, shaders + 1)) {
+        program_get(2, shaders, program);
+        glDeleteShader(shaders[1]);
+      }
+    } else if (type == GL_COMPUTE_SHADER) {
+      uint32_t sh;
+      if (shader_get(path, type, &sh)) { return; }
+      if (program_get(1, &sh, program)) { return; }
     }
-    la = s.st_ctim.tv_sec;
-    return 1;
   }
-  return 0;
 }
 
 void update_mat(uint32_t program, struct material *__restrict mat) {
@@ -499,6 +503,12 @@ struct tbox {
   uint32_t tsize;
 };
 
+struct mtcheck {
+  struct tbox text;
+  uint32_t slen;
+  uint8_t *__restrict val;
+};
+
 struct fslider {
   float *__restrict val;
   v2 lims;
@@ -512,7 +522,7 @@ struct mtslider {
 };
 
 enum MCHID {
-  MTEXT_BOX, MFSLIDER, MTSLIDER
+  MTEXT_BOX, MFSLIDER, MTSLIDER, MCHECKBOX
 };
 
 struct mchild {
@@ -578,6 +588,28 @@ void add_button(struct node *__restrict m, char *__restrict t, uint64_t bg, uint
   strncpy(tmc->text, t, sizeof(tmc->text));
   tmc->tsize = tsize * 64;
   FT_CHECK(FT_Set_Char_Size(ftface, 0, tmc->tsize, 0, 88), "");
+#undef tmc
+  mc.flags = UI_CLICKABLE;
+  mc.callback = callback;
+  mc.cbp = p;
+  mc.pad = pad;
+  mc.bg = bg;
+  mc.height = ftface->size->metrics.y_ppem;
+
+  mchvp(&m->children, mc);
+}
+
+void add_checkbox(struct node *__restrict m, char *__restrict t, uint64_t bg, uint32_t tsize, uint32_t pad, uint8_t *__restrict val, void (*callback)(void*), void *p) {
+  struct mchild mc = {0};
+  mc.id = MCHECKBOX;
+  mc.c = calloc(sizeof(struct mtcheck), 1);
+
+#define tmc ((struct mtcheck *)mc.c)
+  strncpy(tmc->text.text, t, sizeof(tmc->text.text));
+  tmc->text.tsize = tsize * 64;
+  FT_CHECK(FT_Set_Char_Size(ftface, 0, tmc->text.tsize, 0, 88), "");
+  mc.height = ftface->size->metrics.y_ppem;
+  tmc->val = val;
 #undef tmc
   mc.flags = UI_CLICKABLE;
   mc.callback = callback;
@@ -904,7 +936,6 @@ uint32_t draw_slider(float x, float y, uint32_t tlen, struct node *__restrict cm
 
   if (mc->flags & UI_CLICKABLE) {
     if (selui.t == UIT_CAN && ui_pointer_in(x + xoff, y, sS, sS)) {
-      //fprintf(stdout, "Hit slider %p\n", t);
       selui.t = UIT_SLIDERK;
       selui.id.fp = t;
       selui.dx = mouseX;
@@ -913,7 +944,6 @@ uint32_t draw_slider(float x, float y, uint32_t tlen, struct node *__restrict cm
 
     if (selui.t == UIT_SLIDERK && selui.id.fp == t) {
       *t->val = clamp(selui.dy + (mouseX - selui.dx) / tlen * rlen, t->lims.x, t->lims.y);
-      //fprintf(stdout, "%f\n", *t->val);
       if (mc->callback != NULL && mouseX != selui.dx) {
         mc->callback(mc->cbp);
       }
@@ -930,6 +960,33 @@ uint32_t draw_tslider(float x, float y, struct node *__restrict cm, struct mchil
   mc->flags &= ~UI_CLICKABLE;
   snprintf(t->val.text, sizeof(t->val.text), "%.2f", *t->slid.val);
   draw_textbox(x + t->text.tlen + t->slen + sS + sS, y, mc, &t->val);
+  return mc->height + mc->pad;
+}
+
+uint32_t draw_checkpox(float x, float y, struct node *__restrict cm, struct mchild *__restrict mc, struct mtcheck *__restrict t) {
+  uint32_t cbg = mc->bg; mc->bg = 0;
+  draw_textbox(x, y, mc, &t->text);
+  mc->bg = cbg;
+  mc->flags |= UI_CLICKABLE;
+  
+  int32_t xoff = t->text.tlen + 20;
+  int32_t yoff = (mc->height + mc->pad) / 2;
+  draw_squarec(x + xoff, y + yoff, sS, sS, *t->val ? 0xFFFFFFFF : 0xFFFF00FF);
+
+  if (mc->flags & UI_CLICKABLE) {
+    if (selui.t == UIT_CAN && ui_pointer_in(x + xoff, y + yoff, sS, sS)) {
+      selui.t = UIT_CHECK;
+      selui.id.fp = t;
+    }
+
+    if (selui.t == UIT_CHECK && selui.id.fp == t) {
+      selui.t = UIT_CANNOT;
+      *t->val = 1 - *t->val;
+      if (mc->callback != NULL) { mc->callback(mc->cbp); }
+    }
+  }
+
+  mc->flags &= ~UI_CLICKABLE;
   return mc->height + mc->pad;
 }
 
@@ -950,6 +1007,9 @@ void draw_node(uint32_t mi) {
           break;
         case MTSLIDER:
           cy += draw_tslider(cm.px + cm.lp, cm.py + cy, &cm, cm.children.v + i, cm.children.v[i].c);
+          break;
+        case MCHECKBOX:
+          cy += draw_checkpox(cm.px + cm.lp, cm.py + cy, &cm, cm.children.v + i, cm.children.v[i].c);
           break;
         }
     }
@@ -1356,8 +1416,8 @@ void init_clouds(struct cloud *__restrict c) {
 
   memset(c, 0, sizeof(*c));
   c->m.scale.x = 100.0f;
-  c->m.scale.y = 10.0f;
   c->m.scale.z = 100.0f;
+  c->m.scale.y = 10.0f;
   c->m.pos.y = 200.0f;
   c->m.pos.x = -20.0f;
   c->m.pos.z = -16.0f;
@@ -1536,14 +1596,19 @@ void messageCallback(GLenum source, GLenum type, GLuint id, GLenum severity, GLs
 }
 
 float scale = 10.0;
-float pscale = 7.73;
+float pscale = 35;
+float pwscale = 40;
 float curslcs = 0.5;
 float kmsper = 0.53;
 float kmsoct = 3.1;
 float curch = 80.1;
 float KMS = 2.2;
+
+float minDensity = 0.2;
+float densityMultiplier = 2.0;
+
 void compute_shader() {
-  noise_pw(128, 128, 128, (uint32_t)kmsoct, kmsper, pscale, scale, &cl.pwor);
+  noise_pw(128, 128, 128, (uint32_t)kmsoct, kmsper, pscale, pwscale, scale, &cl.pwor);
   noise_ww(32, 32, 32, scale, &cl.worl);
   //noise_p(128, 128, 128, (uint32_t)kmsoct, kmsper, scale, &cp.perl);
   noise_c(128, 128, 128, (uint32_t)kmsoct, kmsper, scale, &cl.curl);
@@ -1654,12 +1719,6 @@ uint8_t run_suijin() {
     glBindBuffer(GL_ARRAY_BUFFER, 0);
   }
 
-  { /// Fragment Shader Stat
-    struct stat s;
-    stat(FRAG_PATH, &s);
-    la = s.st_ctim.tv_sec;
-  }
-
   { /// Camera
     int iw, ih;
     memset(&initCam, 0, sizeof(initCam));
@@ -1691,11 +1750,15 @@ uint8_t run_suijin() {
     {
       mchvi(&nodes[1].children);
       add_title(&nodes[1], "#Clouds", 25, 8);
-      add_tslider(&nodes[1], "Scale", 15, &scale, 1.1, 20.0f, 8, autoupda, NULL);
-      add_tslider(&nodes[1], "PScale", 15, &pscale, 1.1, 20.0f, 8, autoupda, NULL);
+      add_tslider(&nodes[1], "Scale", 15, &scale, 1.1, 40.0f, 8, autoupda, NULL);
+      add_tslider(&nodes[1], "PScale", 15, &pscale, 1.1, 40.0f, 8, autoupda, NULL);
+      add_tslider(&nodes[1], "PWScale", 15, &pwscale, 1.1, 40.0f, 8, autoupda, NULL);
       add_tslider(&nodes[1], "Persist", 15, &kmsper, 0.0, 2.0f, 8, autoupda, NULL);
       add_tslider(&nodes[1], "Octaves", 15, &kmsoct, 1.0, 20.0f, 8, autoupda, NULL);
       add_tslider(&nodes[1], "Channel", 15, &curch, 80.1, 83.1f, 8, NULL, NULL);
+      add_tslider(&nodes[1], "minDensity", 15, &minDensity, 0.0, 1.0f, 8, NULL, NULL);
+      add_tslider(&nodes[1], "densityMultiplier", 15, &densityMultiplier, 0.0, 4.0f, 8, NULL, NULL);
+      add_checkbox(&nodes[1], "Dracu stie", 0xFF00FFFF, 15, 10, &drawTexture, NULL, NULL);
       add_tslider(&nodes[1], "Type", 15, &KMS, 0.1, 3.1f, 8, autoupda, NULL);
       add_tslider(&nodes[1], "Curslice", 15, &curslcs, 0.0, 1.0f, 8, NULL, NULL);
       add_button(&nodes[1], "Update", 0xFF0000FF, 20, 10, compute_shader, NULL);
@@ -1725,6 +1788,14 @@ uint8_t run_suijin() {
     uint8_t *buf = read_png("skybox.png", "Resources/Textures", &sbw, &sbh);
     update_rgb_tex(&sbt, sbh, sbw, buf);
     free(buf);
+  }
+
+  static time_t cla = 0;
+  static time_t ccla = 0;
+  {
+    struct stat s;
+    stat("shaders/cloud_frag.glsl", &s); cla = s.st_ctim.tv_sec;
+    stat("shaders/worley_compute.glsl", &s); ccla = s.st_ctim.tv_sec;
   }
 
   init_clouds(&cl);
@@ -1827,13 +1898,6 @@ uint8_t run_suijin() {
           }
         }
       }
-      /*if (selui.nt != 0xFF) {
-        fprintf(stdout, "SELUI: %u -> %u\n", selui.t, selui.nt);
-        selui.t = selui.nt;
-        selui.nt = 0xFF;
-      } else {
-        fprintf(stdout, "SELUI: %u\n", selui.t);
-      }*/
     }
 
     if (drawBb) { // LPROG
@@ -1862,8 +1926,10 @@ uint8_t run_suijin() {
 
     if (drawTerm) { draw_squaret((windowW - 500) / 2, (windowH - 500) / 2, 500, 500, ttex, 2); upd_therm(); }
 
+    glDisable(GL_DEPTH_TEST);
     if (drawClouds) {
-      glEnable(GL_DEPTH_TEST);
+      glEnable(GL_CULL_FACE);
+      glCullFace(GL_FRONT);
 
       glUseProgram(cloudprog);
       program_set_mat4(cloudprog, "fn", fn);
@@ -1873,34 +1939,30 @@ uint8_t run_suijin() {
       program_set_float3v(cloudprog, "camPos", cam.pos);
 
       glActiveTexture(GL_TEXTURE0);
-      glBindTexture(GL_TEXTURE_3D, cl.worl.t);
+      glBindTexture(GL_TEXTURE_3D, cl.pwor.t);
       program_set_int1(cloudprog, "tex", 0);
 
       glBindVertexArray(cloudvao);
       glDrawArrays(GL_TRIANGLES, 0, cbvl);
+      glDisable(GL_CULL_FACE);
     }
 
-    glDisable(GL_DEPTH_TEST);
     if (drawUi) { // UPROG
       glUseProgram(uprog);
 
       int32_t i;
       for(i = 0; i < MC; ++i) { draw_node(i); }
-      draw_squaret3((windowW - 500) / 2 - 275, (windowH - 500) / 2 - 275, 500, 500, cl.worl.t, curch, curslcs);
+      if (drawTexture) { draw_squaret3((windowW - 500) / 2 - 275, (windowH - 500) / 2 - 275, 500, 500, cl.pwor.t, curch, curslcs); }
       // if (selui.t == UIT_CAN) { selui.t = UIT_CANNOT; }
     }
 
-    draw_textbox(windowW - ((struct tbox*__restrict)nodes[2].children.v[0].c)->tlen, 10, nodes[2].children.v + 0, nodes[2].children.v[0].c);
+    if (drawFps) {
+      draw_textbox(windowW - ((struct tbox*__restrict)nodes[2].children.v[0].c)->tlen, 10, nodes[2].children.v + 0, nodes[2].children.v[0].c);
+    }
 
     if (frame % 30 == 0) { /// Frag update
-      while (!glfwWindowShouldClose(window)) {
-        uint8_t r = check_frag_update(&cloudprog, shaders[12]);
-        if (r < 2) {
-          break;
-        } else {
-          sleep(1);
-        }
-      }
+      check_shader_update(&cloudprog, "shaders/cloud_frag.glsl", GL_FRAGMENT_SHADER, shaders[12], &cla);
+      check_shader_update(&wComp, "shaders/worley_compute.glsl", GL_COMPUTE_SHADER, 0, &ccla);
     }
 
     glfwPollEvents();

@@ -230,17 +230,15 @@ void noise_c(uint32_t h, uint32_t w, uint32_t d, uint32_t octaves, float persist
   glMemoryBarrier(0);
 }
 
-void noise_pw(uint32_t w, uint32_t h, uint32_t d, uint32_t octaves, float persistence, float pscale, float wscale, struct img *__restrict i) {
+void noise_pw(uint32_t w, uint32_t h, uint32_t d, uint32_t octaves, float persistence, float pscale, float pwscale, float wscale, struct img *__restrict i) {
   thefunny4;
 
   static struct img w1, w2, w3, w4, p;
   noise_w(w, h, d, wscale, &w1);
   noise_w(w, h, d, wscale / 2, &w2);
   noise_w(w, h, d, wscale / 3, &w3);
-  noise_w(w, h, d, pscale, &w4);
+  noise_w(w, h, d, pwscale, &w4);
   noise_p(w, h, d, octaves, persistence, pscale, &p);
-
-  //i->t = p.t; return;
 
   glUseProgram(pwComp);
   program_set_int1(pwComp, "type", 0);
@@ -285,8 +283,6 @@ void noise_ww(uint32_t w, uint32_t h, uint32_t d, float scale, struct img *__res
   glBindImageTexture(0, ci.t, 0, GL_FALSE, 0, GL_READ_WRITE, X); \
   ci.w = W; ci.h = H; ci.d = D; \
   return ci;
-  //glTexParameteri(GL_TEXTURE_ ##A, GL_TEXTURE_MAG_FILTER, GL_LINEAR); \
-  //glTexParameteri(GL_TEXTURE_ ##A, GL_TEXTURE_MIN_FILTER, GL_LINEAR); \
 
 struct img create_image24(uint32_t w, uint32_t h)             { CIMG(2D, GL_RGBA32F, GL_RGBA, GL_RGBA32F, w, h, 1, w, h); }
 struct img create_image34(uint32_t w, uint32_t h, uint32_t d) { CIMG(3D, GL_RGBA32F, GL_RGBA, GL_RGBA32F, w, h, d, w, h, d); }

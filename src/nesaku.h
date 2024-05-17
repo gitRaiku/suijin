@@ -25,6 +25,7 @@
 
 extern float pscale;
 extern uint8_t updp;
+extern uint32_t wComp;
 
 struct img {
   uint32_t w, h, d;
@@ -107,7 +108,8 @@ void noise_w(uint32_t w, uint32_t h, uint32_t d, float scale, struct img *__rest
 
 void noise_p(uint32_t h, uint32_t w, uint32_t d, uint32_t octaves, float persistence, float scale, struct img *__restrict i);
 
-void noise_pw(uint32_t w, uint32_t h, uint32_t d, uint32_t octaves, float persistence, float pscale, float wscale, struct img *__restrict i);
+
+void noise_pw(uint32_t w, uint32_t h, uint32_t d, uint32_t octaves, float persistence, float pscale, float pwscale, float wscale, struct img *__restrict i);
 
 void noise_ww(uint32_t w, uint32_t h, uint32_t d, float scale, struct img *__restrict i);
 
