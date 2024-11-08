@@ -28,7 +28,7 @@ VALGRIND = valgrind --leak-check=summary --log-file=valgrind.log
 
 DATE := $(shell date "+%Y-%m-%d")
 
-LFLAGS   = -lglfw -lm -lpng -lfreetype
+LFLAGS = -lglfw -lm -lpng -lfreetype
 
 C_SRC = $(wildcard $(SRC_DIR)/*.c $(SRC_DIR)/*/*.c)
 L_SRC = $(wildcard $(LIB_DIR)/*.c $(LIB_DIR)/*/*.c)

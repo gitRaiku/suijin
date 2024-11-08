@@ -12,7 +12,8 @@ uniform sampler3D tex;
 
 uniform float minDensity = 0.2;
 uniform float densityMultiplier = 3.4;
-uniform int numSteps = 10;
+uniform int numSteps = 100;
+uniform float slen = 0.1;
 uniform int numStepsLight = 10;
 
 uniform float lightDarknessThresh = 0.1;
@@ -40,7 +41,7 @@ float offP = 0.2;
 float mata(float c) { return 1; return min(max(offL - abs(c + offP), 0.0) * 20, 1.0); }
 
 vec3 resetScale = vec3(1.0, centerScale.y / centerScale.x, centerScale.z / centerScale.x) * 1.0;
-vec3 cloudScale = vec3(1.0, 1.0, 1.0);
+vec3 cloudScale = vec3(2.0, 2.0, 2.0);
 float cp1(float x, int y) { if ((y & 1) != 0) { return x - y; } else { return 1.0 - x + y; } }
 vec3 cp3(vec3 x, ivec3 y) { x.x = cp1(x.x, y.x); x.y = cp1(x.y, y.y); x.z = cp1(x.z, y.z); return x; }
 
@@ -84,19 +85,31 @@ float light_march(vec3 pos) {
 
 vec4 start_march(vec3 spos, vec3 dir, float rdist) {
   float stepLen = rdist / numSteps;
+  //float stepLen = slen;
+  //int kms = int(rdist / slen);
   dir = vec3(dir.x, dir.y, dir.z) * stepLen;
   vec3 d;
   vec3 cp = spos;
-  float cm = 0.0;
   float cd, ld;
 
   float lightEnergy = 0.0;
   float transmittance = 1.0;
   float dstTravelled = 0.0;
   for (int i = 0; i < numSteps; ++i) {
+  //for (int i = 0; i < kms; ++i) {
     dstTravelled += stepLen;
     d = dist(cp);
     cd = sample_dens(fix(d));
+    if (cd > 0.40) {
+      vec3 texPos = fix(d) * resetScale * cloudScale;
+      ivec3 iv = ivec3(texPos);
+      return vec4(iv.xyz, 1.0);
+      texPos = cp3(texPos, iv);
+      float res = texture(tex, texPos).r;
+
+      return vec4(fix(d).y, fix(d).x, 1.0, 1.0);
+    }
+    /*
     if (cd > 0.001) {
       ld = light_march(cp);
       lightEnergy += cd * ld * stepLen * transmittance * 1.0; /// Add hg
@@ -104,10 +117,12 @@ vec4 start_march(vec3 spos, vec3 dir, float rdist) {
 
       if (transmittance < 0.01) { break; }
     }
+    */
 
     cp += dir;
-    cm = gm(d);
   }
+
+  return vec4(0.0);
 
   return vec4(lightEnergy * vec4(1.0, 1.0, 1.0, 1.0));
 }

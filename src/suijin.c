@@ -11,15 +11,9 @@
 #include <sys/stat.h>
 #include <unistd.h>
 
-#include "shaders.h"
-#include "linalg.h"
-#include "izanagi.h"
-#include "nesaku.h"
+#include "env.h" 
 
 float DELETE_ME; /// TODO: Delete
-
-#define OUTSIDE_TEMP 0.1f
-float DIFF_COEF = 0.05f;
 
 double _ctime, _ltime;
 double deltaTime;
@@ -98,15 +92,6 @@ struct perlin per;
 uint8_t perlinR = 0;
 
 uint8_t cameraUpdate = 1;
-#define ZOOM_SPEED 0.01f
-#define PAN_SPEED 13.0f
-#define SENS 0.001f
-
-#define UI_COL_BG1 0x181818FF
-#define UI_COL_BG2 0x484848A0
-#define UI_COL_FG1 0xBA2636A0
-#define UI_COL_FG2 0xA232B4FF
-#define UI_COL_FG3 0xFFFFFFFF
 
 mat4 fn;
 int windowW, windowH;
@@ -185,11 +170,6 @@ void create_lookat_matrix(mat4 m) {
   vec3 f = norm(QV(cam.orientation));
   vec3 s = norm(cross(cam.up, f));
   vec3 u = cross(f, s);
-  //print_vec3(f, "f");
-  //print_vec3(f, "f");
-  //print_vec3(s, "s");
-  //print_vec3(u, "u");
-  //print_vec3(cam.pos, "cam.pos");
 
   memset(m, 0, sizeof(mat4));
   m[0][0] = s.x;
@@ -257,24 +237,71 @@ v2 lims[10];
 double startY = 0;
 uint8_t canMoveCam = 1;
 float mxoff, myoff;
+
+
+      double theta = 0.0;
+      double phi = 0.0;
+      int8_t kk = 1;
+
+double sgn(double kms) {
+  if (kms < 0) {
+    return -1;
+  } else {
+    return 1;
+  }
+}
+
 void handle_input(GLFWwindow *__restrict window) {
   { // CURSOR
     glfwGetCursorPos(window, &mouseX, &mouseY);
 
-    if ((mouseX != oldMouseX) || (mouseY != oldMouseY)) {
+    //if ((mouseX != oldMouseX) || (mouseY != oldMouseY)) {
+    if (1) {
       double xoff = mouseX - oldMouseX;
       double yoff = mouseY - oldMouseY;
       oldMouseX = mouseX;
       oldMouseY = mouseY;
 
       if (canMoveCam) {
-        quat qx = gen_quat(cam.up, -xoff * SENS);
-        quat qy = gen_quat(cross(QV(cam.orientation), cam.up), yoff * SENS);
+        if (0) {
+          quat qx = gen_quat(cam.up, -xoff * SENS);
+          //quat qy = gen_quat(cross(QV(cam.orientation), cam.up), yoff * SENS);
+          //quat qx = gen_quat(cam.up, 0.0);
+          vec3 cr = norm(cross(QV(cam.orientation), cam.up));
+          fprintf(stdout, "%.2f %.2f %.2f\n", cr.x, cr.y, cr.z);
+          quat qy = gen_quat(cr, yoff * SENS);
+          quat qz = gen_quat(norm(cross(cr, QV(cam.orientation))), kk * SENS);
+          // quat qy = gen_quat((vec3){0.0, 0.0, 1.0}, yoff * SENS);
 
-        quat qr = qmul(qy, qx);
-        quat qt = qmul(qmul(qr, cam.orientation), qconj(qr));
-        qt = qnorm(qt);
-        cam.orientation = qt;
+          quat qr = qmul(qz, qmul(qy, qx));
+          quat qt = qmul(qmul(qr, cam.orientation), qconj(qr));
+          print_quat(cam.orientation, "cam");
+          print_quat(qx, "qx");
+          print_quat(qx, "qy");
+          print_quat(qx, "qr");
+          print_quat(qx, "qt");
+          qt = qnorm(qt);
+          print_quat(qx, "qtn");
+          cam.orientation = qt;
+          //cam.orientation.y = 0.0;
+        } else {
+          //yoff = 0.0;
+          theta += xoff * SENS;
+          phi += yoff * SENS;
+          fprintf(stdout, "%.2f(%.2f) %.2f(%.2f)\n", theta, sin(theta), phi, sin(phi));
+          float s1 = sgn(sin(theta));
+          float s2 = sgn(cos(theta));
+        
+          vec3 kms = norm((vec3) { 
+              sin(theta), /// x
+              cos(theta), /// y
+              0.0             /// z
+              });
+          cam.orientation.x = kms.x;
+          cam.orientation.y = kms.y;
+          cam.orientation.z = kms.z;
+          print_quat(cam.orientation, "cam");
+        }
 
         cameraUpdate = 1;
       }
@@ -309,6 +336,16 @@ void handle_input(GLFWwindow *__restrict window) {
     //print_keypress("Processing keypress: ", kp);
     if (kp.iskb) {
       switch(kp.key) {
+        case GLFW_KEY_H:
+          if (kp.action == 1) {
+            /*
+            cam.orientation.x *= -1;
+            cam.orientation.y *= -1;
+            cam.orientation.z *= -1;
+            */
+            kk = 1 - kk;
+          }
+          break;
         case GLFW_KEY_I:
           if (kp.action == 1) {
             new_perlin_perms();
@@ -1289,7 +1326,7 @@ void cpoints(uint32_t *__restrict vao, uint32_t *__restrict vbo) {
 
   glBindVertexArray(*vao);
   glBindBuffer(GL_ARRAY_BUFFER, *vbo);
-  glBufferData(GL_ARRAY_BUFFER, 2 * 3 * sizeof(float), NULL, GL_STATIC_DRAW);
+  glBufferData(GL_ARRAY_BUFFER, 2 * 3 * sizeof(float), NULL, GL_DYNAMIC_DRAW);
 
   glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void *) (0 * sizeof(float)));
   glEnableVertexAttribArray(0);
@@ -1817,12 +1854,11 @@ uint8_t run_suijin() {
   glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
 
   double dt = 0;
-  while (!glfwWindowShouldClose(window)) {
+  while (!glfwWindowShouldClose(window)) { 
     ++frame;
     _ctime = glfwGetTime();
     deltaTime = _ctime - _ltime;
     dt += deltaTime;
-#define FRAME_UPDATE 10
     if (frame % FRAME_UPDATE == 0) {
       snprintf(((struct tbox*__restrict)nodes[2].children.v[0].c)->text, 10, "%.2f", FRAME_UPDATE / dt);
       get_textbox_size(nodes[2].children.v[0].c);
