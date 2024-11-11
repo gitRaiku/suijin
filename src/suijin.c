@@ -1,9 +1,3 @@
-#include <glad/glad.h>
-#include <GLFW/glfw3.h>
-#include <ft2build.h>
-#include FT_FREETYPE_H
-#include FT_GLYPH_H
-
 #include <stdio.h>
 #include <stdint.h>
 #include <math.h>
@@ -13,10 +7,13 @@
 
 #include "env.h" 
 
+static struct env *__restrict e;
+void suijin_setenv(struct env *__restrict ee) { e = ee; }
+
 float DELETE_ME; /// TODO: Delete
 
 double _ctime, _ltime;
-double deltaTime;
+double deltaTime, dt;
 
 uint8_t drawObjs = 1;
 uint8_t drawTerm = 0;
@@ -26,12 +23,7 @@ uint8_t drawFps = 0;
 uint8_t drawBb = 0;
 uint8_t drawTexture = 0;
 
-struct objv objs;
-
 mat4 identity;
-
-FT_Library ftlib;
-FT_Face ftface;
 
 /// TODO
 v3 HITP;
@@ -39,24 +31,10 @@ uint8_t HITS = 0;
 
 int32_t cshading = 0;
 
-struct camera {
-  vec3 pos;
-  vec3 up;
-  quat orientation;
-  float fov;
-  float ratio;
-};
-
 double mouseX, mouseY;
 double oldMouseX, oldMouseY;
 
-struct camera initCam;
-struct camera cam;
-
 #define FRAG_PATH "shaders/cloud_frag.glsl"
-
-struct matv mats;
-struct modv mods;
 
 enum UIT {
   UIT_CANNOT, UIT_CAN, UIT_NODE, UIT_SLIDERK, UIT_TEXT, UIT_CHECK
@@ -91,71 +69,6 @@ struct perlin {
 struct perlin per;
 uint8_t perlinR = 0;
 
-uint8_t cameraUpdate = 1;
-
-mat4 fn;
-int windowW, windowH;
-float iwinw, iwinh;
-
-void callback_error(int error, const char *desc) { fprintf(stderr, "GLFW error, no %i, desc %s\n", error, desc); }
-void callback_window_should_close(GLFWwindow *window) { }
-void callback_window_resize(GLFWwindow *window, int width, int height) {
-    glViewport(0, 0, width, height);
-    initCam.ratio = cam.ratio = (float) width / (float) height;
-    cameraUpdate = 1;
-    windowW = width;
-    windowH = height;
-    iwinw = 1.0f / width;
-    iwinh = 1.0f / height;
-    // fprintf(stdout, "Window Resize To: %ix%i\n", width, height);
-}
-
-GLFWwindow *window_init() {
-    GLFWwindow *window;
-    glfwSetErrorCallback(callback_error);
-
-    glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
-    glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 6);
-    glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
-#ifdef __APPLE__
-    glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE);
-#endif
-
-    windowW = 1920;
-    windowH = 1080;
-    iwinw = 1.0f / windowW;
-    iwinh = 1.0f / windowH;
-    window = glfwCreateWindow(1080, 1920, "suijin", NULL, NULL);
-    GL_CHECK(window, "Failed to create the window!");
-
-    glfwMakeContextCurrent(window);
-
-    GL_CHECK(gladLoadGLLoader((GLADloadproc) glfwGetProcAddress), "Failed to initialize GLAD!");
-
-    glViewport(0, 0, 1920, 1080);
-
-    glfwSetFramebufferSizeCallback(window, callback_window_resize);
-    glfwSetWindowCloseCallback(window, callback_window_should_close);
-    glfwSwapInterval(0);
-
-#ifdef SUIJIN_DEBUG
-    {
-        fprintf(stdout, "App compiled on GLFW version %i %i %i\n",
-                GLFW_CONTEXT_VERSION_MAJOR,
-                GLFW_CONTEXT_VERSION_MINOR,
-                GLFW_VERSION_REVISION);
-        int glfw_major, glfw_minor, glfw_revision;
-        glfwGetVersion(&glfw_major, &glfw_minor, &glfw_revision);
-        fprintf(stdout, "With the runtime GLFW version of %i %i %i\n",
-                glfw_major,
-                glfw_minor,
-                glfw_revision);
-    }
-#endif
-
-    return window;
-}
-
 void create_projection_matrix(mat4 m, float angle, float ratio, float near, float far) {
   memset(m, 0, sizeof(mat4));
   float tanHalfAngle = tanf(angle / 2.0f);
@@ -167,8 +80,8 @@ void create_projection_matrix(mat4 m, float angle, float ratio, float near, floa
 }
 
 void create_lookat_matrix(mat4 m) {
-  vec3 f = norm(QV(cam.orientation));
-  vec3 s = norm(cross(cam.up, f));
+  vec3 f = norm(QV(e->cam.orientation));
+  vec3 s = norm(cross(e->cam.up, f));
   vec3 u = cross(f, s);
 
   memset(m, 0, sizeof(mat4));
@@ -184,18 +97,19 @@ void create_lookat_matrix(mat4 m) {
   m[2][1] = f.y;
   m[2][2] = f.z;
          
-  m[0][3] = -dot(s, cam.pos);
-  m[1][3] = -dot(u, cam.pos);
-  m[2][3] = -dot(f, cam.pos);
+  m[0][3] = -dot(s, e->cam.pos);
+  m[1][3] = -dot(u, e->cam.pos);
+  m[2][3] = -dot(f, e->cam.pos);
   m[3][3] = 1.0f;
 }
 
+mat4 fn;
 void update_camera_matrix() {
   mat4 proj, view;
-  if (cam.up.x == cam.orientation.x && cam.up.y == cam.orientation.y && cam.up.z == cam.orientation.z) {
-    cam.orientation.x = 0.0000000000000001;
+  if (e->cam.up.x == e->cam.orientation.x && e->cam.up.y == e->cam.orientation.y && e->cam.up.z == e->cam.orientation.z) {
+    e->cam.orientation.x = 0.0000000000000001;
   }
-  create_projection_matrix(proj, cam.fov, cam.ratio, 0.01f, 3000.0f);
+  create_projection_matrix(proj, e->cam.fov, e->cam.ratio, 0.01f, 3000.0f);
   create_lookat_matrix(view);
 
   matmul44(fn, proj, view);
@@ -228,7 +142,6 @@ uint32_t CDR, CDRO;
 uint32_t lp[3];
 enum MOVEMEMENTS { CAMERA, ITEMS, UI };
 enum MOVEMEMENTS ms = CAMERA;
-void reset_ft();
 uint32_t curi = 0;
 float *vals[10];
 float scal[10];
@@ -251,12 +164,12 @@ double sgn(double kms) {
   }
 }
 
-void handle_input(GLFWwindow *__restrict window) {
+void handle_input() {
   { // CURSOR
-    glfwGetCursorPos(window, &mouseX, &mouseY);
+    glfwGetCursorPos(e->window, &mouseX, &mouseY);
 
     //if ((mouseX != oldMouseX) || (mouseY != oldMouseY)) {
-    if (1) {
+    if (0) {
       double xoff = mouseX - oldMouseX;
       double yoff = mouseY - oldMouseY;
       oldMouseX = mouseX;
@@ -264,46 +177,44 @@ void handle_input(GLFWwindow *__restrict window) {
 
       if (canMoveCam) {
         if (0) {
-          quat qx = gen_quat(cam.up, -xoff * SENS);
-          //quat qy = gen_quat(cross(QV(cam.orientation), cam.up), yoff * SENS);
-          //quat qx = gen_quat(cam.up, 0.0);
-          vec3 cr = norm(cross(QV(cam.orientation), cam.up));
+          quat qx = gen_quat(e->cam.up, -xoff * SENS);
+          //quat qy = gen_quat(cross(QV(e->cam.orientation), e->cam.up), yoff * SENS);
+          //quat qx = gen_quat(e->cam.up, 0.0);
+          vec3 cr = norm(cross(QV(e->cam.orientation), e->cam.up));
           fprintf(stdout, "%.2f %.2f %.2f\n", cr.x, cr.y, cr.z);
           quat qy = gen_quat(cr, yoff * SENS);
-          quat qz = gen_quat(norm(cross(cr, QV(cam.orientation))), kk * SENS);
+          quat qz = gen_quat(norm(cross(cr, QV(e->cam.orientation))), kk * SENS);
           // quat qy = gen_quat((vec3){0.0, 0.0, 1.0}, yoff * SENS);
 
           quat qr = qmul(qz, qmul(qy, qx));
-          quat qt = qmul(qmul(qr, cam.orientation), qconj(qr));
-          print_quat(cam.orientation, "cam");
+          quat qt = qmul(qmul(qr, e->cam.orientation), qconj(qr));
+          print_quat(e->cam.orientation, "cam");
           print_quat(qx, "qx");
           print_quat(qx, "qy");
           print_quat(qx, "qr");
           print_quat(qx, "qt");
           qt = qnorm(qt);
           print_quat(qx, "qtn");
-          cam.orientation = qt;
-          //cam.orientation.y = 0.0;
+          e->cam.orientation = qt;
+          //e->cam.orientation.y = 0.0;
         } else {
           //yoff = 0.0;
           theta += xoff * SENS;
           phi += yoff * SENS;
           fprintf(stdout, "%.2f(%.2f) %.2f(%.2f)\n", theta, sin(theta), phi, sin(phi));
-          float s1 = sgn(sin(theta));
-          float s2 = sgn(cos(theta));
         
           vec3 kms = norm((vec3) { 
               sin(theta), /// x
               cos(theta), /// y
               0.0             /// z
               });
-          cam.orientation.x = kms.x;
-          cam.orientation.y = kms.y;
-          cam.orientation.z = kms.z;
-          print_quat(cam.orientation, "cam");
+          e->cam.orientation.x = kms.x;
+          e->cam.orientation.y = kms.y;
+          e->cam.orientation.z = kms.z;
+          print_quat(e->cam.orientation, "cam");
         }
 
-        cameraUpdate = 1;
+        e->camUpdate = 1;
       }
 
       switch (ms) {
@@ -316,11 +227,6 @@ void handle_input(GLFWwindow *__restrict window) {
             *vals[curi] = clamp(*vals[curi], lims[curi].x, lims[curi].y);
           }
           fprintf(stdout, "%s -> % 3.3f\r", nms[curi], *vals[curi]);
-          switch (curi) {
-            case 3:
-              reset_ft();
-              break;
-         }
           break;
         case UI:
           break;
@@ -339,9 +245,9 @@ void handle_input(GLFWwindow *__restrict window) {
         case GLFW_KEY_H:
           if (kp.action == 1) {
             /*
-            cam.orientation.x *= -1;
-            cam.orientation.y *= -1;
-            cam.orientation.z *= -1;
+            e->cam.orientation.x *= -1;
+            e->cam.orientation.y *= -1;
+            e->cam.orientation.z *= -1;
             */
             kk = 1 - kk;
           }
@@ -360,14 +266,14 @@ void handle_input(GLFWwindow *__restrict window) {
             ms = UI;
             canMoveCam = 0;
             drawUi = 1;
-            glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
-            glfwSetCursorPos(window, windowW / 2.0, windowH / 2.0);
+            glfwSetInputMode(e->window, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
+            glfwSetCursorPos(e->window, e->w.windowW / 2.0, e->w.windowH / 2.0);
           } else if (kp.action == 0) {
             ms = CAMERA;
             canMoveCam = 1;
             drawUi = 0;
             selui.t = UIT_CANNOT;
-            glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+            glfwSetInputMode(e->window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
           }
           break;
         case GLFW_KEY_O:
@@ -414,46 +320,46 @@ void handle_input(GLFWwindow *__restrict window) {
   { // KEY_PRESSED
     float cpanSpeed = (PAN_SPEED + KEY_PRESSED(GLFW_KEY_LEFT_SHIFT) * PAN_SPEED * 3) * deltaTime;
     if (KEY_PRESSED(GLFW_KEY_EQUAL) && KEY_PRESSED(GLFW_KEY_LEFT_SHIFT)) {
-      cam.fov += cam.fov * ZOOM_SPEED;
-      cameraUpdate = 1;
+      e->cam.fov += e->cam.fov * ZOOM_SPEED;
+      e->camUpdate = 1;
     } else if (KEY_PRESSED(GLFW_KEY_EQUAL)) {
-      cam.fov = initCam.fov;
-      cameraUpdate = 1;
+      e->cam.fov = e->initCam.fov;
+      e->camUpdate = 1;
     }
     if (KEY_PRESSED(GLFW_KEY_MINUS)) {
-      cam.fov -= cam.fov * ZOOM_SPEED;
-      cameraUpdate = 1;
+      e->cam.fov -= e->cam.fov * ZOOM_SPEED;
+      e->camUpdate = 1;
     }
     if (KEY_PRESSED(GLFW_KEY_A)) {
-      cam.pos = v3a(v3m(cpanSpeed, norm(cross(QV(cam.orientation), cam.up))), cam.pos);
-      cameraUpdate = 1;
+      e->cam.pos = v3a(v3m(cpanSpeed, norm(cross(QV(e->cam.orientation), e->cam.up))), e->cam.pos);
+      e->camUpdate = 1;
     }
     if (KEY_PRESSED(GLFW_KEY_D)) {
-      cam.pos = v3a(v3m(cpanSpeed, v3n(norm(cross(QV(cam.orientation), cam.up)))), cam.pos);
-      cameraUpdate = 1;
+      e->cam.pos = v3a(v3m(cpanSpeed, v3n(norm(cross(QV(e->cam.orientation), e->cam.up)))), e->cam.pos);
+      e->camUpdate = 1;
     }
     if (KEY_PRESSED(GLFW_KEY_SPACE)) {
-      cam.pos = v3a(v3m(cpanSpeed, cam.up), cam.pos);
-      cameraUpdate = 1;
+      e->cam.pos = v3a(v3m(cpanSpeed, e->cam.up), e->cam.pos);
+      e->camUpdate = 1;
     }
     if (KEY_PRESSED(GLFW_KEY_LEFT_CONTROL)) {
-      cam.pos = v3a(v3m(cpanSpeed, v3n(cam.up)), cam.pos);
-      cameraUpdate = 1;
+      e->cam.pos = v3a(v3m(cpanSpeed, v3n(e->cam.up)), e->cam.pos);
+      e->camUpdate = 1;
     }
     if (KEY_PRESSED(GLFW_KEY_W)) {
-      cam.pos = v3a(v3m(cpanSpeed, v3n(QV(cam.orientation))), cam.pos);
-      cameraUpdate = 1;
+      e->cam.pos = v3a(v3m(cpanSpeed, v3n(QV(e->cam.orientation))), e->cam.pos);
+      e->camUpdate = 1;
     }
     if (KEY_PRESSED(GLFW_KEY_S)) {
-      cam.pos = v3a(v3m(cpanSpeed, QV(cam.orientation)), cam.pos);
-      cameraUpdate = 1;
+      e->cam.pos = v3a(v3m(cpanSpeed, QV(e->cam.orientation)), e->cam.pos);
+      e->camUpdate = 1;
     }
     if (KEY_PRESSED(GLFW_KEY_U)) {
-      memcpy(&cam, &initCam, sizeof(cam));
-      cameraUpdate = 1;
+      memcpy(&e->cam, &e->initCam, sizeof(e->cam));
+      e->camUpdate = 1;
     }
     if (KEY_PRESSED(GLFW_KEY_Q)) {
-      glfwSetWindowShouldClose(window, 1);
+      glfwSetWindowShouldClose(e->window, 1);
     }
   }
 }
@@ -609,8 +515,8 @@ void add_title(struct node *__restrict m, char *__restrict t, uint32_t tsize, ui
 #define tmc ((struct tbox *)mc.c)
   strncpy(tmc->text, t, sizeof(tmc->text));
   tmc->tsize = tsize * 64;
-  FT_CHECK(FT_Set_Char_Size(ftface, 0, tmc->tsize, 0, 88), "");
-  mc.height = ftface->size->metrics.y_ppem;
+  FT_CHECK(FT_Set_Char_Size(e->ftface, 0, tmc->tsize, 0, 88), "");
+  mc.height =e->ftface->size->metrics.y_ppem;
 #undef tmc
   mc.pad = pad;
 
@@ -624,14 +530,14 @@ void add_button(struct node *__restrict m, char *__restrict t, uint64_t bg, uint
 #define tmc ((struct tbox *)mc.c)
   strncpy(tmc->text, t, sizeof(tmc->text));
   tmc->tsize = tsize * 64;
-  FT_CHECK(FT_Set_Char_Size(ftface, 0, tmc->tsize, 0, 88), "");
+  FT_CHECK(FT_Set_Char_Size(e->ftface, 0, tmc->tsize, 0, 88), "");
 #undef tmc
   mc.flags = UI_CLICKABLE;
   mc.callback = callback;
   mc.cbp = p;
   mc.pad = pad;
   mc.bg = bg;
-  mc.height = ftface->size->metrics.y_ppem;
+  mc.height =e->ftface->size->metrics.y_ppem;
 
   mchvp(&m->children, mc);
 }
@@ -644,8 +550,8 @@ void add_checkbox(struct node *__restrict m, char *__restrict t, uint64_t bg, ui
 #define tmc ((struct mtcheck *)mc.c)
   strncpy(tmc->text.text, t, sizeof(tmc->text.text));
   tmc->text.tsize = tsize * 64;
-  FT_CHECK(FT_Set_Char_Size(ftface, 0, tmc->text.tsize, 0, 88), "");
-  mc.height = ftface->size->metrics.y_ppem;
+  FT_CHECK(FT_Set_Char_Size(e->ftface, 0, tmc->text.tsize, 0, 88), "");
+  mc.height =e->ftface->size->metrics.y_ppem;
   tmc->val = val;
 #undef tmc
   mc.flags = UI_CLICKABLE;
@@ -653,7 +559,7 @@ void add_checkbox(struct node *__restrict m, char *__restrict t, uint64_t bg, ui
   mc.cbp = p;
   mc.pad = pad;
   mc.bg = bg;
-  mc.height = ftface->size->metrics.y_ppem;
+  mc.height =e->ftface->size->metrics.y_ppem;
 
   mchvp(&m->children, mc);
 }
@@ -683,8 +589,8 @@ void add_tslider(struct node *__restrict m, char *__restrict t, uint32_t tsize, 
 #define tmc ((struct mtslider *)mc.c)
   strncpy(tmc->text.text, t, sizeof(tmc->text.text));
   tmc->text.tsize = tsize * 64;
-  FT_CHECK(FT_Set_Char_Size(ftface, 0, tmc->text.tsize, 0, 88), "");
-  mc.height = ftface->size->metrics.y_ppem;
+  FT_CHECK(FT_Set_Char_Size(e->ftface, 0, tmc->text.tsize, 0, 88), "");
+  mc.height =e->ftface->size->metrics.y_ppem;
   tmc->val.tsize = tsize * 64;
   tmc->slid.val = v;
   tmc->slen = 150;
@@ -706,10 +612,10 @@ void identity_matrix(mat4 m) {
 }
 
 void create_affine_matrix(mat4 m, float xs, float ys, float zs, float x, float y, float z) {
-  m[0][0] = xs * iwinw; m[0][1] =          0; m[0][2] =  0; m[0][3] = x; 
-  m[1][0] =          0; m[1][1] = ys * iwinh; m[1][2] =  0; m[1][3] = y; 
-  m[2][0] =          0; m[2][1] =          0; m[2][2] = zs; m[2][3] = z; 
-  m[3][0] =          0; m[3][1] =          0; m[3][2] =  0; m[3][3] = 1; 
+  m[0][0] = xs * e->w.iwinw; m[0][1] =               0; m[0][2] =  0; m[0][3] = x; 
+  m[1][0] =               0; m[1][1] = ys * e->w.iwinh; m[1][2] =  0; m[1][3] = y; 
+  m[2][0] =               0; m[2][1] =               0; m[2][2] = zs; m[2][3] = z; 
+  m[3][0] =               0; m[3][1] =               0; m[3][2] =  0; m[3][3] = 1; 
 }
 
 uint32_t uvao, uprog, lprog, pprog; // Draw Square
@@ -717,8 +623,8 @@ void draw_squaret(float px, float py, float sx, float sy, uint32_t tex, int32_t 
   mat4 aff;
   glUseProgram(uprog);
   glBindVertexArray(uvao);
-  float cpx = ((px + sx / 2) * iwinw) * 2 - 1;
-  float cpy = ((py + sy / 2) * iwinh) * 2 - 1;
+  float cpx = ((px + sx / 2) * e->w.iwinw) * 2 - 1;
+  float cpy = ((py + sy / 2) * e->w.iwinh) * 2 - 1;
   create_affine_matrix(aff, sx, sy, 1.0f, cpx, -cpy, 0.0f);
   program_set_mat4(uprog, "affine", aff);
 
@@ -740,8 +646,8 @@ v4 gcor(v4 in, float gamma) { return (v4) { pow(in.x, gamma), pow(in.y, gamma), 
 uint32_t textprog; // Draw text
 void draw_squaretext(float px, float py, float sx, float sy, uint32_t tex, uint64_t bgcol, uint64_t fgcol) {
   mat4 aff;
-  float cpx = ((px + sx / 2) * iwinw) * 2 - 1;
-  float cpy = ((py + sy / 2) * iwinh) * 2 - 1;
+  float cpx = ((px + sx / 2) * e->w.iwinw) * 2 - 1;
+  float cpy = ((py + sy / 2) * e->w.iwinh) * 2 - 1;
   create_affine_matrix(aff, sx, sy, 1.0f, cpx, -cpy, 0.0f);
   program_set_mat4(textprog, "affine", aff);
   glActiveTexture(GL_TEXTURE1);
@@ -758,8 +664,8 @@ void draw_squaret3(float px, float py, float sx, float sy, uint32_t tex, int32_t
   mat4 aff;
   glUseProgram(uprog);
   glBindVertexArray(uvao);
-  float cpx = ((px + sx / 2) * iwinw) * 2 - 1;
-  float cpy = ((py + sy / 2) * iwinh) * 2 - 1;
+  float cpx = ((px + sx / 2) * e->w.iwinw) * 2 - 1;
+  float cpy = ((py + sy / 2) * e->w.iwinh) * 2 - 1;
   create_affine_matrix(aff, sx, sy, 1.0f, cpx, -cpy, 0.0f);
   program_set_mat4(uprog, "affine", aff);
 
@@ -783,8 +689,8 @@ void draw_squarec(float px, float py, float sx, float sy, uint32_t col) {
   glUseProgram(uprog);
   glBindVertexArray(uvao);
 
-  float cpx = ((px + sx / 2) * iwinw) * 2 - 1;
-  float cpy = ((py + sy / 2) * iwinh) * 2 - 1;
+  float cpx = ((px + sx / 2) * e->w.iwinw) * 2 - 1;
+  float cpy = ((py + sy / 2) * e->w.iwinh) * 2 - 1;
   create_affine_matrix(aff, sx, sy, 1.0f, cpx, -cpy, 0.0f);
   program_set_mat4(uprog, "affine", aff);
   program_set_int1(uprog, "type", 0);
@@ -879,12 +785,12 @@ void get_textbox_size(struct tbox *__restrict t) {
   while (*ct) {
     cl = runel(ct);
     cchar = utf8_to_unicode(ct, cl);
-    gi = FT_Get_Char_Index(ftface, cchar);
+    gi = FT_Get_Char_Index(e->ftface, cchar);
 
-    FT_CHECK(FT_Load_Glyph(ftface, gi, FT_LOAD_DEFAULT | FT_LOAD_COLOR | FT_LOAD_FORCE_AUTOHINT), "Could not load glyph");
-    FT_Render_Glyph(ftface->glyph, FT_RENDER_MODE_NORMAL);
+    FT_CHECK(FT_Load_Glyph(e->ftface, gi, FT_LOAD_DEFAULT | FT_LOAD_COLOR | FT_LOAD_FORCE_AUTOHINT), "Could not load glyph");
+    FT_Render_Glyph(e->ftface->glyph, FT_RENDER_MODE_NORMAL);
 
-    px += ftface->glyph->metrics.horiAdvance >> 6;
+    px +=e->ftface->glyph->metrics.horiAdvance >> 6;
     ct += cl;
   }
   t->tlen = px;
@@ -893,11 +799,11 @@ void get_textbox_size(struct tbox *__restrict t) {
 uint32_t draw_textbox(float x, uint32_t y, struct mchild *__restrict mc, struct tbox *__restrict t) { /// MAKE EFFICIENT
   uint32_t px = 0;
   FT_UInt gi;
-  FT_GlyphSlot slot = ftface->glyph;
+  FT_GlyphSlot slot =e->ftface->glyph;
 
   glUseProgram(textprog);
   glBindVertexArray(uvao);
-  FT_CHECK(FT_Set_Char_Size(ftface, 0, t->tsize, 0, 88),"Could not set the character size!");
+  FT_CHECK(FT_Set_Char_Size(e->ftface, 0, t->tsize, 0, 88),"Could not set the character size!");
 
   {
     char *__restrict ct = t->text;
@@ -937,20 +843,20 @@ uint32_t draw_textbox(float x, uint32_t y, struct mchild *__restrict mc, struct 
     while (*ct) {
       cl = runel(ct);
       cchar = utf8_to_unicode(ct, cl);
-      gi = FT_Get_Char_Index(ftface, cchar);
+      gi = FT_Get_Char_Index(e->ftface, cchar);
 
-      FT_CHECK(FT_Load_Glyph(ftface, gi, FT_LOAD_DEFAULT | FT_LOAD_COLOR | FT_LOAD_FORCE_AUTOHINT), "Could not load glyph");
-      FT_Render_Glyph(ftface->glyph, FT_RENDER_MODE_NORMAL);
+      FT_CHECK(FT_Load_Glyph(e->ftface, gi, FT_LOAD_DEFAULT | FT_LOAD_COLOR | FT_LOAD_FORCE_AUTOHINT), "Could not load glyph");
+      FT_Render_Glyph(e->ftface->glyph, FT_RENDER_MODE_NORMAL);
       update_bw_tex(&t->tex, slot->bitmap.rows, slot->bitmap.width, slot->bitmap.buffer);
 
-      int32_t fw = ftface->glyph->metrics.width >> 6;
-      int32_t fh = ftface->glyph->metrics.height >> 6;
-      int32_t xoff = ftface->glyph->metrics.horiBearingX >> 6;
-      int32_t yoff = (-ftface->glyph->metrics.horiBearingY >> 6) + mc->height;
+      int32_t fw =e->ftface->glyph->metrics.width >> 6;
+      int32_t fh =e->ftface->glyph->metrics.height >> 6;
+      int32_t xoff =e->ftface->glyph->metrics.horiBearingX >> 6;
+      int32_t yoff = (-e->ftface->glyph->metrics.horiBearingY >> 6) + mc->height;
 
       draw_squaretext(x + px + xoff, y + mc->pad + yoff, fw, fh, t->tex, curbg ? (curbg & ~0xFF) : UI_COL_BG1, mc->fg ? mc->fg : UI_COL_FG3);
 
-      px += ftface->glyph->metrics.horiAdvance >> 6;
+      px +=e->ftface->glyph->metrics.horiAdvance >> 6;
 
       ct += cl;
     }
@@ -1066,7 +972,7 @@ void draw_node(uint32_t mi) {
 #undef cm
 }
 
-void prep_ui(GLFWwindow *__restrict window, uint32_t *__restrict vao) {
+void prep_ui(uint32_t *__restrict vao) {
   uint32_t vbo;
   float vdata[] = {
     -1.0f,  1.0f, 0.0f, 0.0f,
@@ -1086,20 +992,6 @@ void prep_ui(GLFWwindow *__restrict window, uint32_t *__restrict vao) {
   glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(float), (void *) (2 * sizeof(float)));
   glEnableVertexAttribArray(0);
   glEnableVertexAttribArray(1);
-}
-
-void reset_ft() {
-  if (ftlib != NULL) {
-    FT_CHECK(FT_Done_FreeType(ftlib), "Could not destroy the freetype lib");
-  }
-  FT_CHECK(FT_Init_FreeType(&ftlib), "Could not initialize the freetype lib");
-
-  //FT_CHECK(FT_New_Face(ftlib, "Resources/Fonts/Koruri/Koruri-Regular.ttf", 0, &ftface), "Could not load the font");
-  FT_CHECK(FT_New_Face(ftlib, "Resources/Fonts/JetBrains/jetbrainsmono.ttf", 0, &ftface), "Could not load the font");
-  // FT_CHECK(FT_New_Face(ftlib, "Resources/Fonts/JetBrains/jetbrainsmono.ttf", 0, &ftface), "Could not load the font");
-  FT_CHECK(FT_Set_Char_Size(ftface, 0, 16 * 64, 300, 300),"Could not set the character size!");
-  FT_CHECK(FT_Set_Pixel_Sizes(ftface, 0, (int32_t)72), "Could not set pixel sizes");
-  FT_CHECK(FT_Select_Charmap(ftface, FT_ENCODING_UNICODE), "Could not select char map");
 }
 
 struct sray {
@@ -1207,8 +1099,8 @@ void aobj(uint32_t m, v3 sc, v3 pos, struct object *__restrict cb, uint32_t mask
   cm.pos = pos;
   cm.rot = (vec4) {0.0f, 0.0f, 0.0f, 0.5f};
   maff(&cm);
-  cm.b.i = v3m4(cm.aff, mods.v[cm.m].b.i);
-  cm.b.a = v3m4(cm.aff, mods.v[cm.m].b.a);
+  cm.b.i = v3m4(cm.aff,e->mods.v[cm.m].b.i);
+  cm.b.a = v3m4(cm.aff,e->mods.v[cm.m].b.a);
   cm.mask = mask;
   minfvp(&cb->mins, cm);
   addbb(&cm.b, &lins);
@@ -1285,7 +1177,7 @@ uint8_t rmif(struct sray *__restrict r, struct vv3p *__restrict p, float *__rest
 } 
 
 void rmi(struct sray *__restrict r, struct minf *__restrict cm, float *__restrict f) {
-#define cmm mods.v[cm->m]
+#define cmm e->mods.v[cm->m]
 #define NEG_INF -99999999999.0f
   struct vv3p vv;
   float t = 0;
@@ -1608,14 +1500,14 @@ uint8_t rayHit(v3 s, v3 d, float dist, uint32_t mask) {
   uint32_t i, j;
   float rd = 0;
   uint8_t a;
-  for(i = 0; i < objs.l; ++i) {
+  for(i = 0; i < e->objs.l; ++i) {
     //fprintf(stdout, "%u\n", i);
-    for(j = 0; j < objs.v[i].mins.l; ++j) {
+    for(j = 0; j < e->objs.v[i].mins.l; ++j) {
       //fprintf(stdout, "\\-%u\n", j);
-      a = rbi(&r, &objs.v[i].mins.v[j].b);
+      a = rbi(&r, &e->objs.v[i].mins.v[j].b);
       //fprintf(stdout, "  \\-%u\n", a);
       if (a) {
-        rmi(&r, &objs.v[i].mins.v[j], &rd);
+        rmi(&r, &e->objs.v[i].mins.v[j], &rd);
         if (rd >= -dist) {
           return 1;
         }
@@ -1654,15 +1546,37 @@ void compute_shader() {
 float kkautoupda = 0.2;
 void autoupda() { if (kkautoupda >= 1.0) { compute_shader(); } }
 
-uint8_t run_suijin() {
-  init_random();
-  reset_ft();
-  setbuf(stdout, NULL);
-  GL_CHECK(glfwInit(), "Could not initialize glfw!");
+void load_assets() {
+  modvi(&e->mods);
+  matvi(&e->mats);
+  linvi(&lins);
 
-  GLFWwindow *__restrict window = window_init();
-  glfwSetKeyCallback(window, kbp_callback);
-  glfwSetMouseButtonCallback(window, mbp_callback);
+  parse_folder(&e->mods, &e->mats, "Resources/Items/Mountain");
+  parse_folder(&e->mods, &e->mats, "Resources/Items/Dough");
+  
+  matvt(&e->mats);
+  modvt(&e->mods);
+}
+
+struct skybox sb; /// Skybox
+uint32_t sbt;
+static time_t cla = 0;  // Time cloud last access
+static time_t ccla = 0; // Time worley comupte last access
+struct sray cs;
+uint32_t pvao, pvbo; /// Points
+uint32_t nprog;
+#define PROGC 7 /// Shadercurslcs
+uint32_t shaders[PROGC * 2];
+uint32_t lvao, lvbo; /// Objects
+
+uint8_t suijin_init() {
+  if (!e) {
+    fprintf(stderr, "Env not passed to suijin!\n");
+    exit(1);
+  }
+  fprintf(stdout, "Env %p\n", e);
+  glfwSetKeyCallback(e->window, kbp_callback);
+  glfwSetMouseButtonCallback(e->window, mbp_callback);
 
   glEnable(GL_DEBUG_OUTPUT);
   glDebugMessageCallback(messageCallback, 0);
@@ -1674,45 +1588,28 @@ uint8_t run_suijin() {
   glEnable(GL_BLEND);
   glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
   glEnable(GL_PROGRAM_POINT_SIZE);
-  //glEnable(GL_CULL_FACE);
   glLineWidth(10.0f);
 
   identity_matrix(identity);
+  load_assets();
 
-  { /// Asset loading
-    modvi(&mods);
-    matvi(&mats);
-    linvi(&lins);
-
-    parse_folder(&mods, &mats, "Resources/Items/Mountain");
-    parse_folder(&mods, &mats, "Resources/Items/Dough");
-    
-    matvt(&mats);
-    modvt(&mods);
-  }
-
-  uint32_t lvao, lvbo; /// Objects
-  struct objv objs;
   {
     struct object cb;
-    objvi(&objs);
+    objvi(&e->objs);
 
     init_object(&cb, "MIAN");
     aobj(0, (v3) {10.0f, 10.0f, 10.0f} , (v3) {0.0f, 0.0f, 0.0f}, &cb, MGEOMETRY);
-    objvp(&objs, cb);
+    objvp(&e->objs, cb);
     
     init_object(&cb, "DOUGH");
     aobj(1, (v3) {10.0f, 10.0f, 10.0f}, (v3) {-60.0f, 40.0f, -30.0f}, &cb, MPROP);
     aobj(2, (v3) {10.0f, 10.0f, 10.0f}, (v3) {-60.0f, 40.0f, -30.0f}, &cb, MPROP);
-    objvp(&objs, cb);
+    objvp(&e->objs, cb);
 
-    objvt(&objs);
+    objvt(&e->objs);
     clines(&lvao, &lvbo);
   }
 
-#define PROGC 7 /// Shadercurslcs
-  uint32_t nprog;
-  uint32_t shaders[PROGC * 2];
   {
     char *snames[PROGC] = { "obj", "ui", "line", "point", "skybox", "text", "cloud"};
     char tmpn[128];
@@ -1745,7 +1642,6 @@ uint8_t run_suijin() {
 
 
 
-  uint32_t pvao, pvbo; /// Points
   { 
     cpoints(&pvao, &pvbo);
 
@@ -1758,19 +1654,19 @@ uint8_t run_suijin() {
 
   { /// Camera
     int iw, ih;
-    memset(&initCam, 0, sizeof(initCam));
-    glfwGetWindowSize(window, &iw, &ih);
-    initCam.ratio = (float)iw / (float)ih;
+    memset(&e->initCam, 0, sizeof(e->initCam));
+    glfwGetWindowSize(e->window, &iw, &ih);
+    e->initCam.ratio = (float)iw / (float)ih;
 
-    initCam.up.y = 1.0f;
-    initCam.fov = toRadians(90.0f);
-    initCam.pos = (vec3) { 0.0f, 60.0f, 0.0f };
-    initCam.orientation = (quat) { 1.0f, 0.0f, 0.0f, 0.0f};
-    memcpy(&cam, &initCam, sizeof(cam));
+    e->initCam.up.y = 1.0f;
+    e->initCam.fov = toRadians(90.0f);
+    e->initCam.pos = (vec3) { 0.0f, 60.0f, 0.0f };
+    e->initCam.orientation = (quat) { 1.0f, 0.0f, 0.0f, 0.0f};
+    memcpy(&e->cam, &e->initCam, sizeof(e->cam));
   }
 
   { /// Cursor
-    glfwGetCursorPos(window, &mouseX, &mouseY);
+    glfwGetCursorPos(e->window, &mouseX, &mouseY);
     oldMouseX = 0.0;
     oldMouseY = 0.0;
   }
@@ -1780,7 +1676,7 @@ uint8_t run_suijin() {
       add_title(node, name, namescale, 5); \
       add_slider(node, var, mi, ma, 5, fun, funp)
 #define UI_GET_HEIGHT(res, node) { uint32_t _ch = 0; int32_t _i; for(_i = 0; _i < (node).children.l; ++_i) { _ch += (node).children.v[_i].height + (node).children.v[_i].pad; } res = _ch + 10; }
-    prep_ui(window, &uvao);
+    prep_ui(&uvao);
     // add_title(&nodes[0], "スプーク・プーク", 25, 0);
       //mchvi(&nodes[1].children);
 
@@ -1816,8 +1712,6 @@ uint8_t run_suijin() {
   }
 
 
-  struct skybox sb; /// Skybox
-  uint32_t sbt;
   {
     init_skybox(&sb);
     glGenTextures(1, &sbt);
@@ -1827,8 +1721,6 @@ uint8_t run_suijin() {
     free(buf);
   }
 
-  static time_t cla = 0;
-  static time_t ccla = 0;
   {
     struct stat s;
     stat("shaders/cloud_frag.glsl", &s); cla = s.st_ctim.tv_sec;
@@ -1847,174 +1739,175 @@ uint8_t run_suijin() {
     init_therm(NULL);
   }
 
-  uint32_t frame = 0;
-  struct sray cs;
   //selui.nt = 0xFF;
-  _ctime = _ltime = deltaTime = 0;
-  glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+  _ctime = _ltime = deltaTime = dt = 0;
+  glfwSetInputMode(e->window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+  return 0;
+}
 
-  double dt = 0;
-  while (!glfwWindowShouldClose(window)) { 
-    ++frame;
-    _ctime = glfwGetTime();
-    deltaTime = _ctime - _ltime;
-    dt += deltaTime;
-    if (frame % FRAME_UPDATE == 0) {
-      snprintf(((struct tbox*__restrict)nodes[2].children.v[0].c)->text, 10, "%.2f", FRAME_UPDATE / dt);
-      get_textbox_size(nodes[2].children.v[0].c);
-      fprintf(stdout, "Frametime %f       \r", FRAME_UPDATE / dt);
-      dt = 0;
+uint8_t suijin_run() {
+  ++e->frame;
+  _ctime = glfwGetTime();
+  deltaTime = _ctime - _ltime;
+  dt += deltaTime;
+  if (e->frame % FRAME_UPDATE == 0) {
+    snprintf(((struct tbox*__restrict)nodes[2].children.v[0].c)->text, 10, "%.2f", FRAME_UPDATE / dt);
+    get_textbox_size(nodes[2].children.v[0].c);
+    fprintf(stdout, "Frametime %f       \r", FRAME_UPDATE / dt);
+    dt = 0;
+  }
+
+  glClearColor(0.2f, 0.2f, 0.2f, 1.0f);
+  glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+  glEnable(GL_DEPTH_TEST);
+
+  handle_input();
+
+  if (e->camUpdate) {
+    update_camera_matrix();
+    e->camUpdate = 0;
+  }
+
+  { /// Skybox
+    glUseProgram(skyprog);
+    program_set_mat4(skyprog, "fn", fn);
+    sb.m.pos = e->cam.pos;
+    maff(&sb.m);
+    program_set_mat4(skyprog, "affine", sb.m.aff);
+
+    /*float tscale = 1 / 3.0f;
+    sb.sunPos.x = (sin(_ctime * tscale) + 1) * M_PI / 2;
+    if (cos(_ctime) < 0.0f) {
+      sb.sunPos.y = M_PI + cos(_ctime * tscale) * M_PI;
+    } else {
+      sb.sunPos.y = cos(_ctime * tscale) * M_PI;
+    }
+    program_set_float2(skyprog, "sunPos", sb.sunPos.x, sb.sunPos.y);
+    program_set_float1(skyprog, "sunSiz", sb.sunSize);
+    program_set_float3(skyprog, "sunCol", 0.7f, 0.2f, 0.1f);*/
+
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, sbt);
+    program_set_int1(skyprog, "tex", 0);
+
+    glBindVertexArray(skyvao);
+    glDrawArrays(GL_TRIANGLES, 0, sbvl);
+  }
+
+  if (drawObjs) { // NPROG
+    glUseProgram(nprog);
+
+    program_set_mat4(nprog, "fn_mat", fn);
+    program_set_int1(nprog, "shading", cshading);
+    program_set_float3v(nprog, "camPos", e->cam.pos);
+
+    int32_t i, j;
+    float rd, mrd = NEG_INF;
+
+    if (canMoveCam && glfwGetMouseButton(e->window, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS) {
+      cs = csrayd(e->cam.pos, QV(e->cam.orientation), MPROP);
     }
 
-    glClearColor(0.2f, 0.2f, 0.2f, 1.0f);
-    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-    glEnable(GL_DEPTH_TEST);
-
-    handle_input(window);
-
-    if (cameraUpdate) {
-      update_camera_matrix();
-      cameraUpdate = 0;
-    }
-
-    { /// Skybox
-      glUseProgram(skyprog);
-      program_set_mat4(skyprog, "fn", fn);
-      sb.m.pos = cam.pos;
-      maff(&sb.m);
-      program_set_mat4(skyprog, "affine", sb.m.aff);
-
-      /*float tscale = 1 / 3.0f;
-      sb.sunPos.x = (sin(_ctime * tscale) + 1) * M_PI / 2;
-      if (cos(_ctime) < 0.0f) {
-        sb.sunPos.y = M_PI + cos(_ctime * tscale) * M_PI;
-      } else {
-        sb.sunPos.y = cos(_ctime * tscale) * M_PI;
-      }
-      program_set_float2(skyprog, "sunPos", sb.sunPos.x, sb.sunPos.y);
-      program_set_float1(skyprog, "sunSiz", sb.sunSize);
-      program_set_float3(skyprog, "sunCol", 0.7f, 0.2f, 0.1f);*/
-
-      glActiveTexture(GL_TEXTURE0);
-      glBindTexture(GL_TEXTURE_2D, sbt);
-      program_set_int1(skyprog, "tex", 0);
-
-      glBindVertexArray(skyvao);
-      glDrawArrays(GL_TRIANGLES, 0, sbvl);
-    }
-
-    if (drawObjs) { // NPROG
-      glUseProgram(nprog);
-
-      program_set_mat4(nprog, "fn_mat", fn);
-      program_set_int1(nprog, "shading", cshading);
-      program_set_float3v(nprog, "camPos", cam.pos);
-
-      int32_t i, j;
-      float rd, mrd = NEG_INF;
-
-      if (canMoveCam && glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS) {
-        cs = csrayd(cam.pos, QV(cam.orientation), MPROP);
-      }
-
-      for(i = 0; i < objs.l; ++i) {
-        for(j = 0; j < objs.v[i].mins.l; ++j) {
-          draw_model(nprog, &mats, mods.v + objs.v[i].mins.v[j].m, objs.v[i].mins.v[j].aff);
-          if (canMoveCam && glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS) {
-            if (rbi(&cs, &objs.v[i].mins.v[j].b)) {
-              rmi(&cs, &objs.v[i].mins.v[j], &rd);
-              if (rd > mrd && rd > NEG_INF) {
-                mrd = rd;
-                HITS = 1;
-                HITP = v3a(cam.pos, v3m(rd, QV(cam.orientation)));
-                glBindBuffer(GL_ARRAY_BUFFER, pvbo);
-                glBufferSubData(GL_ARRAY_BUFFER, 0, 3 * sizeof(float), &HITP);
-              }
+    for(i = 0; i < e->objs.l; ++i) {
+      for(j = 0; j < e->objs.v[i].mins.l; ++j) {
+        draw_model(nprog, &e->mats, e->mods.v + e->objs.v[i].mins.v[j].m, e->objs.v[i].mins.v[j].aff);
+        if (canMoveCam && glfwGetMouseButton(e->window, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS) {
+          if (rbi(&cs, &e->objs.v[i].mins.v[j].b)) {
+            rmi(&cs, &e->objs.v[i].mins.v[j], &rd);
+            if (rd > mrd && rd > NEG_INF) {
+              mrd = rd;
+              HITS = 1;
+              HITP = v3a(e->cam.pos, v3m(rd, QV(e->cam.orientation)));
+              glBindBuffer(GL_ARRAY_BUFFER, pvbo);
+              glBufferSubData(GL_ARRAY_BUFFER, 0, 3 * sizeof(float), &HITP);
             }
           }
         }
       }
     }
-
-    if (drawBb) { // LPROG
-      glUseProgram(lprog);
-      program_set_mat4(lprog, "fn_mat", fn);
-
-      glBindVertexArray(lvao);
-      glDrawArrays(GL_LINES, 0, lins.l * 2);
-    }
-
-    { // PPROG
-      glDisable(GL_DEPTH_TEST);
-      glUseProgram(pprog);
-      glBindVertexArray(pvao);
-      program_set_float4(pprog, "col", 1.0f, 1.0f, 1.0f, 0.1f);
-      program_set_float1(pprog, "ps", 7.0f);
-      glDrawArrays(GL_POINTS, 1, 1);
-
-      if (HITS) {
-        program_set_mat4(pprog, "fn_mat", fn);
-        program_set_float4(pprog, "col", 1.0f, 1.0f, 1.0f, 1.0f);
-        program_set_float1(pprog, "ps", 0.0f);
-        glDrawArrays(GL_POINTS, 0, 1);
-      }
-    }
-
-    if (drawTerm) { draw_squaret((windowW - 500) / 2, (windowH - 500) / 2, 500, 500, ttex, 2); upd_therm(); }
-
-    glDisable(GL_DEPTH_TEST);
-    if (drawClouds) {
-      glEnable(GL_CULL_FACE);
-      glCullFace(GL_FRONT);
-
-      glUseProgram(cloudprog);
-      program_set_mat4(cloudprog, "fn", fn);
-      program_set_mat4(cloudprog, "affine", cl.m.aff);
-      program_set_float3v(cloudprog, "centerScale", cl.m.scale);
-      program_set_float3v(cloudprog, "centerPos", cl.m.pos);
-      program_set_float3v(cloudprog, "camPos", cam.pos);
-
-      glActiveTexture(GL_TEXTURE0);
-      glBindTexture(GL_TEXTURE_3D, cl.pwor.t);
-      program_set_int1(cloudprog, "tex", 0);
-
-      glBindVertexArray(cloudvao);
-      glDrawArrays(GL_TRIANGLES, 0, cbvl);
-      glDisable(GL_CULL_FACE);
-    }
-
-    if (drawUi) { // UPROG
-      glUseProgram(uprog);
-
-      int32_t i;
-      for(i = 0; i < MC; ++i) { draw_node(i); }
-      if (drawTexture) { draw_squaret3((windowW - 500) / 2 - 275, (windowH - 500) / 2 - 275, 500, 500, cl.pwor.t, curch, curslcs); }
-      // if (selui.t == UIT_CAN) { selui.t = UIT_CANNOT; }
-    }
-
-    if (drawFps) {
-      draw_textbox(windowW - ((struct tbox*__restrict)nodes[2].children.v[0].c)->tlen, 10, nodes[2].children.v + 0, nodes[2].children.v[0].c);
-    }
-
-    if (frame % 30 == 0) { /// Frag update
-      check_shader_update(&cloudprog, "shaders/cloud_frag.glsl", GL_FRAGMENT_SHADER, shaders[12], &cla);
-      check_shader_update(&wComp, "shaders/worley_compute.glsl", GL_COMPUTE_SHADER, 0, &ccla);
-    }
-
-    glfwPollEvents();
-    glfwSwapBuffers(window);
-    _ltime = _ctime;
   }
 
+  if (drawBb) { // LPROG
+    glUseProgram(lprog);
+    program_set_mat4(lprog, "fn_mat", fn);
+
+    glBindVertexArray(lvao);
+    glDrawArrays(GL_LINES, 0, lins.l * 2);
+  }
+
+  { // PPROG
+    glDisable(GL_DEPTH_TEST);
+    glUseProgram(pprog);
+    glBindVertexArray(pvao);
+    program_set_float4(pprog, "col", 1.0f, 1.0f, 1.0f, 0.1f);
+    program_set_float1(pprog, "ps", 7.0f);
+    glDrawArrays(GL_POINTS, 1, 1);
+
+    if (HITS) {
+      program_set_mat4(pprog, "fn_mat", fn);
+      program_set_float4(pprog, "col", 1.0f, 1.0f, 1.0f, 1.0f);
+      program_set_float1(pprog, "ps", 0.0f);
+      glDrawArrays(GL_POINTS, 0, 1);
+    }
+  }
+
+  if (drawTerm) { draw_squaret((e->w.windowW - 500) / 2, (e->w.windowH - 500) / 2, 500, 500, ttex, 2); upd_therm(); }
+
+  glDisable(GL_DEPTH_TEST);
+  if (drawClouds) {
+    glEnable(GL_CULL_FACE);
+    glCullFace(GL_FRONT);
+
+    glUseProgram(cloudprog);
+    program_set_mat4(cloudprog, "fn", fn);
+    program_set_mat4(cloudprog, "affine", cl.m.aff);
+    program_set_float3v(cloudprog, "centerScale", cl.m.scale);
+    program_set_float3v(cloudprog, "centerPos", cl.m.pos);
+    program_set_float3v(cloudprog, "camPos", e->cam.pos);
+
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_3D, cl.pwor.t);
+    program_set_int1(cloudprog, "tex", 0);
+
+    glBindVertexArray(cloudvao);
+    glDrawArrays(GL_TRIANGLES, 0, cbvl);
+    glDisable(GL_CULL_FACE);
+  }
+
+  if (drawUi) { // UPROG
+    glUseProgram(uprog);
+
+    int32_t i;
+    for(i = 0; i < MC; ++i) { draw_node(i); }
+    if (drawTexture) { draw_squaret3((e->w.windowW - 500) / 2 - 275, (e->w.windowH - 500) / 2 - 275, 500, 500, cl.pwor.t, curch, curslcs); }
+    // if (selui.t == UIT_CAN) { selui.t = UIT_CANNOT; }
+  }
+
+  if (drawFps) {
+    draw_textbox(e->w.windowW - ((struct tbox*__restrict)nodes[2].children.v[0].c)->tlen, 10, nodes[2].children.v + 0, nodes[2].children.v[0].c);
+  }
+
+  if (e->frame % 30 == 0) { /// Frag update
+    check_shader_update(&cloudprog, "shaders/cloud_frag.glsl", GL_FRAGMENT_SHADER, shaders[12], &cla);
+    check_shader_update(&wComp, "shaders/worley_compute.glsl", GL_COMPUTE_SHADER, 0, &ccla);
+  }
+
+  glfwPollEvents();
+  glfwSwapBuffers(e->window);
+  _ltime = _ctime;
+  return 0;
+}
+
+uint8_t suijin_end() {
   free(linsv);
 
   /*{
     int32_t i;
-    for(i = 0; i < mods.l; ++i) {
-      destroy_model(mods.v + i);
+    for(i = 0; i < e->mods.l; ++i) {
+      destroy_model(e->mods.v + i);
     }
-    free(mods.v);
-    free(mats.v);
+    free(e->mods.v);
+    free(e->mats.v);
   }*/
 
   glfwTerminate(); /// This for some reason crashes but exiting without it makes the drivers crash?????????
@@ -2023,8 +1916,11 @@ uint8_t run_suijin() {
   return 0;
 }
 
-int main(int argc, char **argv) {
-  GL_CHECK(run_suijin() == 0, "Running failed!");
-  
-  return 0;
+void suijin_unload(void) { }
+
+void suijin_reload(void) {
+  if (!e) {
+    fprintf(stderr, "Env not passed to suijin!\n");
+    exit(1);
+  }
 }

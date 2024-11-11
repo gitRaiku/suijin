@@ -86,22 +86,6 @@ struct keypress cktop(struct ckq *__restrict cq) {
   return kp;
 }
 
-void init_random() {
-  uint32_t seed = 0;
-  uint32_t randfd = open("/dev/urandom", O_RDONLY);
-
-  if (randfd == -1) {
-    fputs("Could not open /dev/urandom, not initalizing crng!\n", stderr);
-    return;
-  }
-
-  if (read(randfd, &seed, sizeof(seed)) == -1) {
-    fputs("Could not initalize crng!\n", stderr);
-    return;
-  }
-  srand(seed);
-}
-
 float __attribute((pure)) toRadians(float o) { // INLINE
   return o * M_PI / 180.0f;
 }

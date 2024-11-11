@@ -15,7 +15,7 @@
 #define PR_CHECK(call) if (call) { return 1; }
 #define GL_CHECK(call, message) if (!(call)) { fputs(message "! Aborting...\n", stderr); glfwTerminate(); exit(1); }
 #define FT_CHECK(command, errtext) { uint32_t err = command; if (err) { fprintf(stderr, "%s: %u:[%s]!\n", errtext, err, FT_Error_String(err)); exit(1); } }
-#define KEY_PRESSED(key) (glfwGetKey(window, key) == GLFW_PRESS)
+#define KEY_PRESSED(key) (glfwGetKey(e->window, key) == GLFW_PRESS)
 
 #define FPC(v) ((float *__restrict)(v))
 #define V3C(v) ((v3 *__restrict)(v))
@@ -115,8 +115,6 @@ void print_mat(mat4 m, const char *name);
 void ckpush(struct ckq *__restrict cq, struct keypress *__restrict kp);
 
 struct keypress cktop(struct ckq *__restrict cq);
-
-void init_random();
 
 float __attribute((pure)) toRadians(float o); // INLINE
 

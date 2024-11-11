@@ -1,6 +1,12 @@
 #ifndef ENV_H
 #define ENV_H
 
+#include <glad/glad.h>
+#include <GLFW/glfw3.h>
+#include <ft2build.h>
+#include FT_FREETYPE_H
+#include FT_GLYPH_H
+
 #include <stdint.h>
 #include "util.h"
 #include "shaders.h"
@@ -26,5 +32,37 @@
 /// Thermal Subsystem
 #define OUTSIDE_TEMP 0.1f
 #define DIFF_COEF 0.05f
+
+struct camera {
+  vec3 pos;
+  vec3 up;
+  quat orientation;
+  float fov;
+  float ratio;
+};
+
+struct win { 
+  int windowW, windowH;
+  float iwinw, iwinh;
+};
+
+struct env { // God help up all
+  uint32_t frame;
+
+  GLFWwindow *__restrict window; 
+  struct win w;
+
+  FT_Library ftlib;
+  FT_Face ftface;
+
+  struct matv mats;
+  struct modv mods;
+  struct objv objs;
+
+  struct camera cam;
+  struct camera initCam;
+  uint8_t camUpdate;
+};
+
 
 #endif
