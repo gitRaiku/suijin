@@ -4,6 +4,7 @@
 #include "env.h"
 
 #define SO_PATH "./bin/suijin.so"
+#define CHK_PATH "./.obj/lastupdate"
 
 static struct env e;
 
@@ -125,15 +126,15 @@ void init_random() {
 }
 
 time_t sola = 0;
-void check_so_update(char *__restrict path, time_t *__restrict la) {
+void check_so_update(char *__restrict chkpath, time_t *__restrict la) {
   if (e.frame % 200 == 0) {
     struct stat s;
-    if (stat(path, &s)) { return ; }
+    if (stat(chkpath, &s)) { return ; }
     if (s.st_ctim.tv_sec != *la) {
       fprintf(stdout, "UPDATED %lu\n", *la);
       *la = s.st_ctim.tv_sec;
       suijin_unload();
-      reload_so(path);
+      reload_so(SO_PATH);
       suijin_setenv(&e);
       suijin_reload();
     }
@@ -149,15 +150,12 @@ int main(int argc, char **argv) {
   GL_CHECK(glfwInit(), "Could not initialize glfw!");
   e.window = window_init();
 
-  {
-    struct stat s;
-    stat(SO_PATH, &s); sola = s.st_ctim.tv_sec;
-  }
+  { struct stat s; stat(CHK_PATH, &s); sola = s.st_ctim.tv_sec; }
   reload_so(SO_PATH);
   suijin_setenv(&e);
   suijin_init();
   while (!glfwWindowShouldClose(e.window)) { 
-    check_so_update(SO_PATH, &sola);
+    check_so_update(CHK_PATH, &sola);
     suijin_run();
     /*
     char c = fgetc(stdin);

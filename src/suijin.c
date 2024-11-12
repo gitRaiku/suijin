@@ -58,9 +58,7 @@ double startY = 0;
 uint8_t canMoveCam = 1;
 float mxoff, myoff;
 
-double theta = 0.0;
-double phi = 0.0;
-int8_t kk = 1;
+int8_t kk = 0;
 
 void create_projection_matrix(mat4 m, float angle, float ratio, float near, float far) {
   memset(m, 0, sizeof(mat4));
@@ -143,47 +141,26 @@ void handle_input() {
   { // CURSOR
     glfwGetCursorPos(e->window, &mouseX, &mouseY);
 
-    //if ((mouseX != oldMouseX) || (mouseY != oldMouseY)) {
-    if (1) {
+    if ((mouseX != oldMouseX) || (mouseY != oldMouseY)) {
       double xoff = mouseX - oldMouseX;
       double yoff = mouseY - oldMouseY;
       oldMouseX = mouseX;
       oldMouseY = mouseY;
 
       if (canMoveCam) {
-        if (1) {
-          quat qx = gen_quat(e->cam.up, -xoff * SENS);
-          vec3 cr = norm(cross(QV(e->cam.orientation), e->cam.up));
-          //fprintf(stdout, "%.2f %.2f %.2f\n", cr.x, cr.y, cr.z);
-          quat qy = gen_quat(cr, yoff * SENS);
-          quat qz = gen_quat(norm(cross(cr, QV(e->cam.orientation))), kk * SENS);
-
-          quat qr = qmul(qz, qmul(qy, qx));
-          quat qt = qnorm(qmul(qmul(qr, e->cam.orientation), qconj(qr)));
-          /*
-          print_quat(e->cam.orientation, "cam");
-          print_quat(qx, "qx");
-          print_quat(qy, "qy");
-          print_quat(qr, "qr");
-          print_quat(qt, "qt");*/
-          e->cam.orientation = qt;
-          //e->cam.orientation.y = 0.0;
-        } else {
-          //yoff = 0.0;
-          theta += xoff * SENS;
-          phi += yoff * SENS;
-          //fprintf(stdout, "%.2f(%.2f) %.2f(%.2f)\n", theta, sin(theta), phi, sin(phi));
-        
-          vec3 kms = norm((vec3) { 
-              sin(theta), /// x
-              cos(theta), /// y
-              0.0             /// z
-              });
-          e->cam.orientation.x = kms.x;
-          e->cam.orientation.y = kms.y;
-          e->cam.orientation.z = kms.z;
-          //print_quat(e->cam.orientation, "cam");
-        }
+        e->cam.theta += xoff * SENS;
+        e->cam.phi   += yoff * SENS;
+        e->cam.phi   = clamp(e->cam.phi, -M_PI / 2 + 0.0001, M_PI / 2 - 0.0001);
+      
+        vec3 kms = norm((vec3) { 
+            cos(e->cam.theta) * cos(e->cam.phi), /// x
+            sin(e->cam.phi),              /// y
+            sin(e->cam.theta) * cos(e->cam.phi)  /// z
+            });
+        e->cam.orientation.x = kms.x;
+        e->cam.orientation.y = kms.y;
+        e->cam.orientation.z = kms.z;
+        print_quat(e->cam.orientation, "cam");
 
         e->camUpdate = 1;
       }
@@ -1801,4 +1778,5 @@ void suijin_reload(void) {
     fprintf(stderr, "Env not passed to suijin!\n");
     exit(1);
   }
+  update_camera_matrix();
 }

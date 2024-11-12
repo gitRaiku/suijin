@@ -17,7 +17,7 @@
 /// Camera
 #define ZOOM_SPEED 0.01f
 #define PAN_SPEED 13.0f
-#define SENS 0.001f
+#define SENS 0.002f
 
 /// Ui
 #define UI_COL_BG1 0x181818FF
@@ -137,6 +137,7 @@ struct camera {
   vec3 pos;
   vec3 up;
   quat orientation;
+  double theta, phi;
   float fov;
   float ratio;
 };
