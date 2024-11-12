@@ -126,10 +126,9 @@ void init_random() {
 
 time_t sola = 0;
 void check_so_update(char *__restrict path, time_t *__restrict la) {
-  if (e.frame % 2000) {
-    fprintf(stdout, "%u\n", e.frame % 2000);
+  if (e.frame % 200 == 0) {
     struct stat s;
-    stat(path, &s);
+    if (stat(path, &s)) { return ; }
     if (s.st_ctim.tv_sec != *la) {
       fprintf(stdout, "UPDATED %lu\n", *la);
       *la = s.st_ctim.tv_sec;
@@ -158,8 +157,17 @@ int main(int argc, char **argv) {
   suijin_setenv(&e);
   suijin_init();
   while (!glfwWindowShouldClose(e.window)) { 
-    suijin_run();
     check_so_update(SO_PATH, &sola);
+    suijin_run();
+    /*
+    char c = fgetc(stdin);
+    if (c == 'u') {
+      reload_so("./bin/turn.so");
+      suijin_setenv(&e);
+    } else if (c == 'i') {
+      reload_so("./bin/bad.so");
+      suijin_setenv(&e);
+    }*/
   }
   suijin_end();
 }

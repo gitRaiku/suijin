@@ -24,50 +24,43 @@ uint8_t drawBb = 0;
 uint8_t drawTexture = 0;
 
 mat4 identity;
+mat4 fn;
 
 /// TODO
-v3 HITP;
-uint8_t HITS = 0;
-
+v3 HITP; uint8_t HITS = 0;
 int32_t cshading = 0;
 
 double mouseX, mouseY;
 double oldMouseX, oldMouseY;
 
-#define FRAG_PATH "shaders/cloud_frag.glsl"
-
-enum UIT {
-  UIT_CANNOT, UIT_CAN, UIT_NODE, UIT_SLIDERK, UIT_TEXT, UIT_CHECK
-};
-
-union KMS {
-  uint32_t u32;
-  void *__restrict fp;
-};
-
-struct uiSelection {
-  enum UIT t;
-  enum UIT nt;
-  union KMS id;
-  float dx, dy;
-};
 struct uiSelection selui;
-
-struct perlin {
-  struct i2df o1;
-  struct i2df o2;
-  struct i2df *__restrict m;
-  struct i2df *__restrict s;
-  uint32_t oct;
-  float h;
-  float w;
-  float foct;
-  float per;
-  float style;
-  float sc;
-};
 struct perlin per;
 uint8_t perlinR = 0;
+
+
+static time_t cla = 0;  // Time cloud last access
+static time_t ccla = 0; // Time worley comupte last access
+struct sray cs;
+uint32_t lvao, lvbo; /// Objects
+uint32_t ttex = 0;
+struct linv lins; /// Bounding box
+float *__restrict linsv;
+uint32_t CDR, CDRO;
+uint32_t lp[3];
+enum MOVEMEMENTS { CAMERA, ITEMS, UI };
+enum MOVEMEMENTS ms = CAMERA;
+uint32_t curi = 0;
+float *vals[10];
+float scal[10];
+char *nms[10] = { "A", "P2", "P3", "P4", "PERSISTANCE", "HEIGHT", "WIDTH" };
+v2 lims[10];
+double startY = 0;
+uint8_t canMoveCam = 1;
+float mxoff, myoff;
+
+double theta = 0.0;
+double phi = 0.0;
+int8_t kk = 1;
 
 void create_projection_matrix(mat4 m, float angle, float ratio, float near, float far) {
   memset(m, 0, sizeof(mat4));
@@ -103,7 +96,6 @@ void create_lookat_matrix(mat4 m) {
   m[3][3] = 1.0f;
 }
 
-mat4 fn;
 void update_camera_matrix() {
   mat4 proj, view;
   if (e->cam.up.x == e->cam.orientation.x && e->cam.up.y == e->cam.orientation.y && e->cam.up.z == e->cam.orientation.z) {
@@ -138,23 +130,6 @@ void mbp_callback(GLFWwindow *window, int button, int action, int mod) {
 }
 
 /// HANDLE INPUT
-uint32_t CDR, CDRO;
-uint32_t lp[3];
-enum MOVEMEMENTS { CAMERA, ITEMS, UI };
-enum MOVEMEMENTS ms = CAMERA;
-uint32_t curi = 0;
-float *vals[10];
-float scal[10];
-char *nms[10] = { "A", "P2", "P3", "P4", "PERSISTANCE", "HEIGHT", "WIDTH" };
-v2 lims[10];
-double startY = 0;
-uint8_t canMoveCam = 1;
-float mxoff, myoff;
-
-
-      double theta = 0.0;
-      double phi = 0.0;
-      int8_t kk = 1;
 
 double sgn(double kms) {
   if (kms < 0) {
@@ -169,39 +144,35 @@ void handle_input() {
     glfwGetCursorPos(e->window, &mouseX, &mouseY);
 
     //if ((mouseX != oldMouseX) || (mouseY != oldMouseY)) {
-    if (0) {
+    if (1) {
       double xoff = mouseX - oldMouseX;
       double yoff = mouseY - oldMouseY;
       oldMouseX = mouseX;
       oldMouseY = mouseY;
 
       if (canMoveCam) {
-        if (0) {
+        if (1) {
           quat qx = gen_quat(e->cam.up, -xoff * SENS);
-          //quat qy = gen_quat(cross(QV(e->cam.orientation), e->cam.up), yoff * SENS);
-          //quat qx = gen_quat(e->cam.up, 0.0);
           vec3 cr = norm(cross(QV(e->cam.orientation), e->cam.up));
-          fprintf(stdout, "%.2f %.2f %.2f\n", cr.x, cr.y, cr.z);
+          //fprintf(stdout, "%.2f %.2f %.2f\n", cr.x, cr.y, cr.z);
           quat qy = gen_quat(cr, yoff * SENS);
           quat qz = gen_quat(norm(cross(cr, QV(e->cam.orientation))), kk * SENS);
-          // quat qy = gen_quat((vec3){0.0, 0.0, 1.0}, yoff * SENS);
 
           quat qr = qmul(qz, qmul(qy, qx));
-          quat qt = qmul(qmul(qr, e->cam.orientation), qconj(qr));
+          quat qt = qnorm(qmul(qmul(qr, e->cam.orientation), qconj(qr)));
+          /*
           print_quat(e->cam.orientation, "cam");
           print_quat(qx, "qx");
-          print_quat(qx, "qy");
-          print_quat(qx, "qr");
-          print_quat(qx, "qt");
-          qt = qnorm(qt);
-          print_quat(qx, "qtn");
+          print_quat(qy, "qy");
+          print_quat(qr, "qr");
+          print_quat(qt, "qt");*/
           e->cam.orientation = qt;
           //e->cam.orientation.y = 0.0;
         } else {
           //yoff = 0.0;
           theta += xoff * SENS;
           phi += yoff * SENS;
-          fprintf(stdout, "%.2f(%.2f) %.2f(%.2f)\n", theta, sin(theta), phi, sin(phi));
+          //fprintf(stdout, "%.2f(%.2f) %.2f(%.2f)\n", theta, sin(theta), phi, sin(phi));
         
           vec3 kms = norm((vec3) { 
               sin(theta), /// x
@@ -211,7 +182,7 @@ void handle_input() {
           e->cam.orientation.x = kms.x;
           e->cam.orientation.y = kms.y;
           e->cam.orientation.z = kms.z;
-          print_quat(e->cam.orientation, "cam");
+          //print_quat(e->cam.orientation, "cam");
         }
 
         e->camUpdate = 1;
@@ -439,51 +410,6 @@ void draw_model(uint32_t program, struct matv *__restrict m, struct model *__res
   glDrawArrays(GL_TRIANGLES, li / 8, (mod->v.l - li) / 8);
 }
 
-struct tbox {
-  uint32_t tlen;
-  uint32_t tex;
-  char text[64];
-  uint32_t tsize;
-};
-
-struct mtcheck {
-  struct tbox text;
-  uint32_t slen;
-  uint8_t *__restrict val;
-};
-
-struct fslider {
-  float *__restrict val;
-  v2 lims;
-};
-
-struct mtslider {
-  struct tbox text;
-  struct fslider slid;
-  uint32_t slen;
-  struct tbox val;
-};
-
-enum MCHID {
-  MTEXT_BOX, MFSLIDER, MTSLIDER, MCHECKBOX
-};
-
-struct mchild {
-  enum MCHID id;
-  void *__restrict c;
-  uint8_t flags;
-  void (*callback)(void*);
-  void *cbp;
-  uint32_t height;
-  uint32_t pad;
-  uint64_t fg;
-  uint64_t bg;
-};
-#define UI_CLICKABLE 0b1
-
-VECSTRUCT(mch, struct mchild);
-VECTOR_SUITE(mch, struct mchv *__restrict, struct mchild)
-
 v4 __attribute((pure)) h2c4(uint64_t c) { // INLINE
   return (v4) { ((c & 0xFF000000) >> 24) / 255.0f,
                 ((c & 0x00FF0000) >> 16) / 255.0f, 
@@ -496,17 +422,6 @@ v3 __attribute((pure)) h2c3(uint64_t c) { // INLINE
                 ((c & 0x0000FF00) >>  8) / 255.0f, 
                 ((c & 0x000000FF) >>  0) / 255.0f };
 }
-
-struct node {
-  float px, py;    // Pos
-  float sx, sy;    // Size
-  uint32_t lp, rp; // Left, right padding
-  uint32_t bp, tp; // Bottom, top padding
-  mat4 aff;
-  struct mchv children;
-};
-#define MC 2
-struct node nodes[MC];
 
 void add_title(struct node *__restrict m, char *__restrict t, uint32_t tsize, uint32_t pad) {
   struct mchild mc = {0};
@@ -618,24 +533,23 @@ void create_affine_matrix(mat4 m, float xs, float ys, float zs, float x, float y
   m[3][0] =               0; m[3][1] =               0; m[3][2] =  0; m[3][3] = 1; 
 }
 
-uint32_t uvao, uprog, lprog, pprog; // Draw Square
 void draw_squaret(float px, float py, float sx, float sy, uint32_t tex, int32_t type) {
   mat4 aff;
-  glUseProgram(uprog);
-  glBindVertexArray(uvao);
+  glUseProgram(e->uprog);
+  glBindVertexArray(e->uvao);
   float cpx = ((px + sx / 2) * e->w.iwinw) * 2 - 1;
   float cpy = ((py + sy / 2) * e->w.iwinh) * 2 - 1;
   create_affine_matrix(aff, sx, sy, 1.0f, cpx, -cpy, 0.0f);
-  program_set_mat4(uprog, "affine", aff);
+  program_set_mat4(e->uprog, "affine", aff);
 
   if (tex) {
     glActiveTexture(GL_TEXTURE2);
     glBindTexture(GL_TEXTURE_2D, tex);
-    program_set_int1(uprog, "tex", 2);
-    program_set_int1(uprog, "type", type);
+    program_set_int1(e->uprog, "tex", 2);
+    program_set_int1(e->uprog, "type", type);
   } else {
-    program_set_float4(uprog, "col", 0.0f, 0.0f, 0.0f, 1.0f);
-    program_set_int1(uprog, "type", 0);
+    program_set_float4(e->uprog, "col", 0.0f, 0.0f, 0.0f, 1.0f);
+    program_set_int1(e->uprog, "type", 0);
   }
 
   glDrawArrays(GL_TRIANGLE_FAN, 0, 4);
@@ -643,61 +557,60 @@ void draw_squaret(float px, float py, float sx, float sy, uint32_t tex, int32_t 
 
 v4 gcor(v4 in, float gamma) { return (v4) { pow(in.x, gamma), pow(in.y, gamma), pow(in.z, gamma), in.w }; }
 
-uint32_t textprog; // Draw text
 void draw_squaretext(float px, float py, float sx, float sy, uint32_t tex, uint64_t bgcol, uint64_t fgcol) {
   mat4 aff;
   float cpx = ((px + sx / 2) * e->w.iwinw) * 2 - 1;
   float cpy = ((py + sy / 2) * e->w.iwinh) * 2 - 1;
   create_affine_matrix(aff, sx, sy, 1.0f, cpx, -cpy, 0.0f);
-  program_set_mat4(textprog, "affine", aff);
+  program_set_mat4(e->textprog, "affine", aff);
   glActiveTexture(GL_TEXTURE1);
   glBindTexture(GL_TEXTURE_2D, tex);
-  program_set_int1(textprog, "tex", 1);
+  program_set_int1(e->textprog, "tex", 1);
   v4 bg = gcor(h2c4(bgcol), 1 / 1.8);
-  program_set_float4(textprog, "bgcol", bg.x, bg.y, bg.z, bg.w);
+  program_set_float4(e->textprog, "bgcol", bg.x, bg.y, bg.z, bg.w);
   v4 fg = gcor(h2c4(fgcol), 1 / 1.8);
-  program_set_float4(textprog, "fgcol", fg.x, fg.y, fg.z, fg.w);
+  program_set_float4(e->textprog, "fgcol", fg.x, fg.y, fg.z, fg.w);
   glDrawArrays(GL_TRIANGLE_FAN, 0, 4);
 }
 
 void draw_squaret3(float px, float py, float sx, float sy, uint32_t tex, int32_t type, float z) {
   mat4 aff;
-  glUseProgram(uprog);
-  glBindVertexArray(uvao);
+  glUseProgram(e->uprog);
+  glBindVertexArray(e->uvao);
   float cpx = ((px + sx / 2) * e->w.iwinw) * 2 - 1;
   float cpy = ((py + sy / 2) * e->w.iwinh) * 2 - 1;
   create_affine_matrix(aff, sx, sy, 1.0f, cpx, -cpy, 0.0f);
-  program_set_mat4(uprog, "affine", aff);
+  program_set_mat4(e->uprog, "affine", aff);
 
-  program_set_int1(uprog, "tex", 0);
+  program_set_int1(e->uprog, "tex", 0);
   glActiveTexture(GL_TEXTURE1);
   glBindTexture(GL_TEXTURE_3D, tex);
-  program_set_int1(uprog, "tex3", 1);
+  program_set_int1(e->uprog, "tex3", 1);
   if (type >= 80 && type <= 83) {
-    program_set_int1(uprog, "type", 8);
-    program_set_int1(uprog, "ch", type - 80);
+    program_set_int1(e->uprog, "type", 8);
+    program_set_int1(e->uprog, "ch", type - 80);
   } else {
-    program_set_int1(uprog, "type", type);
+    program_set_int1(e->uprog, "type", type);
   }
-  program_set_float1(uprog, "z", z);
+  program_set_float1(e->uprog, "z", z);
 
   glDrawArrays(GL_TRIANGLE_FAN, 0, 4);
 }
 
 void draw_squarec(float px, float py, float sx, float sy, uint32_t col) {
   mat4 aff;
-  glUseProgram(uprog);
-  glBindVertexArray(uvao);
+  glUseProgram(e->uprog);
+  glBindVertexArray(e->uvao);
 
   float cpx = ((px + sx / 2) * e->w.iwinw) * 2 - 1;
   float cpy = ((py + sy / 2) * e->w.iwinh) * 2 - 1;
   create_affine_matrix(aff, sx, sy, 1.0f, cpx, -cpy, 0.0f);
-  program_set_mat4(uprog, "affine", aff);
-  program_set_int1(uprog, "type", 0);
-  program_set_int1(uprog, "tex3", 0);
-  program_set_int1(uprog, "tex", 1);
+  program_set_mat4(e->uprog, "affine", aff);
+  program_set_int1(e->uprog, "type", 0);
+  program_set_int1(e->uprog, "tex3", 0);
+  program_set_int1(e->uprog, "tex", 1);
   v4 c = h2c4(col);
-  program_set_float4(uprog, "col", c.x, c.y, c.z, c.w);
+  program_set_float4(e->uprog, "col", c.x, c.y, c.z, c.w);
 
   glDrawArrays(GL_TRIANGLE_FAN, 0, 4);
 }
@@ -801,8 +714,8 @@ uint32_t draw_textbox(float x, uint32_t y, struct mchild *__restrict mc, struct 
   FT_UInt gi;
   FT_GlyphSlot slot =e->ftface->glyph;
 
-  glUseProgram(textprog);
-  glBindVertexArray(uvao);
+  glUseProgram(e->textprog);
+  glBindVertexArray(e->uvao);
   FT_CHECK(FT_Set_Char_Size(e->ftface, 0, t->tsize, 0, 88),"Could not set the character size!");
 
   {
@@ -837,7 +750,7 @@ uint32_t draw_textbox(float x, uint32_t y, struct mchild *__restrict mc, struct 
       draw_squarec(x, y + mc->pad / 1.4, t->tlen, mc->height + mc->pad, curbg);
     }
 
-    glUseProgram(textprog);
+    glUseProgram(e->textprog);
     ct = t->text;
     px = 0;
     while (*ct) {
@@ -934,7 +847,7 @@ uint32_t draw_checkpox(float x, float y, struct node *__restrict cm, struct mchi
 }
 
 void draw_node(uint32_t mi) {
-#define cm nodes[mi]
+#define cm e->nodes[mi]
   draw_squarec(cm.px, cm.py, cm.sx, cm.sy, UI_COL_BG1);
 
   {
@@ -993,14 +906,6 @@ void prep_ui(uint32_t *__restrict vao) {
   glEnableVertexAttribArray(0);
   glEnableVertexAttribArray(1);
 }
-
-struct sray {
-  v3 o; // Orig
-  v3 d; // Dir
-  v3 i; // 1 / Dir
-  uint8_t s[3]; // Sign of dirs
-  uint32_t mask;
-};
 
 struct sray csray(v3 s, v3 e) {
   struct sray cs;
@@ -1072,8 +977,6 @@ uint8_t rbi(struct sray *__restrict r, struct bbox *__restrict cb) {
     return 1; 
 }
 
-struct linv lins; /// Bounding box
-float *__restrict linsv;
 void addbb(struct bbox *__restrict cb, struct linv *__restrict v) {
 #define CHEA(i) (FPC(&cl.e)[i] = FPC(&cb->a)[i])
 #define CHSA(i) (FPC(&cl.s)[i] = FPC(&cb->a)[i])
@@ -1224,14 +1127,7 @@ void cpoints(uint32_t *__restrict vao, uint32_t *__restrict vbo) {
   glEnableVertexAttribArray(0);
 }
 
-struct skybox {
-  v2 sunPos;
-  float sunSize;
-  struct minf m;
-  v3 sunCol;
-};
 
-uint32_t skyprog, skyvao, skyvbo, sbvl;
 void init_skybox(struct skybox *__restrict sb) {
   memset(sb, 0, sizeof(*sb));
   sb->sunSize = 1.0f;
@@ -1242,8 +1138,8 @@ void init_skybox(struct skybox *__restrict sb) {
   sb->m.mask = MSKYBOX;
   maff(&sb->m);
 
-  glGenVertexArrays(1, &skyvao);
-  glGenBuffers(1, &skyvbo);
+  glGenVertexArrays(1, &e->skyvao);
+  glGenBuffers(1, &e->skyvbo);
 
   /* TODO: Use GL_TRIANGLE_STRIP
     float sbv[] = { 
@@ -1317,10 +1213,10 @@ void init_skybox(struct skybox *__restrict sb) {
      1.0f, -1.0f,  1.0f, 1.00f, UP333
   };
 
-  sbvl = sizeof(sbv) / sizeof(float) / 5;
+  e->sbvl = sizeof(sbv) / sizeof(float) / 5;
 
-  glBindVertexArray(skyvao);
-  glBindBuffer(GL_ARRAY_BUFFER, skyvbo);
+  glBindVertexArray(e->skyvao);
+  glBindBuffer(GL_ARRAY_BUFFER, e->skyvbo);
   glBufferData(GL_ARRAY_BUFFER, sizeof(sbv), sbv, GL_STATIC_DRAW);
 
   glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 5 * sizeof(float), (void *) (0 * sizeof(float)));
@@ -1329,19 +1225,9 @@ void init_skybox(struct skybox *__restrict sb) {
   glEnableVertexAttribArray(1);
 }
 
-struct cloud {
-  struct minf m;
-  struct img worl;
-  struct img pwor;
-  struct img curl;
-  v3 pos;
-};
-struct cloud cl;
-
-uint32_t cloudvao, cloudvbo, cloudprog, cbvl;
 void init_clouds(struct cloud *__restrict c) {
-  if (!cloudvao) { glGenVertexArrays(1, &cloudvao); }
-  if (!cloudvbo) { glGenBuffers(1, &cloudvbo); }
+  if (!e->cloudvao) { glGenVertexArrays(1, &e->cloudvao); }
+  if (!e->cloudvbo) { glGenBuffers(1, &e->cloudvbo); }
 
   memset(c, 0, sizeof(*c));
   c->m.scale.x = 100.0f;
@@ -1370,17 +1256,17 @@ void init_clouds(struct cloud *__restrict c) {
      1.0f,  1.0f, -1.0f,  1.0f, -1.0f, -1.0f,  1.0f, -1.0f,  1.0f,
   };
 
-  cbvl = sizeof(cbv) / sizeof(float) / 3;
+  e->cbvl = sizeof(cbv) / sizeof(float) / 3;
 
-  glBindVertexArray(cloudvao);
-  glBindBuffer(GL_ARRAY_BUFFER, cloudvbo);
+  glBindVertexArray(e->cloudvao);
+  glBindBuffer(GL_ARRAY_BUFFER, e->cloudvbo);
   glBufferData(GL_ARRAY_BUFFER, sizeof(cbv), cbv, GL_STATIC_DRAW);
 
   glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void *)0);
   glEnableVertexAttribArray(0);
 }
 
-uint32_t ttex = 0;
+
 void init_therm(void *ignored) {
   if (ttex == 0) {
     glGenTextures(1, &ttex);
@@ -1537,10 +1423,10 @@ float minDensity = 0.2;
 float densityMultiplier = 2.0;
 
 void compute_shader() {
-  noise_pw(128, 128, 128, (uint32_t)kmsoct, kmsper, pscale, pwscale, scale, &cl.pwor);
-  noise_ww(32, 32, 32, scale, &cl.worl);
+  noise_pw(128, 128, 128, (uint32_t)kmsoct, kmsper, pscale, pwscale, scale, &e->cl.pwor);
+  noise_ww(32, 32, 32, scale, &e->cl.worl);
   //noise_p(128, 128, 128, (uint32_t)kmsoct, kmsper, scale, &cp.perl);
-  noise_c(128, 128, 128, (uint32_t)kmsoct, kmsper, scale, &cl.curl);
+  noise_c(128, 128, 128, (uint32_t)kmsoct, kmsper, scale, &e->cl.curl);
 }
 
 float kkautoupda = 0.2;
@@ -1557,17 +1443,6 @@ void load_assets() {
   matvt(&e->mats);
   modvt(&e->mods);
 }
-
-struct skybox sb; /// Skybox
-uint32_t sbt;
-static time_t cla = 0;  // Time cloud last access
-static time_t ccla = 0; // Time worley comupte last access
-struct sray cs;
-uint32_t pvao, pvbo; /// Points
-uint32_t nprog;
-#define PROGC 7 /// Shadercurslcs
-uint32_t shaders[PROGC * 2];
-uint32_t lvao, lvbo; /// Objects
 
 uint8_t suijin_init() {
   if (!e) {
@@ -1617,24 +1492,24 @@ uint8_t suijin_init() {
     uint32_t i;
     for (i = 0; i < PROGC; ++i) {
       snprintf(tmpn, sizeof(tmpn), "shaders/%s_vert.glsl", snames[i]);
-      PR_CHECK(shader_get(tmpn, GL_VERTEX_SHADER  , shaders + 2 * i + 0));
+      PR_CHECK(shader_get(tmpn, GL_VERTEX_SHADER  , e->shaders + 2 * i + 0));
       snprintf(tmpn, sizeof(tmpn), "shaders/%s_frag.glsl", snames[i]);
-      PR_CHECK(shader_get(tmpn, GL_FRAGMENT_SHADER, shaders + 2 * i + 1));
+      PR_CHECK(shader_get(tmpn, GL_FRAGMENT_SHADER, e->shaders + 2 * i + 1));
     }
 
-    PR_CHECK(program_get(2, shaders      , &nprog));
-    PR_CHECK(program_get(2, shaders +   2, &uprog));
-    PR_CHECK(program_get(2, shaders +   4, &lprog));
-    PR_CHECK(program_get(2, shaders +   6, &pprog));
-    PR_CHECK(program_get(2, shaders +   8, &skyprog));
-    PR_CHECK(program_get(2, shaders +  10, &textprog));
-    PR_CHECK(program_get(2, shaders +  12, &cloudprog));
-    //PR_CHECK(program_get(2, shaders + 10, &c.prog));
+    PR_CHECK(program_get(2, e->shaders      , &e->nprog));
+    PR_CHECK(program_get(2, e->shaders +   2, &e->uprog));
+    PR_CHECK(program_get(2, e->shaders +   4, &e->lprog));
+    PR_CHECK(program_get(2, e->shaders +   6, &e->pprog));
+    PR_CHECK(program_get(2, e->shaders +   8, &e->skyprog));
+    PR_CHECK(program_get(2, e->shaders +  10, &e->textprog));
+    PR_CHECK(program_get(2, e->shaders +  12, &e->cloudprog));
+    //PR_CHECK(program_get(2, e->shaders + 10, &c.prog));
 
     /*
     for (i = 0; i < PROGC; ++i) {
-      glDeleteShader(shaders[i * 2]);
-      glDeleteShader(shaders[i * 2 + 1]);
+      glDeleteShader(e->shaders[i * 2]);
+      glDeleteShader(e->shaders[i * 2 + 1]);
     }*/
     if (prep_compute_shaders()) { exit(1); }
     new_perlin_perms();
@@ -1643,11 +1518,11 @@ uint8_t suijin_init() {
 
 
   { 
-    cpoints(&pvao, &pvbo);
+    cpoints(&e->pvao, &e->pvbo);
 
     v3 ce = {0.0f, 0.0f, 0.0f};
 
-    glBindBuffer(GL_ARRAY_BUFFER, pvbo);
+    glBindBuffer(GL_ARRAY_BUFFER, e->pvbo);
     glBufferSubData(GL_ARRAY_BUFFER, 3 * sizeof(float), 3 * sizeof(float), &ce);
     glBindBuffer(GL_ARRAY_BUFFER, 0);
   }
@@ -1676,48 +1551,47 @@ uint8_t suijin_init() {
       add_title(node, name, namescale, 5); \
       add_slider(node, var, mi, ma, 5, fun, funp)
 #define UI_GET_HEIGHT(res, node) { uint32_t _ch = 0; int32_t _i; for(_i = 0; _i < (node).children.l; ++_i) { _ch += (node).children.v[_i].height + (node).children.v[_i].pad; } res = _ch + 10; }
-    prep_ui(&uvao);
-    // add_title(&nodes[0], "スプーク・プーク", 25, 0);
-      //mchvi(&nodes[1].children);
+    prep_ui(&e->uvao);
+    // add_title(&e->nodes[0], "スプーク・プーク", 25, 0);
+      //mchvi(&e->nodes[1].children);
 
     {
-      mchvi(&nodes[1].children);
-      add_title(&nodes[1], "#Clouds", 25, 8);
-      add_tslider(&nodes[1], "Scale", 15, &scale, 1.1, 40.0f, 8, autoupda, NULL);
-      add_tslider(&nodes[1], "PScale", 15, &pscale, 1.1, 40.0f, 8, autoupda, NULL);
-      add_tslider(&nodes[1], "PWScale", 15, &pwscale, 1.1, 40.0f, 8, autoupda, NULL);
-      add_tslider(&nodes[1], "Persist", 15, &kmsper, 0.0, 2.0f, 8, autoupda, NULL);
-      add_tslider(&nodes[1], "Octaves", 15, &kmsoct, 1.0, 20.0f, 8, autoupda, NULL);
-      add_tslider(&nodes[1], "Channel", 15, &curch, 80.1, 83.1f, 8, NULL, NULL);
-      add_tslider(&nodes[1], "minDensity", 15, &minDensity, 0.0, 1.0f, 8, NULL, NULL);
-      add_tslider(&nodes[1], "densityMultiplier", 15, &densityMultiplier, 0.0, 4.0f, 8, NULL, NULL);
-      add_checkbox(&nodes[1], "Dracu stie", 0xFF00FFFF, 15, 10, &drawTexture, NULL, NULL);
-      add_tslider(&nodes[1], "Type", 15, &KMS, 0.1, 3.1f, 8, autoupda, NULL);
-      add_tslider(&nodes[1], "Curslice", 15, &curslcs, 0.0, 1.0f, 8, NULL, NULL);
-      add_button(&nodes[1], "Update", 0xFF0000FF, 20, 10, compute_shader, NULL);
-      add_tslider(&nodes[1], "Autoupdate", 15, &kkautoupda, 0.1, 1.9f, 8, NULL, NULL);
-      nodes[1].px = 400.0f; nodes[1].py = 50.0f; nodes[1].sx = 400.0f;
-      UI_GET_HEIGHT(nodes[1].sy, nodes[1]);
-      nodes[1].bp = nodes[1].tp = nodes[1].rp = 0; nodes[1].lp = 8;
-      mchvt(&nodes[1].children);
+      mchvi(&e->nodes[1].children);
+      add_title(&e->nodes[1], "#Clouds", 25, 8);
+      add_tslider(&e->nodes[1], "Scale", 15, &scale, 1.1, 40.0f, 8, autoupda, NULL);
+      add_tslider(&e->nodes[1], "PScale", 15, &pscale, 1.1, 40.0f, 8, autoupda, NULL);
+      add_tslider(&e->nodes[1], "PWScale", 15, &pwscale, 1.1, 40.0f, 8, autoupda, NULL);
+      add_tslider(&e->nodes[1], "Persist", 15, &kmsper, 0.0, 2.0f, 8, autoupda, NULL);
+      add_tslider(&e->nodes[1], "Octaves", 15, &kmsoct, 1.0, 20.0f, 8, autoupda, NULL);
+      add_tslider(&e->nodes[1], "Channel", 15, &curch, 80.1, 83.1f, 8, NULL, NULL);
+      add_tslider(&e->nodes[1], "minDensity", 15, &minDensity, 0.0, 1.0f, 8, NULL, NULL);
+      add_tslider(&e->nodes[1], "densityMultiplier", 15, &densityMultiplier, 0.0, 4.0f, 8, NULL, NULL);
+      add_checkbox(&e->nodes[1], "Dracu stie", 0xFF00FFFF, 15, 10, &drawTexture, NULL, NULL);
+      add_tslider(&e->nodes[1], "Type", 15, &KMS, 0.1, 3.1f, 8, autoupda, NULL);
+      add_tslider(&e->nodes[1], "Curslice", 15, &curslcs, 0.0, 1.0f, 8, NULL, NULL);
+      add_button(&e->nodes[1], "Update", 0xFF0000FF, 20, 10, compute_shader, NULL);
+      add_tslider(&e->nodes[1], "Autoupdate", 15, &kkautoupda, 0.1, 1.9f, 8, NULL, NULL);
+      e->nodes[1].px = 400.0f; e->nodes[1].py = 50.0f; e->nodes[1].sx = 400.0f;
+      UI_GET_HEIGHT(e->nodes[1].sy, e->nodes[1]);
+      e->nodes[1].bp = e->nodes[1].tp = e->nodes[1].rp = 0; e->nodes[1].lp = 8;
+      mchvt(&e->nodes[1].children);
     }
 
     {
-      mchvi(&nodes[2].children);
-      add_title(&nodes[2], "10.0", 25, 8);
-      nodes[2].children.v[0].fg = 0x10FF00FF;
-      nodes[2].children.v[0].bg = 0xF0000000;
-      mchvt(&nodes[2].children);
+      mchvi(&e->nodes[2].children);
+      add_title(&e->nodes[2], "10.0", 25, 8);
+      e->nodes[2].children.v[0].fg = 0x10FF00FF;
+      e->nodes[2].children.v[0].bg = 0xF0000000;
+      mchvt(&e->nodes[2].children);
     }
   }
 
-
   {
-    init_skybox(&sb);
-    glGenTextures(1, &sbt);
+    init_skybox(&e->sb);
+    glGenTextures(1, &e->sbt);
     uint32_t sbw, sbh;
     uint8_t *buf = read_png("skybox.png", "Resources/Textures", &sbw, &sbh);
-    update_rgb_tex(&sbt, sbh, sbw, buf);
+    update_rgb_tex(&e->sbt, sbh, sbw, buf);
     free(buf);
   }
 
@@ -1727,7 +1601,7 @@ uint8_t suijin_init() {
     stat("shaders/worley_compute.glsl", &s); ccla = s.st_ctim.tv_sec;
   }
 
-  init_clouds(&cl);
+  init_clouds(&e->cl);
   compute_shader();
 
   { /// Init therm
@@ -1746,14 +1620,18 @@ uint8_t suijin_init() {
 }
 
 uint8_t suijin_run() {
+  if (!e) {
+    fprintf(stderr, "Env not passed to suijin!\n");
+    exit(1);
+  }
   ++e->frame;
   _ctime = glfwGetTime();
   deltaTime = _ctime - _ltime;
   dt += deltaTime;
   if (e->frame % FRAME_UPDATE == 0) {
-    snprintf(((struct tbox*__restrict)nodes[2].children.v[0].c)->text, 10, "%.2f", FRAME_UPDATE / dt);
-    get_textbox_size(nodes[2].children.v[0].c);
-    fprintf(stdout, "Frametime %f       \r", FRAME_UPDATE / dt);
+    snprintf(((struct tbox*__restrict)e->nodes[2].children.v[0].c)->text, 10, "%.2f", FRAME_UPDATE / dt);
+    get_textbox_size(e->nodes[2].children.v[0].c);
+    //fprintf(stdout, "Frametime %f       \r", FRAME_UPDATE / dt);
     dt = 0;
   }
 
@@ -1769,11 +1647,11 @@ uint8_t suijin_run() {
   }
 
   { /// Skybox
-    glUseProgram(skyprog);
-    program_set_mat4(skyprog, "fn", fn);
-    sb.m.pos = e->cam.pos;
-    maff(&sb.m);
-    program_set_mat4(skyprog, "affine", sb.m.aff);
+    glUseProgram(e->skyprog);
+    program_set_mat4(e->skyprog, "fn", fn);
+    e->sb.m.pos = e->cam.pos;
+    maff(&e->sb.m);
+    program_set_mat4(e->skyprog, "affine", e->sb.m.aff);
 
     /*float tscale = 1 / 3.0f;
     sb.sunPos.x = (sin(_ctime * tscale) + 1) * M_PI / 2;
@@ -1782,24 +1660,24 @@ uint8_t suijin_run() {
     } else {
       sb.sunPos.y = cos(_ctime * tscale) * M_PI;
     }
-    program_set_float2(skyprog, "sunPos", sb.sunPos.x, sb.sunPos.y);
-    program_set_float1(skyprog, "sunSiz", sb.sunSize);
-    program_set_float3(skyprog, "sunCol", 0.7f, 0.2f, 0.1f);*/
+    program_set_float2(e->skyprog, "sunPos", sb.sunPos.x, sb.sunPos.y);
+    program_set_float1(e->skyprog, "sunSiz", sb.sunSize);
+    program_set_float3(e->skyprog, "sunCol", 0.7f, 0.2f, 0.1f);*/
 
     glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, sbt);
-    program_set_int1(skyprog, "tex", 0);
+    glBindTexture(GL_TEXTURE_2D, e->sbt);
+    program_set_int1(e->skyprog, "tex", 0);
 
-    glBindVertexArray(skyvao);
-    glDrawArrays(GL_TRIANGLES, 0, sbvl);
+    glBindVertexArray(e->skyvao);
+    glDrawArrays(GL_TRIANGLES, 0, e->sbvl);
   }
 
-  if (drawObjs) { // NPROG
-    glUseProgram(nprog);
+  if (drawObjs) { // e->nprog
+    glUseProgram(e->nprog);
 
-    program_set_mat4(nprog, "fn_mat", fn);
-    program_set_int1(nprog, "shading", cshading);
-    program_set_float3v(nprog, "camPos", e->cam.pos);
+    program_set_mat4(e->nprog, "fn_mat", fn);
+    program_set_int1(e->nprog, "shading", cshading);
+    program_set_float3v(e->nprog, "camPos", e->cam.pos);
 
     int32_t i, j;
     float rd, mrd = NEG_INF;
@@ -1810,7 +1688,7 @@ uint8_t suijin_run() {
 
     for(i = 0; i < e->objs.l; ++i) {
       for(j = 0; j < e->objs.v[i].mins.l; ++j) {
-        draw_model(nprog, &e->mats, e->mods.v + e->objs.v[i].mins.v[j].m, e->objs.v[i].mins.v[j].aff);
+        draw_model(e->nprog, &e->mats, e->mods.v + e->objs.v[i].mins.v[j].m, e->objs.v[i].mins.v[j].aff);
         if (canMoveCam && glfwGetMouseButton(e->window, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS) {
           if (rbi(&cs, &e->objs.v[i].mins.v[j].b)) {
             rmi(&cs, &e->objs.v[i].mins.v[j], &rd);
@@ -1818,7 +1696,7 @@ uint8_t suijin_run() {
               mrd = rd;
               HITS = 1;
               HITP = v3a(e->cam.pos, v3m(rd, QV(e->cam.orientation)));
-              glBindBuffer(GL_ARRAY_BUFFER, pvbo);
+              glBindBuffer(GL_ARRAY_BUFFER, e->pvbo);
               glBufferSubData(GL_ARRAY_BUFFER, 0, 3 * sizeof(float), &HITP);
             }
           }
@@ -1827,26 +1705,26 @@ uint8_t suijin_run() {
     }
   }
 
-  if (drawBb) { // LPROG
-    glUseProgram(lprog);
-    program_set_mat4(lprog, "fn_mat", fn);
+  if (drawBb) { // e->lprog
+    glUseProgram(e->lprog);
+    program_set_mat4(e->lprog, "fn_mat", fn);
 
     glBindVertexArray(lvao);
     glDrawArrays(GL_LINES, 0, lins.l * 2);
   }
 
-  { // PPROG
+  { // e->pprog
     glDisable(GL_DEPTH_TEST);
-    glUseProgram(pprog);
-    glBindVertexArray(pvao);
-    program_set_float4(pprog, "col", 1.0f, 1.0f, 1.0f, 0.1f);
-    program_set_float1(pprog, "ps", 7.0f);
+    glUseProgram(e->pprog);
+    glBindVertexArray(e->pvao);
+    program_set_float4(e->pprog, "col", 1.0f, 1.0f, 1.0f, 0.1f);
+    program_set_float1(e->pprog, "ps", 7.0f);
     glDrawArrays(GL_POINTS, 1, 1);
 
     if (HITS) {
-      program_set_mat4(pprog, "fn_mat", fn);
-      program_set_float4(pprog, "col", 1.0f, 1.0f, 1.0f, 1.0f);
-      program_set_float1(pprog, "ps", 0.0f);
+      program_set_mat4(e->pprog, "fn_mat", fn);
+      program_set_float4(e->pprog, "col", 1.0f, 1.0f, 1.0f, 1.0f);
+      program_set_float1(e->pprog, "ps", 0.0f);
       glDrawArrays(GL_POINTS, 0, 1);
     }
   }
@@ -1858,37 +1736,37 @@ uint8_t suijin_run() {
     glEnable(GL_CULL_FACE);
     glCullFace(GL_FRONT);
 
-    glUseProgram(cloudprog);
-    program_set_mat4(cloudprog, "fn", fn);
-    program_set_mat4(cloudprog, "affine", cl.m.aff);
-    program_set_float3v(cloudprog, "centerScale", cl.m.scale);
-    program_set_float3v(cloudprog, "centerPos", cl.m.pos);
-    program_set_float3v(cloudprog, "camPos", e->cam.pos);
+    glUseProgram(e->cloudprog);
+    program_set_mat4(e->cloudprog, "fn", fn);
+    program_set_mat4(e->cloudprog, "affine", e->cl.m.aff);
+    program_set_float3v(e->cloudprog, "centerScale", e->cl.m.scale);
+    program_set_float3v(e->cloudprog, "centerPos", e->cl.m.pos);
+    program_set_float3v(e->cloudprog, "camPos", e->cam.pos);
 
     glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_3D, cl.pwor.t);
-    program_set_int1(cloudprog, "tex", 0);
+    glBindTexture(GL_TEXTURE_3D, e->cl.pwor.t);
+    program_set_int1(e->cloudprog, "tex", 0);
 
-    glBindVertexArray(cloudvao);
-    glDrawArrays(GL_TRIANGLES, 0, cbvl);
+    glBindVertexArray(e->cloudvao);
+    glDrawArrays(GL_TRIANGLES, 0, e->cbvl);
     glDisable(GL_CULL_FACE);
   }
 
-  if (drawUi) { // UPROG
-    glUseProgram(uprog);
+  if (drawUi) { // e->uprog
+    glUseProgram(e->uprog);
 
     int32_t i;
     for(i = 0; i < MC; ++i) { draw_node(i); }
-    if (drawTexture) { draw_squaret3((e->w.windowW - 500) / 2 - 275, (e->w.windowH - 500) / 2 - 275, 500, 500, cl.pwor.t, curch, curslcs); }
+    if (drawTexture) { draw_squaret3((e->w.windowW - 500) / 2 - 275, (e->w.windowH - 500) / 2 - 275, 500, 500, e->cl.pwor.t, curch, curslcs); }
     // if (selui.t == UIT_CAN) { selui.t = UIT_CANNOT; }
   }
 
   if (drawFps) {
-    draw_textbox(e->w.windowW - ((struct tbox*__restrict)nodes[2].children.v[0].c)->tlen, 10, nodes[2].children.v + 0, nodes[2].children.v[0].c);
+    draw_textbox(e->w.windowW - ((struct tbox*__restrict)e->nodes[2].children.v[0].c)->tlen, 10, e->nodes[2].children.v + 0, e->nodes[2].children.v[0].c);
   }
 
   if (e->frame % 30 == 0) { /// Frag update
-    check_shader_update(&cloudprog, "shaders/cloud_frag.glsl", GL_FRAGMENT_SHADER, shaders[12], &cla);
+    check_shader_update(&e->cloudprog, "shaders/cloud_frag.glsl", GL_FRAGMENT_SHADER, e->shaders[12], &cla);
     check_shader_update(&wComp, "shaders/worley_compute.glsl", GL_COMPUTE_SHADER, 0, &ccla);
   }
 

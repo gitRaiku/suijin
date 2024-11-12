@@ -54,6 +54,7 @@ $(L_OBJ): $(OBJ_DIR)/%.o : $(LIB_DIR)/%.c
 	$(CC) -c -fPIC $(CCFLAGS) $< -o $@
 
 $(BIN_DIR)/$(TARGET): $(SRC_DIR)/main.c $(L_OBJ)
+	unlink $@
 	$(CC) -o $(BIN_DIR)/$(TARGET) $(CCFLAGS) $(LFLAGS) $(L_OBJ) $<
 
 $(BIN_DIR)/$(SHARED): $(C_OBJ) $(L_OBJ)
