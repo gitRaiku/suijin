@@ -18,6 +18,7 @@
 
 # Get rid of leftovers from running
 *.o
+.obj/*
 src/.deps
 shaders/*.spv
 bin/*
